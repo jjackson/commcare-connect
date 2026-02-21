@@ -33,6 +33,10 @@ import type {
   TaskWithOCSResult,
   PipelineResult,
   ActiveJobState,
+  SaveWorkerResultParams,
+  SaveWorkerResultResponse,
+  CompleteRunParams,
+  CompleteRunResponse,
 } from '@/components/workflow/types';
 import {
   MessageCircle,
@@ -64,6 +68,7 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
             title: params.title,
             description: params.description || '',
             priority: params.priority || 'medium',
+            flw_name: params.flw_name || params.username,
           }),
         });
 
@@ -413,7 +418,7 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-CSRFToken': getCSRFToken(),
+              'X-CSRFToken': csrfToken,
             },
           },
         );
@@ -432,6 +437,151 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
           success: false,
           error: e instanceof Error ? e.message : 'Failed to cancel',
         };
+      }
+    },
+
+    // MBW Monitoring Actions
+    saveWorkerResult: async (
+      runId: number,
+      params: SaveWorkerResultParams,
+    ): Promise<SaveWorkerResultResponse> => {
+      try {
+        const response = await fetch(
+          `/labs/workflow/api/run/${runId}/worker-result/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(params),
+          },
+        );
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error:
+            e instanceof Error ? e.message : 'Failed to save worker result',
+        };
+      }
+    },
+
+    completeRun: async (
+      runId: number,
+      params?: CompleteRunParams,
+    ): Promise<CompleteRunResponse> => {
+      try {
+        const response = await fetch(
+          `/labs/workflow/api/run/${runId}/complete/`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrfToken,
+            },
+            body: JSON.stringify(params || {}),
+          },
+        );
+
+        return await response.json();
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Failed to complete run',
+        };
+      }
+    },
+
+    openTaskCreator: (params: TaskUrlParams): void => {
+      const urlParams = new URLSearchParams();
+      if (params.username) urlParams.set('username', params.username);
+      if (params.title) urlParams.set('title', params.title);
+      if (params.description)
+        urlParams.set('description', params.description);
+      if (params.workflow_instance_id)
+        urlParams.set(
+          'workflow_instance_id',
+          String(params.workflow_instance_id),
+        );
+      if (params.priority) urlParams.set('priority', params.priority);
+
+      window.open(`/tasks/new/?${urlParams.toString()}`, '_blank');
+    },
+
+    // --- Generic task management handlers (reusable by any workflow template) ---
+
+    getTaskDetail: async (taskId: number): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/api/${taskId}/`, {
+          headers: { 'X-CSRFToken': csrfToken },
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to fetch task' };
+      }
+    },
+
+    getAITranscript: async (taskId: number, sessionId?: string, refresh?: boolean): Promise<Record<string, unknown>> => {
+      try {
+        const params = new URLSearchParams();
+        if (sessionId) params.set('session_id', sessionId);
+        if (refresh) params.set('refresh', 'true');
+        const response = await fetch(`/tasks/${taskId}/ai/transcript/?${params.toString()}`, {
+          headers: { 'X-CSRFToken': csrfToken },
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to fetch transcript' };
+      }
+    },
+
+    updateTask: async (taskId: number, data: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/api/${taskId}/update/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(data),
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to update task' };
+      }
+    },
+
+    saveAITranscript: async (taskId: number, data: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/${taskId}/ai/save-transcript/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify(data),
+        });
+        try {
+          return await response.json();
+        } catch {
+          return { success: false, error: `Server error: ${response.status}` };
+        }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to save transcript' };
       }
     },
   };
@@ -933,7 +1083,9 @@ function WorkflowRunner({
   }, [editingCode]);
 
   // Create action handlers
-  const actions = useMemo(() => createActionHandlers(csrfToken), [csrfToken]);
+  const actions = useMemo(() => {
+    return createActionHandlers(csrfToken);
+  }, [csrfToken]);
 
   // Create props for workflow component
   const workflowProps: WorkflowProps = {
@@ -953,7 +1105,7 @@ function WorkflowRunner({
     <div className="flex h-full">
       {/* Main Content */}
       <div
-        className={`flex-1 transition-all duration-300 ${
+        className={`flex-1 min-w-0 transition-all duration-300 ${
           isChatOpen ? 'mr-96' : ''
         }`}
       >
