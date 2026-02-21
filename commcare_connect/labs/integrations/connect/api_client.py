@@ -257,6 +257,7 @@ class LabsRecordAPIClient:
         program_id: int | None = None,
         labs_record_id: int | None = None,
         public: bool | None = None,
+        current_record: LocalLabsRecord | None = None,
     ) -> LocalLabsRecord:
         """Update an existing record in production (upsert).
 
@@ -269,6 +270,7 @@ class LabsRecordAPIClient:
             program_id: Updated program ID
             labs_record_id: Updated parent record ID
             public: Whether record is publicly queryable without scope (for sharing)
+            current_record: Optional pre-fetched record (avoids redundant API call)
 
         Returns:
             Updated LocalLabsRecord instance
@@ -276,8 +278,14 @@ class LabsRecordAPIClient:
         Raises:
             LabsAPIError: If API request fails
         """
-        # Get current record to merge fields (use experiment/type as optimization hints)
-        current = self.get_record_by_id(record_id, experiment=experiment, type=type)
+        # Use provided record or fetch current to read metadata
+        if current_record is not None and current_record.id != record_id:
+            logger.warning(
+                f"current_record.id ({current_record.id}) != record_id ({record_id}); "
+                f"ignoring current_record and fetching fresh"
+            )
+            current_record = None
+        current = current_record or self.get_record_by_id(record_id, experiment=experiment, type=type)
         if not current:
             raise LabsAPIError(f"Record {record_id} not found")
 
