@@ -54,4 +54,3 @@ pre-commit run --all-files          # Run linters/formatters
 - **[.claude/AGENTS.md](.claude/AGENTS.md)** — Full architecture reference: per-app details, API endpoints, data access patterns, common mistakes
 - **[docs/LABS_ARCHITECTURE.md](docs/LABS_ARCHITECTURE.md)** — Architecture diagrams, data flow, cross-app dependency matrix, decision tree
 - **[pr_guidelines.md](pr_guidelines.md)** — Pull request best practices
-- **[new_architecture.md](new_architecture.md)** — Audit write-back architecture design (production-backed storage with OAuth scopes)

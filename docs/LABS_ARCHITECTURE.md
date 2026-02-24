@@ -189,5 +189,4 @@ What data do you need?
 
 - [LABS_GUIDE.md](../commcare_connect/labs/LABS_GUIDE.md) — OAuth setup, API client patterns, proxy model patterns
 - [AGENTS.md](../.claude/AGENTS.md) — Per-app details and common mistakes
-- [new_architecture.md](../new_architecture.md) — Audit write-back architecture design
 - [Workflow Templates SKILL](../.claude/skills/workflow-templates/SKILL.md) — Workflow template creation patterns
