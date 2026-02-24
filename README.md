@@ -1,197 +1,101 @@
-# CommCare Connect
+# CommCare Connect Labs
 
-CommCare Connect
+A rapid prototyping environment for CommCare Connect experiments. Labs operates entirely via API against production CommCare Connect — there is no direct database access to production data.
 
-[![Built with Cookiecutter Django](https://img.shields.io/badge/built%20with-Cookiecutter%20Django-ff69b4.svg?logo=cookiecutter)](https://github.com/cookiecutter/cookiecutter-django/)
-[![Black code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/dimagi/commcare-connect)
+**AI agents:** Start with [CLAUDE.md](CLAUDE.md) — it's auto-loaded in Claude Code and provides the full architecture overview, app map, and links to deeper docs.
 
-## Local setup
-
-This assumes you will use the docker compose file in this repo to run services. If that is not the case you may
-need to edit some settings.
-
-    # create and active a python vertual environment using Python 3.11
-    $ python3.11 -m venv <virtual env path>
-
-    # install requirements
-    $ pip install -r requirements-dev.txt
-    # for labs requirements
-    $ pip install -r requirements/labs.txt
-
-    # install git hooks
-    $ pre-commit install
-    $ pre-commit run -a
-
-    # create env file and edit the settings as needed (or export settings directly)
-    $ cp .env_template .env
-
-    # start docker services
-    $ inv up
-
-    # install JS dependencies
-    $ npm ci
-
-    # build JS (optionally watch files for changes and rebuild)
-    $ inv build-js [-w]
-
-    # run Django
-    $ ./manage.py migrate
-    $ ./manage.py runserver
-
-## Basic Commands
-
-Some useful command are available via the `tasks.py` file:
-
-    $ inv -l
-
-### Setting up auth with CommCare HQ
-
-**Expose your local service to the internet**
-
-- Create an account on ngrok and Install ngrok
-  - https://dashboard.ngrok.com/get-started/setup/
-- Create a custom domain on ngrok using this [link](https://dashboard.ngrok.com/domains/new)
-- Run `ngrok http --url=[my-unique-subdomain].ngrok-free.app 8000`
-- Update your `.env` file with the host:
-
-      DJANGO_ALLOWED_HOSTS=[my-unique-subdomain].ngrok-free.app
-      CSRF_TRUSTED_ORIGINS=https://[my-unique-subdomain].ngrok-free.app
-
-**Create an OAuth2 application on CommCare HQ**
-
-- Navigate to https://staging.commcarehq.org/oauth/applications/
-- Create a new application with the following settings:
-  - Client Type: Confidential
-  - Authorization Grant Type: Authorization Code
-  - Redirect URIs: https://[my-unique-subdomain].ngrok-free.app/accounts/commcarehq/login/callback/
-  - Pkce required: False
-- Copy the Client ID and Client Secret
-- Create a new SocialApp locally at http://localhost:8000/admin/socialaccount/socialapp/
-
-**Test the OAuth2 flow**
-
-- Set `COMMCARE_HQ_URL=https://staging.commcarehq.org` in your `.env` file and restart the server.
-- Navigate to http://[my-unique-subdomain].ngrok-free.app/accounts/login/
-- Click the "Log in with CommCare HQ" button
-- You should be redirected to CommCare HQ to log in
-- After logging in, you should be redirected back to the app and logged in
-
-### Setting Up Your Users
-
-- To create a **normal user account**, just go to Sign Up and fill out the form. Once you submit it, you'll see a "Verify Your E-mail Address" page. Go to your console to see a simulated email verification message. Copy the link into your browser. Now the user's email should be verified and ready to go.
-
-- To create a **superuser account**, use this command:
-
-      $ python manage.py createsuperuser
-
-- To promote a user to superuser, use this command:
-
-      $ python manage.py promote_user_to_superuser <email>
-
-For convenience, you can keep your normal user logged in on Chrome and your superuser logged in on Firefox (or similar), so that you can see how the site behaves for both kinds of users.
-
-### Test coverage
-
-To run the tests, check your test coverage, and generate an HTML coverage report:
-
-    $ coverage run -m pytest
-    $ coverage html
-    $ open htmlcov/index.html
-
-#### Running tests with pytest
-
-    $ pytest
-
-### Live reloading and Sass CSS compilation
-
-    $ inv build-js -w
-
-### Celery
-
-This app comes with Celery.
-
-To run a celery worker:
+## Quick Start
 
 ```bash
-celery -A config.celery_app worker -l info
+# Create and activate a Python 3.11 virtual environment
+python3.11 -m venv venv && source venv/bin/activate
+
+# Install requirements
+pip install -r requirements-dev.txt
+pip install -r requirements/labs.txt
+
+# Install git hooks
+pre-commit install
+
+# Copy env template and configure
+cp .env_template .env
+
+# Start services (PostgreSQL, Redis)
+inv up
+
+# Install JS deps and build frontend
+npm ci && inv build-js
+
+# Run migrations and start server
+python manage.py migrate
+python manage.py runserver
 ```
 
-Please note: For Celery's import magic to work, it is important _where_ the celery commands are run. If you are in the same folder with _manage.py_, you should be right.
+**Important:** Use `config.settings.local` (the default) for local development, NOT `config.settings.labs`. The labs settings are for the AWS deployment only.
 
-To run [periodic tasks](https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html), you'll need to start the celery beat scheduler service. You can start it as a standalone process:
+## Labs Apps
+
+| App | Purpose | Docs |
+|-----|---------|------|
+| `labs/` | Core infrastructure: OAuth, API client, middleware | [LABS_GUIDE.md](commcare_connect/labs/LABS_GUIDE.md) |
+| `audit/` | Quality assurance review of FLW visits | [README](commcare_connect/audit/README.md) |
+| `tasks/` | Task management for FLW follow-ups | [README](commcare_connect/tasks/README.md) |
+| `workflow/` | Configurable workflow engine with React UIs | [README](commcare_connect/workflow/README.md) |
+| `ai/` | AI agent integration via pydantic-ai | [README](commcare_connect/ai/README.md) |
+| `solicitations/` | RFP management scoped by program | [README](commcare_connect/solicitations/README.md) |
+| `coverage/` | Delivery unit mapping from CommCare HQ | [Commands README](commcare_connect/coverage/management/commands/README.md) |
+
+## Documentation Map
+
+- **[CLAUDE.md](CLAUDE.md)** — Architecture overview, app map, critical warnings (auto-loaded by Claude Code)
+- **[.claude/AGENTS.md](.claude/AGENTS.md)** — Full per-app architecture reference, API endpoints, common mistakes
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — Code style, data_access.py pattern, how to add a new feature
+- **[LABS_GUIDE.md](commcare_connect/labs/LABS_GUIDE.md)** — OAuth setup, API client usage, proxy model patterns
+- **[LABS_ARCHITECTURE.md](docs/LABS_ARCHITECTURE.md)** — Architecture diagrams, data flow, decision tree
+- **[PR Guidelines](pr_guidelines.md)** — Pull request best practices
+
+## Key Commands
 
 ```bash
-celery -A config.celery_app beat
+inv up                              # Start docker services
+npm ci && inv build-js              # Build frontend
+inv build-js -w                     # Watch mode
+python manage.py runserver          # Dev server
+pytest                              # Run tests
+celery -A config.celery_app worker -l info   # Celery worker
+pre-commit run --all-files          # Linters/formatters
 ```
 
-or you can embed the beat service inside a worker with the `-B` option (not recommended for production use):
+## Setting up Auth
+
+### Labs OAuth (for web UI)
+
+Access labs features at `http://localhost:8000/labs/login/` — this initiates OAuth against production CommCare Connect.
+
+### CLI OAuth (for scripts)
 
 ```bash
-celery -A config.celery_app worker -B -l info
+python manage.py get_cli_token
 ```
 
-### AI integrations
+### CommCare HQ OAuth (for coverage app)
 
-To use the labs AI integrations you will need to add an OpenAI key to your `.env` file:
+See [coverage commands README](commcare_connect/coverage/management/commands/README.md).
+
+### AI Integrations
+
+Add API keys to your `.env` file:
 
 ```
 OPENAI_API_KEY=sk...
+ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+## Inherited Production Code
+
+This repo contains the full production CommCare Connect Django ORM codebase (`opportunity/`, `organization/`, `program/`, `users/`). That code is inherited and **not relevant for labs development** — the tables are empty in this environment. Do not modify those apps for labs features.
 
 ## Deployment
 
-The following details how to deploy this application.
-
-The application is running on AWS. Deploying new version of the app can be done via the "Deploy" workflow
-on Github Actions.
-
-Should the deploy fail you can view the logs via the [AWS console][aws_console].
-
-[aws_console]: https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/using-features.logging.html?icmpid=docs_elasticbeanstalk_console
-
-For details on how this actions is configured see:
-
-- https://aws.amazon.com/blogs/security/use-iam-roles-to-connect-github-actions-to-actions-in-aws/
-- https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
-
-### Deploying to the staging environment
-
-The project has a staging environment at [https://connect-staging.dimagi.com/](https://connect-staging.dimagi.com/),
-which is connected to the staging environment of CommCare HQ at
-[https://staging.commcarehq.org/](https://staging.commcarehq.org/).
-
-- Update [commcare-connect-staging.yml](https://github.com/dimagi/staging-branches/blob/main/commcare-connect-staging.yml) with the branches you need to include.
-- Run `.deploy/rebuildstaging` to build the `autostaging` branch
-- After this, you can deploy to the staging environment by manually running the `deploy`
-  [workflow from here](https://github.com/dimagi/commcare-connect/actions/workflows/deploy.yml).
-
-### Remote Access to machines
-
-Machines can be accessed via SSH using AWS SSM. In order for that to work, you will need to add the following lines to your ssh config (typically located at `~/.ssh/config`)
-
-```
-Host i-*
-     ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region us-east-1 --profile commcare-connect"
-```
-
-This remote access is required for the ansible commands in the `tasks.py` file.
-
-### Setting up logical replication
-
-- Create another postgres database (in a seperate cluster)
-- Add `SECONDARY_DATABASE_URL` to the `.env` file
-- Enable replication on the default database (requires restart)
-  ```
-        - "wal_level=logical"
-        - "max_replication_slots=5"
-        - "max_wal_senders=5"
-  ```
-- Create table schemas in the secondary database
-  ```
-  ./manage.py migrate_multi
-  ```
-- Initialize replication
-  ```
-  ./manage.py setup_logical_replication
-  ```
+- **Labs:** Use `/deploy-labs` skill or `gh workflow run "Deploy to AWS Labs"` — see [deploy skill](.claude/skills/deploy-labs/SKILL.md)
+- **Production:** See [deploy/README.md](deploy/README.md) for Kamal/Ansible deployment
