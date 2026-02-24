@@ -84,6 +84,8 @@ Base URL: `settings.CONNECT_PRODUCTION_URL` (production: `https://connect.dimagi
 
 ### `audit/` — Quality Assurance Review
 
+> See also: [`commcare_connect/audit/README.md`](../commcare_connect/audit/README.md) for data model details and testing guidance.
+
 Structured audits of FLW visits with AI-powered reviews.
 
 - **DataAccess:** `AuditDataAccess` in `audit/data_access.py`
@@ -95,6 +97,8 @@ Structured audits of FLW visits with AI-powered reviews.
 
 ### `tasks/` — Task Management
 
+> See also: [`commcare_connect/tasks/README.md`](../commcare_connect/tasks/README.md) for data model details and testing guidance.
+
 Task tracking for FLW follow-ups with timeline, comments, and AI assistant.
 
 - **DataAccess:** `TaskDataAccess` in `tasks/data_access.py` (simplest example of the pattern)
@@ -104,6 +108,8 @@ Task tracking for FLW follow-ups with timeline, comments, and AI assistant.
 - **Cross-app:** Tasks can reference audit sessions via `audit_session_id` in task data
 
 ### `workflow/` — Configurable Workflow Engine
+
+> See also: [`commcare_connect/workflow/README.md`](../commcare_connect/workflow/README.md) for data model details and testing guidance.
 
 Data-driven workflows with custom React UIs and pipeline integration.
 
@@ -116,6 +122,8 @@ Data-driven workflows with custom React UIs and pipeline integration.
 
 ### `ai/` — AI Agent Integration
 
+> See also: [`commcare_connect/ai/README.md`](../commcare_connect/ai/README.md) for data model details and testing guidance.
+
 SSE streaming endpoints for AI-assisted editing using pydantic-ai agents.
 
 - **No data_access.py** — agents call into other apps' DataAccess classes via tool functions
@@ -125,6 +133,8 @@ SSE streaming endpoints for AI-assisted editing using pydantic-ai agents.
 - **Models:** Claude Sonnet/Opus or GPT via pydantic-ai
 
 ### `solicitations/` — RFP Management
+
+> See also: [`commcare_connect/solicitations/README.md`](../commcare_connect/solicitations/README.md) for data model details and testing guidance.
 
 Solicitations (requests for proposals), responses, and reviews.
 
