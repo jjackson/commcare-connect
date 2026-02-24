@@ -1,3 +1,5 @@
+> **Note:** This documents the production CommCare Connect template structure. Labs apps use their own templates under `commcare_connect/templates/{app_name}/`. See [CLAUDE.md](../../CLAUDE.md) for labs documentation.
+
 # CommCare Connect Templates
 
 This directory contains all Django HTML templates for the CommCare Connect project, organized by feature and reuse purpose. The structure follows a modular approach to support maintainability, reuse, and clarity.

@@ -1,3 +1,5 @@
+> **Note:** This is production CommCare Connect code, not relevant for labs development. See [CLAUDE.md](../../CLAUDE.md) for labs documentation.
+
 # Release Toggles in Commcare Connect
 
 Commcare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) to manage feature release toggles.
