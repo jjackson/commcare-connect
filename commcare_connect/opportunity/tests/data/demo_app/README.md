@@ -1,3 +1,5 @@
+> **Note:** This is production CommCare Connect test data, not relevant for labs development.
+
 This content comes from the https://staging.commcarehq.org/a/skelly/apps/view/a671db914232020002c1f294c675d1d8/ app.
 
 To update it from the app:
