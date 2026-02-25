@@ -22,7 +22,7 @@ from django.http import HttpRequest
 
 from commcare_connect.audit.analysis_config import AUDIT_EXTRACTION_CONFIG
 from commcare_connect.audit.models import AuditSessionRecord
-from commcare_connect.labs.analysis import compute_visit_fields
+from commcare_connect.labs.analysis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.models import LocalUserVisit
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.api_client import LabsRecordAPIClient
