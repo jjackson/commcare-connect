@@ -26,9 +26,7 @@ Non-Web Contexts (Synchronous):
 Note: stream_analysis() is ALWAYS fast when data is cached (typically <1s),
       so web views don't need to check cache existence beforehand.
 
-Backend selection is based on settings.LABS_ANALYSIS_BACKEND:
-- "python_redis" (default): Redis/file caching with pandas computation
-- "sql": PostgreSQL table caching with SQL computation
+Uses PostgreSQL table caching with SQL computation (SQLBackend).
 """
 
 import logging
@@ -36,10 +34,9 @@ from collections.abc import Generator
 from typing import Any
 
 import sentry_sdk
-from django.conf import settings
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.backends.protocol import AnalysisBackend
+from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, VisitAnalysisResult
 
@@ -52,33 +49,9 @@ EVENT_RESULT = "result"
 EVENT_ERROR = "error"
 
 
-def _get_backend_name() -> str:
-    """Get configured backend name from settings."""
-    return getattr(settings, "LABS_ANALYSIS_BACKEND", "python_redis")
-
-
-def _get_backend() -> AnalysisBackend:
-    """Get the configured backend instance."""
-    backend_name = _get_backend_name()
-
-    if backend_name == "sql":
-        from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
-
-        return SQLBackend()
-    else:
-        from commcare_connect.labs.analysis.backends.python_redis.backend import PythonRedisBackend
-
-        return PythonRedisBackend()
-
-
-# Expose get_backend for callers that need direct backend access
-def get_backend() -> AnalysisBackend:
-    """
-    Get the configured backend instance.
-
-    Most callers should use AnalysisPipeline instead.
-    """
-    return _get_backend()
+def get_backend() -> SQLBackend:
+    """Get the SQL backend instance."""
+    return SQLBackend()
 
 
 class AnalysisPipeline:
@@ -97,8 +70,8 @@ class AnalysisPipeline:
             request: HttpRequest with labs_oauth and labs_context
         """
         self.request = request
-        self.backend = _get_backend()
-        self.backend_name = _get_backend_name()
+        self.backend = SQLBackend()
+        self.backend_name = "sql"
 
         # Extract context
         self.access_token = request.session.get("labs_oauth", {}).get("access_token")
@@ -214,9 +187,8 @@ class AnalysisPipeline:
         """
         Filter visits based on audit criteria.
 
-        Delegates to backend which implements optimally:
-        - SQL backend: Uses database queries with indexes and window functions
-        - Python/Redis backend: Uses pandas filtering on cached data
+        Delegates to SQL backend which uses database queries with indexes
+        and window functions for optimal performance.
 
         Args:
             opportunity_id: Opportunity ID (defaults to labs_context)
