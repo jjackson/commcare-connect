@@ -75,6 +75,9 @@ class AnalysisPipeline:
 
         # Extract context
         self.access_token = request.session.get("labs_oauth", {}).get("access_token")
+
+        # CCHQ OAuth token (for cchq_forms data sources)
+        self.cchq_access_token = request.session.get("commcare_oauth", {}).get("access_token")
         self.labs_context = getattr(request, "labs_context", {})
 
         if not self.access_token:
