@@ -34,6 +34,32 @@ class CacheStage(Enum):
 
 
 @dataclass
+class DataSourceConfig:
+    """
+    Configuration for where a pipeline fetches its raw data.
+
+    Attributes:
+        type: Data source type. "connect_csv" fetches from Connect production
+              CSV export. "cchq_forms" fetches from CommCare HQ Form API.
+        form_name: (cchq_forms only) Form name for xmlns discovery,
+                   e.g., "Register Mother", "Gold Standard Visit Checklist"
+        app_id: (cchq_forms only) Explicit CommCare app ID.
+        app_id_source: (cchq_forms only) "opportunity" = derive from opportunity metadata.
+        gs_app_id: (cchq_forms only) Explicit GS supervisor app ID.
+    """
+
+    type: str = "connect_csv"
+    form_name: str = ""
+    app_id: str = ""
+    app_id_source: str = ""
+    gs_app_id: str = ""
+
+    def __post_init__(self):
+        if self.type not in ("connect_csv", "cchq_forms"):
+            raise ValueError(f"Invalid data source type: {self.type}")
+
+
+@dataclass
 class FieldComputation:
     """
     Configuration for extracting and aggregating a field from UserVisit data.
@@ -281,6 +307,9 @@ class AnalysisPipelineConfig:
 
     # Entity linking configuration
     linking_field: str = "entity_id"
+
+    # Data source configuration
+    data_source: DataSourceConfig = field(default_factory=DataSourceConfig)
 
     def __post_init__(self):
         """Validate configuration."""
