@@ -73,24 +73,23 @@ Used by audit (visit filtering) and workflow (pipeline data).
        │
        ▼
 2. AnalysisPipeline(request) initialized
-   └── Selects backend: "python_redis" or "sql" (settings.LABS_ANALYSIS_BACKEND)
+   └── SQL backend (PostgreSQL)
        │
        ▼
-3. Pipeline fetches CSV from production
-   └── GET /export/opportunity/<id>/user_visits/ (streaming CSV)
+3. Pipeline fetches data from source
+   ├── connect_csv: GET /export/opportunity/<id>/user_visits/ (streaming CSV)
+   └── cchq_forms: CommCare HQ Form API (via CommCareDataAccess)
        │
        ▼
-4. Backend caches raw data
-   ├── python_redis: Redis key or temp file
-   └── sql: RawVisitCache table in local PostgreSQL
+4. SQL backend caches raw data
+   └── RawVisitCache table in local PostgreSQL
        │
        ▼
-5. Backend applies computations (field computations, histograms, aggregations)
+5. SQL backend applies computations (field computations, histograms, aggregations)
        │
        ▼
-6. Backend caches computed results
-   ├── python_redis: Redis key with TTL
-   └── sql: ComputedVisitCache / ComputedFLWCache tables
+6. SQL backend caches computed results
+   └── ComputedVisitCache / ComputedFLWCache tables
        │
        ▼
 7. Returns result objects (FLWRow, VisitRow with custom_fields)
