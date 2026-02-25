@@ -337,35 +337,51 @@ class AnalysisPipeline:
                         logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                         visit_dicts = None
-                        for event in self.backend.stream_raw_visits(
-                            opportunity_id=opp_id,
-                            access_token=self.access_token,
-                            expected_visit_count=self.visit_count,
-                            force_refresh=force_refresh,
-                        ):
-                            event_type = event[0]
-                            if event_type == "cached":
-                                visit_dicts = event[1]
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                                )
-                                yield (
-                                    EVENT_STATUS,
-                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
-                                )
-                            elif event_type == "progress":
-                                _, bytes_downloaded, total_bytes = event
-                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                            elif event_type == "parsing":
-                                csv_size = event[1]
-                                size_mb = csv_size / (1024 * 1024)
-                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
-                            elif event_type == "complete":
-                                visit_dicts = event[1]
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                                )
-                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                        if unfiltered_config.data_source.type == "cchq_forms":
+                            from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                                fetch_cchq_forms_as_visit_dicts,
+                            )
+
+                            yield (
+                                EVENT_STATUS,
+                                {"message": f"Fetching '{unfiltered_config.data_source.form_name}' from CommCare HQ..."},
+                            )
+                            visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                                request=self.request,
+                                data_source=unfiltered_config.data_source,
+                                access_token=self.access_token,
+                                opportunity_id=opp_id,
+                            )
+                        else:
+                            for event in self.backend.stream_raw_visits(
+                                opportunity_id=opp_id,
+                                access_token=self.access_token,
+                                expected_visit_count=self.visit_count,
+                                force_refresh=force_refresh,
+                            ):
+                                event_type = event[0]
+                                if event_type == "cached":
+                                    visit_dicts = event[1]
+                                    logger.info(
+                                        f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                                    )
+                                    yield (
+                                        EVENT_STATUS,
+                                        {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
+                                    )
+                                elif event_type == "progress":
+                                    _, bytes_downloaded, total_bytes = event
+                                    yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                                elif event_type == "parsing":
+                                    csv_size = event[1]
+                                    size_mb = csv_size / (1024 * 1024)
+                                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
+                                elif event_type == "complete":
+                                    visit_dicts = event[1]
+                                    logger.info(
+                                        f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                                    )
+                                    yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
                         if visit_dicts is None:
                             raise RuntimeError("No data received from API")
@@ -419,32 +435,51 @@ class AnalysisPipeline:
                     logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                     visit_dicts = None
-                    for event in self.backend.stream_raw_visits(
-                        opportunity_id=opp_id,
-                        access_token=self.access_token,
-                        expected_visit_count=self.visit_count,
-                        force_refresh=True,  # Force refresh from API
-                    ):
-                        event_type = event[0]
-                        if event_type == "cached":
-                            visit_dicts = event[1]
-                            logger.info(
-                                f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                            )
-                            yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
-                        elif event_type == "progress":
-                            _, bytes_downloaded, total_bytes = event
-                            yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                        elif event_type == "parsing":
-                            csv_size = event[1]
-                            size_mb = csv_size / (1024 * 1024)
-                            yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
-                        elif event_type == "complete":
-                            visit_dicts = event[1]
-                            logger.info(
-                                f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                            )
-                            yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                    if unfiltered_config.data_source.type == "cchq_forms":
+                        from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                            fetch_cchq_forms_as_visit_dicts,
+                        )
+
+                        yield (
+                            EVENT_STATUS,
+                            {"message": f"Fetching '{unfiltered_config.data_source.form_name}' from CommCare HQ..."},
+                        )
+                        visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                            request=self.request,
+                            data_source=unfiltered_config.data_source,
+                            access_token=self.access_token,
+                            opportunity_id=opp_id,
+                        )
+                    else:
+                        for event in self.backend.stream_raw_visits(
+                            opportunity_id=opp_id,
+                            access_token=self.access_token,
+                            expected_visit_count=self.visit_count,
+                            force_refresh=True,  # Force refresh from API
+                        ):
+                            event_type = event[0]
+                            if event_type == "cached":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                                )
+                                yield (
+                                    EVENT_STATUS,
+                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
+                                )
+                            elif event_type == "progress":
+                                _, bytes_downloaded, total_bytes = event
+                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                            elif event_type == "parsing":
+                                csv_size = event[1]
+                                size_mb = csv_size / (1024 * 1024)
+                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
+                            elif event_type == "complete":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                                )
+                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
                     if visit_dicts is None:
                         raise RuntimeError("No data received from API")
@@ -475,6 +510,32 @@ class AnalysisPipeline:
                         return
                     else:
                         raise RuntimeError("Failed to read filtered data from cache after force refresh")
+
+            # CCHQ data source: fetch synchronously (no streaming progress)
+            if config.data_source.type == "cchq_forms":
+                from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                    fetch_cchq_forms_as_visit_dicts,
+                )
+
+                yield (EVENT_STATUS, {"message": f"Fetching '{config.data_source.form_name}' from CommCare HQ..."})
+
+                visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                    request=self.request,
+                    data_source=config.data_source,
+                    access_token=self.access_token,
+                    opportunity_id=opp_id,
+                )
+
+                if not visit_dicts:
+                    yield (EVENT_STATUS, {"message": "No forms found"})
+                    yield (EVENT_RESULT, VisitAnalysisResult(opportunity_id=opp_id, rows=[], metadata={}))
+                    return
+
+                yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} forms..."})
+                result = self.backend.process_and_cache(self.request, config, opp_id, visit_dicts)
+                yield (EVENT_STATUS, {"message": "Complete!"})
+                yield (EVENT_RESULT, result)
+                return
 
             # Stream raw data fetch with progress (unfiltered path)
             yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
