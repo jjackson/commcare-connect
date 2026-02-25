@@ -347,3 +347,4 @@ commcare_connect/custom_analysis/rutf/examples/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+.worktrees/
