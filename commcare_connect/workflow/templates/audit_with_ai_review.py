@@ -1,5 +1,5 @@
 """
-Weekly Audit with AI Review Workflow Template.
+Weekly KMC Audit with AI Review Workflow Template.
 
 Streamlined workflow for creating weekly audit sessions with AI pre-validation.
 Designed to run every Monday with sensible defaults:
@@ -10,8 +10,8 @@ Designed to run every Monday with sensible defaults:
 """
 
 DEFINITION = {
-    "name": "Weekly Audit with AI Review",
-    "description": "Create weekly audit sessions per FLW with optional AI image validation",
+    "name": "Weekly KMC Audit with AI Review",
+    "description": "Create weekly KMC audit sessions per FLW with optional AI image validation",
     "version": 1,
     "templateType": "audit_with_ai_review",
     "statuses": [
@@ -986,8 +986,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 # Template export - this is what the registry imports
 TEMPLATE = {
     "key": "audit_with_ai_review",
-    "name": "Weekly Audit with AI Review",
-    "description": "Create weekly audit sessions per FLW with AI image validation",
+    "name": "Weekly KMC Audit with AI Review",
+    "description": "Create weekly KMC audit sessions per FLW with AI image validation",
     "icon": "fa-calendar-check",
     "color": "purple",
     "definition": DEFINITION,
