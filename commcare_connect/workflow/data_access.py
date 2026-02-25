@@ -1685,6 +1685,7 @@ class PipelineDataAccess(BaseDataAccess):
         from commcare_connect.labs.analysis.config import (
             AnalysisPipelineConfig,
             CacheStage,
+            DataSourceConfig,
             FieldComputation,
             HistogramComputation,
         )
@@ -1740,6 +1741,16 @@ class PipelineDataAccess(BaseDataAccess):
         if schema.get("terminal_stage") == "aggregated":
             terminal_stage = CacheStage.AGGREGATED
 
+        # Parse data source config
+        data_source_dict = schema.get("data_source", {})
+        data_source = DataSourceConfig(
+            type=data_source_dict.get("type", "connect_csv"),
+            form_name=data_source_dict.get("form_name", ""),
+            app_id=data_source_dict.get("app_id", ""),
+            app_id_source=data_source_dict.get("app_id_source", ""),
+            gs_app_id=data_source_dict.get("gs_app_id", ""),
+        )
+
         return AnalysisPipelineConfig(
             grouping_key=schema.get("grouping_key", "username"),
             fields=fields,
@@ -1749,4 +1760,5 @@ class PipelineDataAccess(BaseDataAccess):
             experiment=f"pipeline_{definition_id}",
             terminal_stage=terminal_stage,
             linking_field=schema.get("linking_field", "entity_id"),
+            data_source=data_source,
         )
