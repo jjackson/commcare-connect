@@ -222,6 +222,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     completed_at: new Date().toISOString(),
                                 },
                             }).catch(() => {});
+                        } else {
+                            setPhase('config');
+                            onUpdateState({ phase: 'config' }).catch(() => {});
                         }
                     },
                     (err) => {
@@ -245,6 +248,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         if (selectedOpps.length === 0) return;
 
         const imageTypeObj = IMAGE_TYPES.find(t => t.id === imageType);
+        if (!imageTypeObj) {
+            setIsRunning(false);
+            setProgress({ status: 'failed', error: 'Unknown image type: ' + imageType });
+            setPhase('config');
+            return;
+        }
         const config = {
             selected_opps: selectedOpps,
             image_type: imageType,
@@ -359,8 +368,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         } catch (e) { /* ignore */ }
         setProgress({ status: 'cancelled', message: 'Audit creation cancelled' });
         setPhase('config');
-        await onUpdateState({ phase: 'config' });
-        setIsCancelling(false);
+        try {
+            await onUpdateState({ phase: 'config' });
+        } finally {
+            setIsCancelling(false);
+        }
     };
 
     // ── Inner component: Visit Selection ────────────────────────────────────
