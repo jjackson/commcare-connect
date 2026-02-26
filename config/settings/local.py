@@ -86,5 +86,11 @@ MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsAuthentic
 MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
 MIDDLEWARE.insert(_auth_idx + 3, "commcare_connect.labs.context.LabsContextMiddleware")
 
+# Pipeline cache settings for local development
+# Accept cache if it has >=98% of expected visits (small delta from new data between runs)
+PIPELINE_CACHE_TOLERANCE_PCT = 98
+# 24-hour cache TTL for dev (production default: 1 hour)
+PIPELINE_CACHE_TTL_HOURS = 24
+
 # Labs apps configuration
 # No longer need hardcoded opportunity_id - API now supports organization_id/program_id

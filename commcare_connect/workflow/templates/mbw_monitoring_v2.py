@@ -911,8 +911,7 @@ def _build_v2_render_code() -> str:
         "                            ? 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'\n"
         "                            : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed')}>\n"
         "                        {'\\u21BB'} Re-run Analysis\n"
-        "                    </button>\n"
-        "                </div>\n            </div>\n\n            {/* Filter Bar */}",
+        "                    </button>\n",
     )
 
     # Replace OCS OAuth check (uses oauthStatus)
