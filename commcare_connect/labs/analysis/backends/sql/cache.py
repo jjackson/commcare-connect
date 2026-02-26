@@ -17,7 +17,8 @@ from commcare_connect.labs.analysis.utils import get_config_hash
 
 logger = logging.getLogger(__name__)
 
-# Default cache TTL (1 hour)
+# Default cache TTL. Read from settings to allow dev override.
+# Production: 1 hour. Local dev: configurable via PIPELINE_CACHE_TTL_HOURS.
 DEFAULT_TTL_HOURS = 1
 
 
@@ -64,7 +65,10 @@ class SQLCacheManager:
         self.opportunity_id = opportunity_id
         self.config = config
         self.config_hash = get_config_hash(config) if config else None
-        self.ttl = timedelta(hours=DEFAULT_TTL_HOURS)
+        from django.conf import settings
+
+        ttl_hours = getattr(settings, "PIPELINE_CACHE_TTL_HOURS", DEFAULT_TTL_HOURS)
+        self.ttl = timedelta(hours=ttl_hours)
 
     def _get_expires_at(self):
         return timezone.now() + self.ttl
@@ -73,11 +77,18 @@ class SQLCacheManager:
     # Raw Visit Cache
     # -------------------------------------------------------------------------
 
-    def has_valid_raw_cache(self, expected_visit_count: int) -> bool:
-        """Check if we have valid raw visit cache."""
+    def has_valid_raw_cache(self, expected_visit_count: int, tolerance_pct: int = 100) -> bool:
+        """Check if we have valid raw visit cache.
+
+        Args:
+            expected_visit_count: The live visit count from the opportunity.
+            tolerance_pct: Accept cache if it has >= this % of expected visits.
+                           100 = strict (default), 95 = accept if >=95% of visits cached.
+        """
+        min_count = int(expected_visit_count * tolerance_pct / 100) if tolerance_pct < 100 else expected_visit_count
         return RawVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
-            visit_count__gte=expected_visit_count,
+            visit_count__gte=min_count,
             expires_at__gt=timezone.now(),
         ).exists()
 
@@ -149,14 +160,15 @@ class SQLCacheManager:
     # Computed Visit Cache
     # -------------------------------------------------------------------------
 
-    def has_valid_computed_visit_cache(self, expected_visit_count: int) -> bool:
+    def has_valid_computed_visit_cache(self, expected_visit_count: int, tolerance_pct: int = 100) -> bool:
         """Check if we have valid computed visit cache for this config."""
         if not self.config_hash:
             return False
+        min_count = int(expected_visit_count * tolerance_pct / 100) if tolerance_pct < 100 else expected_visit_count
         return ComputedVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
             config_hash=self.config_hash,
-            visit_count__gte=expected_visit_count,
+            visit_count__gte=min_count,
             expires_at__gt=timezone.now(),
         ).exists()
 
@@ -222,14 +234,15 @@ class SQLCacheManager:
     # Computed FLW Cache
     # -------------------------------------------------------------------------
 
-    def has_valid_flw_cache(self, expected_visit_count: int) -> bool:
+    def has_valid_flw_cache(self, expected_visit_count: int, tolerance_pct: int = 100) -> bool:
         """Check if we have valid FLW cache for this config."""
         if not self.config_hash:
             return False
+        min_count = int(expected_visit_count * tolerance_pct / 100) if tolerance_pct < 100 else expected_visit_count
         return ComputedFLWCache.objects.filter(
             opportunity_id=self.opportunity_id,
             config_hash=self.config_hash,
-            visit_count__gte=expected_visit_count,
+            visit_count__gte=min_count,
             expires_at__gt=timezone.now(),
         ).exists()
 
