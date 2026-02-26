@@ -68,7 +68,6 @@ DATABASES = {
         default="postgres:///commcare_connect",
     ),
 }
-# Use PostGIS backend for GeoDjango spatial features
 DATABASES["default"]["ENGINE"] = "django.contrib.gis.db.backends.postgis"
 
 # DATABASES staging/production
@@ -89,6 +88,7 @@ SECONDARY_DB_ALIAS = None
 if env("SECONDARY_DATABASE_URL", default=None):
     SECONDARY_DB_ALIAS = "secondary"
     DATABASES[SECONDARY_DB_ALIAS] = env.db("SECONDARY_DATABASE_URL")
+    DATABASES[SECONDARY_DB_ALIAS]["ENGINE"] = "django.contrib.gis.db.backends.postgis"
     DATABASE_ROUTERS = ["commcare_connect.multidb.db_router.ConnectDatabaseRouter"]
 
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
@@ -112,7 +112,7 @@ DJANGO_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",  # Handy template tags
     "django.contrib.admin",
-    "django.contrib.gis",  # GeoDjango for spatial/GIS features
+    "django.contrib.gis",
     "django.forms",
 ]
 THIRD_PARTY_APPS = [
@@ -129,6 +129,8 @@ THIRD_PARTY_APPS = [
     "oauth2_provider",
     "django_tables2",
     "waffle",
+    "pghistory",
+    "pgtrigger",  # added for pghistory
 ]
 
 LOCAL_APPS = [
@@ -202,6 +204,7 @@ MIDDLEWARE = [
     "commcare_connect.utils.middleware.CustomErrorHandlingMiddleware",
     "commcare_connect.utils.middleware.CurrentVersionMiddleware",
     "waffle.middleware.WaffleMiddleware",
+    "commcare_connect.utils.middleware.CustomPGHistoryMiddleware",
 ]
 
 # STATIC
