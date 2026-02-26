@@ -595,6 +595,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"  - {diff}")
             if len(all_diffs) > 30:
                 self.stdout.write(f"  ... and {len(all_diffs) - 30} more")
+            raise CommandError(f"Parity failed with {len(all_diffs)} differences")
         else:
             self.stdout.write(self.style.SUCCESS(
                 "\nPASSED: v1 and v2 payloads are identical!"

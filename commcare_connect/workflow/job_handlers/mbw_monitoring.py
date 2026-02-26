@@ -184,7 +184,7 @@ def _compute_ebf_by_flw(adapted_rows: list[_PipelineRowAdapter]) -> dict[str, in
 
 
 @register_job_handler("mbw_monitoring")
-def handle_mbw_monitoring_job(job_config: dict, access_token: str, progress_callback) -> dict:
+def handle_mbw_monitoring_job(job_config: dict, _access_token: str, progress_callback) -> dict:
     """
     Handle MBW monitoring job - run GPS analysis, follow-up rates, quality metrics.
 
@@ -289,6 +289,7 @@ def handle_mbw_monitoring_job(job_config: dict, access_token: str, progress_call
     # =========================================================================
     # Step 2: Follow-up Rate Analysis
     # =========================================================================
+    adapted_visit_rows = None
     try:
         progress_callback("Computing follow-up rates...", processed=1, total=5)
 
@@ -367,7 +368,8 @@ def handle_mbw_monitoring_job(job_config: dict, access_token: str, progress_call
         pnc_date_by_mother = {}
         baby_dob_by_mother = {}
         flw_drilldown = {}
-        adapted_visit_rows = _adapt_rows(visit_rows) if "adapted_visit_rows" not in dir() else adapted_visit_rows
+        if not adapted_visit_rows:
+            adapted_visit_rows = _adapt_rows(visit_rows)
 
     # =========================================================================
     # Step 3: Quality/Fraud Overview Metrics
