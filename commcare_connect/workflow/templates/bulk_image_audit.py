@@ -76,7 +76,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [endDate, setEndDate] = React.useState(
         instance.state?.config?.end_date || ''
     );
-    const [datePreset, setDatePreset] = React.useState('last_week');
+    const [datePreset, setDatePreset] = React.useState('last_week'); // TODO Task 5: persist date_preset in handleCreate config and restore from instance.state?.config?.date_preset
     const [lastNCount, setLastNCount] = React.useState(
         instance.state?.config?.count_per_opp || 10
     );
@@ -164,6 +164,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     React.useEffect(() => {
         if (!startDate && !endDate) applyPreset('last_week');
     }, []);
+
+    // ── Placeholder: replaced in Task 5 ─────────────────────────────────────
+    const handleCreate = async () => {};
 
     // ── Inner component: Visit Selection ────────────────────────────────────
     const VisitSelectionSection = () => (
