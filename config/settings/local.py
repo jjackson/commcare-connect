@@ -38,11 +38,6 @@ INSTALLED_APPS += ["commcare_connect.deid"]
 # ------------------------------------------------------------------------------
 IS_LABS_ENVIRONMENT = True
 
-# Analysis backend: "python_redis" (default) or "sql"
-# python_redis: Redis/file caching with pandas computation
-# sql: PostgreSQL table caching with SQL computation
-LABS_ANALYSIS_BACKEND = env("LABS_ANALYSIS_BACKEND", default="sql")
-
 # OAuth configuration
 LABS_OAUTH_SCOPES = ["export"]
 
@@ -58,6 +53,7 @@ CLI_OAUTH_CLIENT_SECRET = env("CLI_OAUTH_CLIENT_SECRET", default="")  # Not need
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://www.commcarehq.org")
 COMMCARE_OAUTH_CLIENT_ID = env("COMMCARE_OAUTH_CLIENT_ID", default="")
 COMMCARE_OAUTH_CLIENT_SECRET = env("COMMCARE_OAUTH_CLIENT_SECRET", default="")
+COMMCARE_OAUTH_CLI_CLIENT_ID = env("COMMCARE_OAUTH_CLI_CLIENT_ID", default="")
 
 # Open Chat Studio OAuth Configuration (for OCS API access)
 OCS_URL = env("OCS_URL", default="https://www.openchatstudio.com")
@@ -89,6 +85,12 @@ MIDDLEWARE.remove("commcare_connect.users.middleware.OrganizationMiddleware")  #
 MIDDLEWARE.insert(_auth_idx + 1, "commcare_connect.labs.middleware.LabsAuthenticationMiddleware")
 MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.middleware.LabsURLWhitelistMiddleware")
 MIDDLEWARE.insert(_auth_idx + 3, "commcare_connect.labs.context.LabsContextMiddleware")
+
+# Pipeline cache settings for local development
+# Accept cache if it has >=98% of expected visits (small delta from new data between runs)
+PIPELINE_CACHE_TOLERANCE_PCT = 98
+# 24-hour cache TTL for dev (production default: 1 hour)
+PIPELINE_CACHE_TTL_HOURS = 24
 
 # Labs apps configuration
 # No longer need hardcoded opportunity_id - API now supports organization_id/program_id

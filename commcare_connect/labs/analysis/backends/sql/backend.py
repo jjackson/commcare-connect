@@ -76,6 +76,7 @@ class SQLBackend:
         force_refresh: bool = False,
         skip_form_json: bool = False,
         filter_visit_ids: set[int] | None = None,
+        tolerance_pct: int = 100,
     ) -> list[dict]:
         """
         Fetch raw visit data from SQL cache or API.
@@ -87,8 +88,8 @@ class SQLBackend:
 
         # Check if we have valid cached data in SQL
         if not force_refresh and expected_visit_count:
-            if cache_manager.has_valid_raw_cache(expected_visit_count):
-                logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
+            if cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct):
+                logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id} (tolerance={tolerance_pct}%)")
                 return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
 
         # Cache miss or force refresh - fetch from API
@@ -119,6 +120,7 @@ class SQLBackend:
         access_token: str,
         expected_visit_count: int | None = None,
         force_refresh: bool = False,
+        tolerance_pct: int = 100,
     ) -> Generator[tuple[str, Any], None, None]:
         """
         Stream raw visit data with progress events.
@@ -130,7 +132,7 @@ class SQLBackend:
 
         # Check SQL cache first
         if not force_refresh and expected_visit_count:
-            if cache_manager.has_valid_raw_cache(expected_visit_count):
+            if cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
                 visit_dicts = self._load_from_cache(cache_manager, skip_form_json=False, filter_visit_ids=None)
                 yield ("cached", visit_dicts)
@@ -179,20 +181,32 @@ class SQLBackend:
 
         csv_bytes = b"".join(chunks)
 
+        # Count raw CSV lines to diagnose truncation vs parsing issues
+        raw_line_count = csv_bytes.count(b"\n")
+        logger.info(
+            f"[SQL] Download complete: {len(csv_bytes)} bytes, "
+            f"{raw_line_count} raw lines (expect ~{expected_visit_count}+1 if complete)"
+        )
+
         # Yield status before slow CSV parsing so frontend can show progress
-        yield ("parsing", len(csv_bytes))
+        yield ("parsing", len(csv_bytes), raw_line_count)
 
         visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
+        if len(visit_dicts) != raw_line_count - 1:  # -1 for header
+            logger.warning(
+                f"[SQL] CSV parsing dropped rows: {raw_line_count - 1} raw data lines "
+                f"but only {len(visit_dicts)} parsed. Delta: {raw_line_count - 1 - len(visit_dicts)} lost"
+            )
 
         # NOTE: Don't store to SQL here - let process_and_cache handle it.
         # Storage happens in process_and_cache after pipeline yields "Processing X visits..."
 
         yield ("complete", visit_dicts)
 
-    def has_valid_raw_cache(self, opportunity_id: int, expected_visit_count: int) -> bool:
+    def has_valid_raw_cache(self, opportunity_id: int, expected_visit_count: int, tolerance_pct: int = 100) -> bool:
         """Check if valid raw cache exists in SQL."""
         cache_manager = SQLCacheManager(opportunity_id, config=None)
-        return cache_manager.has_valid_raw_cache(expected_visit_count)
+        return cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct)
 
     def _load_from_cache(
         self,
@@ -242,12 +256,13 @@ class SQLBackend:
     # -------------------------------------------------------------------------
 
     def get_cached_flw_result(
-        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
+        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int,
+        tolerance_pct: int = 100,
     ) -> FLWAnalysisResult | None:
         """Get cached FLW result if valid."""
         cache_manager = SQLCacheManager(opportunity_id, config)
 
-        if not cache_manager.has_valid_flw_cache(visit_count):
+        if not cache_manager.has_valid_flw_cache(visit_count, tolerance_pct=tolerance_pct):
             return None
 
         logger.info(f"[SQL] FLW cache HIT for opp {opportunity_id}")
@@ -276,12 +291,13 @@ class SQLBackend:
         )
 
     def get_cached_visit_result(
-        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int
+        self, opportunity_id: int, config: AnalysisPipelineConfig, visit_count: int,
+        tolerance_pct: int = 100,
     ) -> VisitAnalysisResult | None:
         """Get cached visit result if valid, applying filters at query time."""
         cache_manager = SQLCacheManager(opportunity_id, config)
 
-        if not cache_manager.has_valid_computed_visit_cache(visit_count):
+        if not cache_manager.has_valid_computed_visit_cache(visit_count, tolerance_pct=tolerance_pct):
             return None
 
         logger.info(f"[SQL] Visit cache HIT for opp {opportunity_id}")
