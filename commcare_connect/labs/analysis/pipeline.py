@@ -36,7 +36,6 @@ from typing import Any
 import sentry_sdk
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, VisitAnalysisResult
 
@@ -49,8 +48,10 @@ EVENT_RESULT = "result"
 EVENT_ERROR = "error"
 
 
-def get_backend() -> SQLBackend:
-    """Get the SQL backend instance."""
+def get_backend():
+    """Get the SQL backend instance (lazy import to avoid AppRegistryNotReady)."""
+    from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
+
     return SQLBackend()
 
 
@@ -70,7 +71,7 @@ class AnalysisPipeline:
             request: HttpRequest with labs_oauth and labs_context
         """
         self.request = request
-        self.backend = SQLBackend()
+        self.backend = get_backend()
         self.backend_name = "sql"
 
         # Extract context
