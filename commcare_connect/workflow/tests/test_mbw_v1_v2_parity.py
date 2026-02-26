@@ -5,19 +5,19 @@ Both paths call the same computation functions (GPS analysis, follow-up rates,
 quality metrics, etc.). The difference is how raw data is transformed before
 those calls. This test verifies the transformations produce identical inputs.
 
+V1 transforms are imported from data_transforms.py (the shared module that
+views.py also uses). V2 transforms come from the job handler module.
+
 Strategy:
     1. Create VisitRow objects (as v1's pipeline would produce)
-    2. Run v1's inline transformations (extracted from views.py)
+    2. Run v1's transforms via data_transforms module (same code views.py uses)
     3. Serialize VisitRows to dicts (as v2's pipeline SSE would deliver)
-    4. Run v2's adapter/transformation functions
+    4. Run v2's adapter/transformation functions from job handler
     5. Assert both paths produce identical computation inputs and outputs
 """
 
-import os
-import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime
-from unittest.mock import MagicMock
+from datetime import date
 
 import django
 from django.conf import settings
@@ -46,6 +46,11 @@ from commcare_connect.workflow.job_handlers.mbw_monitoring import (  # noqa: E40
     _build_gps_visit_dicts,
     _compute_ebf_by_flw,
     _extract_per_mother_fields,
+)
+from commcare_connect.workflow.templates.mbw_monitoring.data_transforms import (  # noqa: E402
+    build_gps_visit_dicts,
+    compute_ebf_by_flw,
+    extract_per_mother_fields,
 )
 
 
@@ -193,88 +198,6 @@ def _serialize_visit_row(row) -> dict:
 
 
 # =============================================================================
-# V1 transformation functions (extracted from views.py)
-# =============================================================================
-
-def v1_build_gps_visit_dicts(pipeline_rows, active_usernames):
-    """Replicate v1's GPS dict-building from views.py lines 456-472."""
-    visits_for_gps = []
-    for row in pipeline_rows:
-        row_username = (row.username or "").lower()
-        if row_username not in active_usernames:
-            continue
-        gps_location = None
-        if row.latitude is not None and row.longitude is not None:
-            gps_location = f"{row.latitude} {row.longitude}"
-
-        visits_for_gps.append({
-            "id": row.id,
-            "username": row_username,
-            "visit_date": row.visit_date.isoformat() if row.visit_date else None,
-            "entity_name": row.entity_name,
-            "computed": row.computed,
-            "metadata": {"location": gps_location},
-        })
-    return visits_for_gps
-
-
-def v1_extract_per_mother_fields(pipeline_rows):
-    """Replicate v1's per-mother extraction from views.py lines 580-603."""
-    parity_by_mother = {}
-    anc_date_by_mother = {}
-    pnc_date_by_mother = {}
-    baby_dob_by_mother = {}
-    for row in pipeline_rows:
-        form_name = row.computed.get("form_name", "").strip()
-        mother_id = row.computed.get("mother_case_id")
-        if not mother_id:
-            continue
-        if form_name == "ANC Visit":
-            parity = row.computed.get("parity")
-            if parity:
-                parity_by_mother[mother_id] = parity
-            anc_date = row.computed.get("anc_completion_date")
-            if anc_date:
-                anc_date_by_mother[mother_id] = anc_date
-        elif form_name == "Post delivery visit":
-            pnc_date = row.computed.get("pnc_completion_date")
-            if pnc_date:
-                pnc_date_by_mother[mother_id] = pnc_date
-            baby_dob = row.computed.get("baby_dob")
-            if baby_dob:
-                baby_dob_by_mother[mother_id] = baby_dob
-    return {
-        "parity_by_mother": parity_by_mother,
-        "anc_date_by_mother": anc_date_by_mother,
-        "pnc_date_by_mother": pnc_date_by_mother,
-        "baby_dob_by_mother": baby_dob_by_mother,
-    }
-
-
-def v1_compute_ebf_by_flw(pipeline_rows):
-    """Replicate v1's EBF computation from views.py lines 606-623."""
-    ebf_counts_by_flw = {}
-    for row in pipeline_rows:
-        bf_status = (row.computed.get("bf_status") or "").strip()
-        if not bf_status:
-            continue
-        username = (row.username or "").strip().lower()
-        if not username:
-            continue
-        if username not in ebf_counts_by_flw:
-            ebf_counts_by_flw[username] = {"ebf": 0, "total": 0}
-        ebf_counts_by_flw[username]["total"] += 1
-        if "ebf" in bf_status.split():
-            ebf_counts_by_flw[username]["ebf"] += 1
-
-    ebf_pct_by_flw = {}
-    for username, counts in ebf_counts_by_flw.items():
-        if counts["total"] > 0:
-            ebf_pct_by_flw[username] = round(counts["ebf"] / counts["total"] * 100)
-    return ebf_pct_by_flw
-
-
-# =============================================================================
 # Parity Tests
 # =============================================================================
 
@@ -289,14 +212,14 @@ class TestGPSTransformationParity:
 
     def test_gps_dict_count_matches(self):
         """Both paths produce the same number of GPS visit dicts."""
-        v1_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v2_dicts = _build_gps_visit_dicts(self.serialized_rows)
 
         assert len(v1_dicts) == len(v2_dicts)
 
     def test_gps_dict_usernames_match(self):
         """Both paths produce identical lowercased usernames."""
-        v1_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v2_dicts = _build_gps_visit_dicts(self.serialized_rows)
 
         v1_usernames = [d["username"] for d in v1_dicts]
@@ -308,7 +231,7 @@ class TestGPSTransformationParity:
 
     def test_gps_dict_computed_fields_match(self):
         """Both paths produce identical computed dicts for GPS analysis."""
-        v1_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v2_dicts = _build_gps_visit_dicts(self.serialized_rows)
 
         # Compare computed fields for each visit
@@ -322,7 +245,7 @@ class TestGPSTransformationParity:
 
     def test_gps_dict_metadata_location_match(self):
         """Both paths produce identical metadata.location strings."""
-        v1_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v2_dicts = _build_gps_visit_dicts(self.serialized_rows)
 
         for v1, v2 in zip(v1_dicts, v2_dicts):
@@ -337,7 +260,7 @@ class TestGPSTransformationParity:
         )
 
         flw_names = {"flw_alpha": "FLW Alpha"}
-        v1_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v2_dicts = _build_gps_visit_dicts(self.serialized_rows)
 
         v1_result = analyze_gps_metrics(v1_dicts, flw_names)
@@ -367,32 +290,32 @@ class TestPerMotherFieldExtractionParity:
         self.serialized_rows = [_serialize_visit_row(r) for r in self.visit_rows]
 
     def test_parity_by_mother_matches(self):
-        v1_result = v1_extract_per_mother_fields(self.visit_rows)
+        v1_result = extract_per_mother_fields(self.visit_rows)
         v2_result = _extract_per_mother_fields(_adapt_rows(self.serialized_rows))
 
         assert v1_result["parity_by_mother"] == v2_result["parity_by_mother"]
 
     def test_anc_date_by_mother_matches(self):
-        v1_result = v1_extract_per_mother_fields(self.visit_rows)
+        v1_result = extract_per_mother_fields(self.visit_rows)
         v2_result = _extract_per_mother_fields(_adapt_rows(self.serialized_rows))
 
         assert v1_result["anc_date_by_mother"] == v2_result["anc_date_by_mother"]
 
     def test_pnc_date_by_mother_matches(self):
-        v1_result = v1_extract_per_mother_fields(self.visit_rows)
+        v1_result = extract_per_mother_fields(self.visit_rows)
         v2_result = _extract_per_mother_fields(_adapt_rows(self.serialized_rows))
 
         assert v1_result["pnc_date_by_mother"] == v2_result["pnc_date_by_mother"]
 
     def test_baby_dob_by_mother_matches(self):
-        v1_result = v1_extract_per_mother_fields(self.visit_rows)
+        v1_result = extract_per_mother_fields(self.visit_rows)
         v2_result = _extract_per_mother_fields(_adapt_rows(self.serialized_rows))
 
         assert v1_result["baby_dob_by_mother"] == v2_result["baby_dob_by_mother"]
 
     def test_all_fields_match(self):
         """Full comparison of all per-mother field dicts."""
-        v1_result = v1_extract_per_mother_fields(self.visit_rows)
+        v1_result = extract_per_mother_fields(self.visit_rows)
         v2_result = _extract_per_mother_fields(_adapt_rows(self.serialized_rows))
 
         assert v1_result == v2_result
@@ -406,7 +329,7 @@ class TestEBFComputationParity:
         self.serialized_rows = [_serialize_visit_row(r) for r in self.visit_rows]
 
     def test_ebf_percentages_match(self):
-        v1_ebf = v1_compute_ebf_by_flw(self.visit_rows)
+        v1_ebf = compute_ebf_by_flw(self.visit_rows)
         v2_ebf = _compute_ebf_by_flw(_adapt_rows(self.serialized_rows))
 
         assert v1_ebf == v2_ebf
@@ -421,7 +344,7 @@ class TestEBFComputationParity:
 
         flw_alpha: 2 ebf out of 3 total = 67%
         """
-        v1_ebf = v1_compute_ebf_by_flw(self.visit_rows)
+        v1_ebf = compute_ebf_by_flw(self.visit_rows)
         v2_ebf = _compute_ebf_by_flw(_adapt_rows(self.serialized_rows))
 
         assert v1_ebf["flw_alpha"] == 67
@@ -552,7 +475,7 @@ class TestEndToEndJobHandlerParity:
         )
 
         # V1 path
-        v1_gps_dicts = v1_build_gps_visit_dicts(self.visit_rows, self.active_usernames)
+        v1_gps_dicts = build_gps_visit_dicts(self.visit_rows, self.active_usernames)
         v1_result = analyze_gps_metrics(v1_gps_dicts, self.flw_names)
         v1_gps_data = {
             "total_visits": v1_result.total_visits,
@@ -631,7 +554,7 @@ class TestEndToEndJobHandlerParity:
         v1_cases = build_followup_from_pipeline(
             self.visit_rows, self.active_usernames
         )
-        v1_per_mother = v1_extract_per_mother_fields(self.visit_rows)
+        v1_per_mother = extract_per_mother_fields(self.visit_rows)
         v1_mother_meta = extract_mother_metadata_from_forms([], current_date=current_date)
         v1_quality = compute_overview_quality_metrics(
             v1_cases, v1_mother_meta,

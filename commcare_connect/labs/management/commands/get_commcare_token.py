@@ -59,7 +59,7 @@ class Command(BaseCommand):
             self.stdout.write(f"Client ID: {client_id}")
             self.stdout.write(f"Scope: {options['scope']}\n")
 
-        # Get OAuth token using the same client as Connect OAuth
+        # Get OAuth token — CommCare HQ uses /oauth/ paths, not /o/
         token_data = get_oauth_token(
             client_id=client_id,
             production_url=commcare_url,
@@ -68,6 +68,8 @@ class Command(BaseCommand):
             callback_path="/commcare/callback",
             scope=options["scope"],
             verbose=not options["quiet"],
+            authorize_path="/oauth/authorize/",
+            token_path="/oauth/token/",
         )
 
         if not token_data:

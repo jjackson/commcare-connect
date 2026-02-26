@@ -95,6 +95,8 @@ def get_oauth_token(
     callback_path: str = "/callback",
     scope: str = "export",
     verbose: bool = True,
+    authorize_path: str = "/o/authorize/",
+    token_path: str = "/o/token/",
 ) -> dict | None:
     """
     Obtain an OAuth access token via browser-based authorization.
@@ -107,12 +109,14 @@ def get_oauth_token(
 
     Args:
         client_id: OAuth client ID
-        production_url: Base URL of the production CommCare Connect instance
+        production_url: Base URL of the OAuth provider
         client_secret: OAuth client secret (optional, not needed for public clients with PKCE)
         port: Local port for OAuth callback (default: 8765)
         callback_path: Path for OAuth callback (default: "/callback")
         scope: OAuth scopes to request (default: "export")
         verbose: Print status messages (default: True)
+        authorize_path: OAuth authorization endpoint path (default: "/o/authorize/")
+        token_path: OAuth token endpoint path (default: "/o/token/")
 
     Returns:
         Dict with token data including 'access_token', 'token_type', 'expires_in', etc.
@@ -146,7 +150,7 @@ def get_oauth_token(
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
-    auth_url = f"{production_url}/o/authorize/?{urlencode(auth_params)}"
+    auth_url = f"{production_url}{authorize_path}?{urlencode(auth_params)}"
 
     if verbose:
         print("\n" + "=" * 70)
@@ -194,7 +198,7 @@ def get_oauth_token(
 
     try:
         response = httpx.post(
-            f"{production_url}/o/token/",
+            f"{production_url}{token_path}",
             data=token_data,
             timeout=10,
         )
@@ -303,6 +307,7 @@ def create_cli_request(
     program_id: int | None = None,
     organization_id: str | None = None,
     url_path: str = "/",
+    include_commcare: bool = True,
 ):
     """
     Create a mock Django request with full labs context for CLI usage.
@@ -313,12 +318,14 @@ def create_cli_request(
     2. Introspects the token to get user profile
     3. Fetches organization data to populate labs_context with full objects
     4. Creates a mock request with properly populated session and labs_context
+    5. Optionally loads CommCare HQ OAuth token (from ``get_commcare_token``)
 
     Args:
         opportunity_id: Optional opportunity ID to include in context
         program_id: Optional program ID to include in context
         organization_id: Optional organization slug to include in context
         url_path: URL path for the request (default: "/")
+        include_commcare: Load CommCare HQ token into session if available (default: True)
 
     Returns:
         Mock HttpRequest with labs_oauth session and labs_context, or None if auth fails
@@ -428,4 +435,45 @@ def create_cli_request(
     }
     request.labs_context = labs_context
 
+    # Optionally load CommCare HQ OAuth token
+    if include_commcare:
+        _inject_commcare_token(request)
+
     return request
+
+
+def _inject_commcare_token(request):
+    """Load CommCare HQ CLI token into request session if available.
+
+    Reads the token saved by ``python manage.py get_commcare_token``
+    (stored at ``~/.commcare-connect/commcare_token.json``) and injects
+    it into ``request.session["commcare_oauth"]`` so that
+    ``CommCareDataAccess`` can use it transparently.
+    """
+    from pathlib import Path
+
+    from commcare_connect.labs.integrations.connect.cli.token_manager import TokenManager
+
+    token_file = Path.home() / ".commcare-connect" / "commcare_token.json"
+    tm = TokenManager(str(token_file))
+    token_data = tm.load_token()
+
+    if not token_data or not tm.get_valid_token():
+        return
+
+    # Build the session dict that CommCareDataAccess expects
+    expires_at = 0
+    if "expires_at" in token_data:
+        from datetime import datetime
+
+        try:
+            expires_at = datetime.fromisoformat(token_data["expires_at"]).timestamp()
+        except (ValueError, TypeError):
+            pass
+
+    request.session["commcare_oauth"] = {
+        "access_token": token_data["access_token"],
+        "refresh_token": token_data.get("refresh_token"),
+        "expires_at": expires_at,
+        "token_type": token_data.get("token_type", "Bearer"),
+    }

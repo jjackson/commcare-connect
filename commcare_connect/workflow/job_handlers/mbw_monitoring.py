@@ -112,6 +112,7 @@ def _build_gps_visit_dicts(rows: list[dict]) -> list[dict]:
         visit_dict = {
             "id": row.get("id") or row.get("entity_id") or row.get("visit_id", 0),
             "username": (row.get("username") or "").lower(),
+            "visit_date": row.get("visit_date"),
             "metadata": row.get("metadata", {}),
             "computed": computed,
         }
