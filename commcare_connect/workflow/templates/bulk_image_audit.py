@@ -404,7 +404,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const handleComplete = async () => {
         const config = instance.state?.config || {};
         const flwRows = buildFlwRows(assessments, config);
-        const allPassing = flwRows.every(r => r.pct >= threshold);
+        const allPassing = flwRows.length > 0 && flwRows.every(r => r.pct >= threshold);
         const overallResult = allPassing ? 'pass' : 'fail';
         const visitResults = buildVisitResults(assessments);
 
@@ -825,7 +825,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 const body = JSON.stringify({
                     assessments: [{ visit_id: a.visit_id, blob_id: a.blob_id, reading }],
                     agent_id: 'scale_validation',
-                    opportunity_id: instance.state?.config?.selected_opps?.[0]?.id,
+                    opportunity_id: a.opportunity_id,
                 });
                 const res = await fetch('/audit/api/' + sessionId + '/ai-review/', {
                     method: 'POST',
@@ -956,7 +956,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (col === 'result') {
                 return ((a.pct >= tableThreshold ? 1 : 0) - (b.pct >= tableThreshold ? 1 : 0)) * dir;
             }
-            return a[col].localeCompare(b[col]) * dir;
+            return String(a[col] ?? '').localeCompare(String(b[col] ?? '')) * dir;
         });
 
         const SortIcon = ({ col }) => (
@@ -1016,7 +1016,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             {sorted.map((row, idx) => {
                                 const passing = row.pct >= tableThreshold;
                                 return (
-                                    <tr key={idx} className="hover:bg-gray-50">
+                                    <tr key={row.flw_name + '|' + row.opp_name} className="hover:bg-gray-50">
                                         <td className="px-4 py-3 text-sm text-gray-700">{row.opp_name}</td>
                                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.flw_name}</td>
                                         <td className="px-4 py-3 text-sm text-gray-700">
@@ -1195,7 +1195,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // ── Inner component: Completed FLW Table (loads data for read-only view) ────
     const CompletedFlwTable = ({ config, threshold: completedThreshold }) => {
-        const sid = instance.state?.session_id;
+        const sid = sessionId;
         const [rows, setRows] = React.useState([]);
         const [loading, setLoading] = React.useState(true);
 
