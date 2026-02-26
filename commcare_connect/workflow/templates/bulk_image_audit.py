@@ -375,6 +375,110 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
     };
 
+    // ── Review state ─────────────────────────────────────────────────────────
+    const [assessments, setAssessments] = React.useState([]);
+    const [loadingReview, setLoadingReview] = React.useState(false);
+    const [reviewError, setReviewError] = React.useState(null);
+    const [isSaving, setIsSaving] = React.useState(false);
+    const [aiRunning, setAiRunning] = React.useState({});  // {blob_id: true/false}
+
+    // Load assessment data when entering review phase
+    React.useEffect(() => {
+        if (phase !== 'reviewing' || !sessionId) return;
+        setLoadingReview(true);
+        setReviewError(null);
+        fetch('/audit/api/' + sessionId + '/bulk-data/')
+            .then(r => r.json())
+            .then(data => {
+                setAssessments(data.assessments || []);
+                setLoadingReview(false);
+            })
+            .catch(err => {
+                setReviewError(err.message);
+                setLoadingReview(false);
+            });
+    }, [phase, sessionId]);
+
+    // Update a single assessment field locally
+    const updateAssessment = (id, patch) => {
+        setAssessments(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
+    };
+
+    // Build visit_results structure expected by backend
+    const buildVisitResults = (asmnts) => {
+        const vr = {};
+        for (const a of asmnts) {
+            const vid = String(a.visit_id);
+            if (!vr[vid]) vr[vid] = { assessments: {} };
+            vr[vid].assessments[a.blob_id] = {
+                question_id: a.question_id,
+                result: a.result || '',
+                notes: a.notes || '',
+                ai_result: a.ai_result || '',
+                ai_notes: a.ai_notes || '',
+            };
+        }
+        return vr;
+    };
+
+    // Save progress to backend
+    const saveProgress = async (updatedAssessments) => {
+        if (!sessionId) return;
+        const asmnts = updatedAssessments || assessments;
+        const visitResults = buildVisitResults(asmnts);
+        const fd = new FormData();
+        fd.append('visit_results', JSON.stringify(visitResults));
+        setIsSaving(true);
+        try {
+            await fetch('/audit/api/' + sessionId + '/save/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCsrfToken() },
+                body: fd,
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Handle pass/fail button click — update locally and save
+    const handleAssessResult = async (id, result) => {
+        const updated = assessments.map(a =>
+            a.id === id ? { ...a, result, status: result } : a
+        );
+        setAssessments(updated);
+        await saveProgress(updated);
+    };
+
+    // Handle notes change — debounced save
+    const notesTimeout = React.useRef(null);
+    const handleNotesChange = (id, notes) => {
+        updateAssessment(id, { notes });
+        if (notesTimeout.current) clearTimeout(notesTimeout.current);
+        notesTimeout.current = setTimeout(() => saveProgress(), 800);
+    };
+
+    // ── FLW summary helper ───────────────────────────────────────────────────
+    const buildFlwRows = (asmnts, config) => {
+        const byUser = {};
+        for (const a of asmnts) {
+            if (!byUser[a.username]) {
+                byUser[a.username] = {
+                    flw_name: a.username,
+                    opp_name: (config?.selected_opps || []).find(o => String(o.id) === String(a.opportunity_id))?.name
+                        || (config?.selected_opps || [])[0]?.name || '—',
+                    passed: 0,
+                    total: 0,
+                };
+            }
+            byUser[a.username].total += 1;
+            if (a.status === 'pass') byUser[a.username].passed += 1;
+        }
+        return Object.values(byUser).map(row => ({
+            ...row,
+            pct: row.total > 0 ? Math.round(row.passed / row.total * 100) : 0,
+        }));
+    };
+
     // ── Inner component: Visit Selection ────────────────────────────────────
     const VisitSelectionSection = () => (
         <div>
@@ -648,8 +752,200 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             )}
         </div>
     );
+    // ── Inner component: PhotoCard ───────────────────────────────────────────
+    const PhotoCard = ({ assessment: a, isScalePhoto }) => {
+        const [expanded, setExpanded] = React.useState(false);
+        const isAiRunning = aiRunning[a.blob_id];
+
+        const handleAiReview = async () => {
+            if (!isScalePhoto || !sessionId) return;
+            setAiRunning(prev => ({ ...prev, [a.blob_id]: true }));
+            try {
+                const fd = new FormData();
+                fd.append('blob_id', a.blob_id);
+                fd.append('visit_id', String(a.visit_id));
+                const res = await fetch('/audit/api/' + sessionId + '/ai-review/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                });
+                const data = await res.json();
+                if (data.success) {
+                    updateAssessment(a.id, {
+                        ai_result: data.result || '',
+                        ai_notes: data.notes || '',
+                    });
+                }
+            } finally {
+                setAiRunning(prev => ({ ...prev, [a.blob_id]: false }));
+            }
+        };
+
+        const statusBorderColor = a.status === 'pass' ? 'border-green-200'
+            : a.status === 'fail' ? 'border-red-200' : 'border-gray-200';
+
+        return (
+            <div className={'bg-white rounded-lg shadow-sm border ' + statusBorderColor}>
+                <div className="p-4 flex gap-4">
+                    {/* Thumbnail */}
+                    <div className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded overflow-hidden cursor-pointer"
+                        onClick={() => setExpanded(!expanded)}>
+                        <img src={a.image_url} alt="visit photo"
+                            className="w-full h-full object-cover"
+                            loading="lazy" />
+                    </div>
+                    {/* Meta + controls */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-gray-900 truncate">
+                                {a.entity_name || 'Unknown'}
+                            </span>
+                            <span className="text-xs text-gray-400">{a.visit_date}</span>
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono mb-2">{a.username}</div>
+
+                        {/* Pass / Fail buttons */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <button onClick={() => handleAssessResult(a.id, 'pass')}
+                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
+                                    (a.status === 'pass'
+                                        ? 'bg-green-600 text-white border-green-600'
+                                        : 'bg-white text-green-700 border-green-300 hover:bg-green-50')}>
+                                <i className="fa-solid fa-check mr-1"></i>Pass
+                            </button>
+                            <button onClick={() => handleAssessResult(a.id, 'fail')}
+                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
+                                    (a.status === 'fail'
+                                        ? 'bg-red-600 text-white border-red-600'
+                                        : 'bg-white text-red-700 border-red-300 hover:bg-red-50')}>
+                                <i className="fa-solid fa-times mr-1"></i>Fail
+                            </button>
+
+                            {/* AI Review — enabled for scale photos only */}
+                            <button
+                                onClick={handleAiReview}
+                                disabled={!isScalePhoto || isAiRunning}
+                                title={!isScalePhoto ? 'AI review is only available for Scale Photos' : 'Run AI review'}
+                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
+                                    (isScalePhoto
+                                        ? 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
+                                        : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50')}>
+                                {isAiRunning
+                                    ? <i className="fa-solid fa-spinner fa-spin mr-1"></i>
+                                    : <i className="fa-solid fa-robot mr-1"></i>}
+                                AI Review
+                            </button>
+                        </div>
+
+                        {/* AI result badge */}
+                        {a.ai_result && (
+                            <div className={'mt-2 text-xs px-2 py-1 rounded inline-flex items-center gap-1 ' +
+                                (a.ai_result === 'match' ? 'bg-green-50 text-green-700'
+                                    : a.ai_result === 'no_match' ? 'bg-red-50 text-red-700'
+                                    : 'bg-yellow-50 text-yellow-700')}>
+                                <i className="fa-solid fa-robot"></i>
+                                AI: {a.ai_result}{a.ai_notes ? ' — ' + a.ai_notes : ''}
+                            </div>
+                        )}
+
+                        {/* Notes */}
+                        <input
+                            type="text"
+                            value={a.notes || ''}
+                            onChange={e => handleNotesChange(a.id, e.target.value)}
+                            placeholder="Add note..."
+                            className="mt-2 w-full text-sm border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                        />
+                    </div>
+                </div>
+
+                {/* Expanded full image */}
+                {expanded && (
+                    <div className="border-t border-gray-100 p-4">
+                        <img src={a.image_url} alt="full visit photo"
+                            className="max-w-full rounded shadow-sm" />
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // ── Inner component: Review ──────────────────────────────────────────────
+    const ReviewPhase = () => {
+        const config = instance.state?.config || {};
+        const currentThreshold = config.threshold ?? 80;
+        const currentImageType = config.image_type || 'scale_photo';
+        const isScalePhoto = currentImageType === 'scale_photo';
+
+        const total = assessments.length;
+        const passed = assessments.filter(a => a.status === 'pass').length;
+        const failed = assessments.filter(a => a.status === 'fail').length;
+        const pending = total - passed - failed;
+
+        if (loadingReview) return (
+            <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+                <i className="fa-solid fa-spinner fa-spin text-gray-400 text-3xl mb-3"></i>
+                <p className="text-gray-500 mt-3">Loading photos...</p>
+            </div>
+        );
+        if (reviewError) return (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <p className="text-red-700">Error loading review data: {reviewError}</p>
+            </div>
+        );
+
+        return (
+            <div className="space-y-6">
+                {/* Stats bar */}
+                <div className="grid grid-cols-4 gap-4">
+                    {[
+                        { label: 'Total', value: total, color: 'blue', icon: 'fa-images' },
+                        { label: 'Pending', value: pending, color: 'yellow', icon: 'fa-clock' },
+                        { label: 'Passed', value: passed, color: 'green', icon: 'fa-check' },
+                        { label: 'Failed', value: failed, color: 'red', icon: 'fa-times' },
+                    ].map(card => (
+                        <div key={card.label}
+                            className={'bg-white rounded-lg shadow-sm p-4 border-l-4 border-' + card.color + '-500'}>
+                            <div className={'text-2xl font-bold text-' + card.color + '-600'}>
+                                {card.value}
+                            </div>
+                            <div className="text-sm text-gray-500 flex items-center gap-1 mt-1">
+                                <i className={'fa-solid ' + card.icon + ' text-xs'}></i>
+                                {card.label}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Save indicator */}
+                {isSaving && (
+                    <div className="text-sm text-gray-400 flex items-center gap-1">
+                        <i className="fa-solid fa-spinner fa-spin text-xs"></i> Saving...
+                    </div>
+                )}
+
+                {/* Photo list */}
+                <div className="space-y-3">
+                    {assessments.map(a => (
+                        <PhotoCard key={a.id} assessment={a} isScalePhoto={isScalePhoto} />
+                    ))}
+                    {assessments.length === 0 && (
+                        <div className="bg-white rounded-lg shadow-sm p-8 text-center text-gray-500">
+                            No photos found for the selected criteria.
+                        </div>
+                    )}
+                </div>
+
+                {/* FLW Summary Table — placeholder, replaced in Task 7 */}
+                <div id="flw-summary-placeholder"></div>
+
+                {/* Complete Image Review — placeholder, replaced in Task 8 */}
+                <div id="complete-section-placeholder"></div>
+            </div>
+        );
+    };
+
     // ── Placeholder inner components (to be replaced in later tasks) ─────────
-    const ReviewPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Review phase coming soon...</div>;
     const CompletedPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Completed.</div>;
 
     // ── Phase router ────────────────────────────────────────────────────────
