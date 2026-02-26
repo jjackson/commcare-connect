@@ -953,6 +953,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (col === 'pct' || col === 'passed' || col === 'total') {
                 return (a[col] - b[col]) * dir;
             }
+            if (col === 'result') {
+                return ((a.pct >= tableThreshold ? 1 : 0) - (b.pct >= tableThreshold ? 1 : 0)) * dir;
+            }
             return a[col].localeCompare(b[col]) * dir;
         });
 
@@ -1001,11 +1004,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     { id: 'result', label: 'Result' },
                                 ].map(col => (
                                     <th key={col.id}
-                                        onClick={() => col.id !== 'result' && sortFlwTable(col.id)}
-                                        className={'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ' +
-                                            (col.id !== 'result' ? 'cursor-pointer hover:text-gray-700' : '')}>
+                                        onClick={() => sortFlwTable(col.id)}
+                                        className={'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700'}>
                                         {col.label}
-                                        {col.id !== 'result' && <SortIcon col={col.id} />}
+                                        <SortIcon col={col.id} />
                                     </th>
                                 ))}
                             </tr>
