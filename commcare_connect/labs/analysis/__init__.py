@@ -7,9 +7,7 @@ Two main analysis patterns:
 - FLW Analysis: One row per FLW with aggregated computations
 - Visit Analysis: One row per visit with computed fields (no aggregation)
 
-Backends (configured via settings.LABS_ANALYSIS_BACKEND):
-- python_redis: Redis/file caching with pandas computation (default)
-- sql: PostgreSQL table caching with SQL computation
+Uses PostgreSQL table caching with SQL computation (SQLBackend).
 
 Usage:
     # Using the streaming pipeline (recommended for dashboards)
@@ -27,10 +25,8 @@ Usage:
     result = run_analysis_pipeline(request, config)
 """
 
-# Import from python_redis backend for direct access when needed
-from commcare_connect.labs.analysis.backends.python_redis.computations import compute_visit_fields
-from commcare_connect.labs.analysis.backends.python_redis.flw_analyzer import FLWAnalyzer, compute_flw_analysis
-from commcare_connect.labs.analysis.backends.python_redis.visit_analyzer import VisitAnalyzer, compute_visit_analysis
+# Shared computation functions (used by audit and pipeline backends)
+from commcare_connect.labs.analysis.computations import compute_visit_fields
 from commcare_connect.labs.analysis.config import (
     AnalysisConfig,
     AnalysisPipelineConfig,
@@ -75,15 +71,11 @@ __all__ = [
     "FieldComputation",
     "HistogramComputation",
     # FLW Analysis
-    "FLWAnalyzer",
     "FLWAnalysisResult",
     "FLWRow",
-    "compute_flw_analysis",
     # Visit Analysis
-    "VisitAnalyzer",
     "VisitAnalysisResult",
     "VisitRow",
-    "compute_visit_analysis",
     "compute_visit_fields",
     # Data models
     "AnalysisResult",

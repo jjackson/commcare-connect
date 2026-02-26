@@ -21,6 +21,11 @@ from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 from django.views import View
 from django.views.generic import TemplateView
 
+from commcare_connect.workflow.templates.mbw_monitoring.data_transforms import (
+    build_gps_visit_dicts,
+    compute_ebf_by_flw,
+    extract_per_mother_fields,
+)
 from commcare_connect.workflow.templates.mbw_monitoring.gps_analysis import (
     analyze_gps_metrics,
     build_result_from_analyzed_visits,
@@ -453,23 +458,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # Step 3: GPS analysis (on ALL visits, then filter by date)
             yield send_sse_event("Analyzing GPS data...")
 
-            visits_for_gps = []
-            for row in pipeline_result.rows:
-                row_username = (row.username or "").lower()
-                if row_username not in active_usernames:
-                    continue
-                gps_location = None
-                if row.latitude is not None and row.longitude is not None:
-                    gps_location = f"{row.latitude} {row.longitude}"
-
-                visits_for_gps.append({
-                    "id": row.id,
-                    "username": row_username,
-                    "visit_date": row.visit_date.isoformat() if row.visit_date else None,
-                    "entity_name": row.entity_name,
-                    "computed": row.computed,
-                    "metadata": {"location": gps_location},
-                })
+            visits_for_gps = build_gps_visit_dicts(pipeline_result.rows, active_usernames)
 
             # Apply app version filter to GPS visits if configured
             if app_version_op and app_version_val is not None:
@@ -578,49 +567,14 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             )
 
             # Extract per-mother fields from pipeline rows (needed by drilldown + quality metrics)
-            parity_by_mother = {}
-            anc_date_by_mother = {}
-            pnc_date_by_mother = {}
-            baby_dob_by_mother = {}
-            for row in all_pipeline_rows:
-                form_name = row.computed.get("form_name", "").strip()
-                mother_id = row.computed.get("mother_case_id")
-                if not mother_id:
-                    continue
-                if form_name == "ANC Visit":
-                    parity = row.computed.get("parity")
-                    if parity:
-                        parity_by_mother[mother_id] = parity
-                    anc_date = row.computed.get("anc_completion_date")
-                    if anc_date:
-                        anc_date_by_mother[mother_id] = anc_date
-                elif form_name == "Post delivery visit":
-                    pnc_date = row.computed.get("pnc_completion_date")
-                    if pnc_date:
-                        pnc_date_by_mother[mother_id] = pnc_date
-                    baby_dob = row.computed.get("baby_dob")
-                    if baby_dob:
-                        baby_dob_by_mother[mother_id] = baby_dob
+            per_mother = extract_per_mother_fields(all_pipeline_rows)
+            parity_by_mother = per_mother["parity_by_mother"]
+            anc_date_by_mother = per_mother["anc_date_by_mother"]
+            pnc_date_by_mother = per_mother["pnc_date_by_mother"]
+            baby_dob_by_mother = per_mother["baby_dob_by_mother"]
 
             # Compute % EBF (exclusive breastfeeding) per FLW from pipeline rows
-            ebf_counts_by_flw: dict[str, dict] = {}
-            for row in all_pipeline_rows:
-                bf_status = (row.computed.get("bf_status") or "").strip()
-                if not bf_status:
-                    continue
-                username = (row.username or "").strip().lower()
-                if not username:
-                    continue
-                if username not in ebf_counts_by_flw:
-                    ebf_counts_by_flw[username] = {"ebf": 0, "total": 0}
-                ebf_counts_by_flw[username]["total"] += 1
-                if "ebf" in bf_status.split():
-                    ebf_counts_by_flw[username]["ebf"] += 1
-
-            ebf_pct_by_flw: dict[str, int] = {}
-            for username, counts in ebf_counts_by_flw.items():
-                if counts["total"] > 0:
-                    ebf_pct_by_flw[username] = round(counts["ebf"] / counts["total"] * 100)
+            ebf_pct_by_flw = compute_ebf_by_flw(all_pipeline_rows)
 
             logger.info(
                 "[MBW Dashboard] Pipeline extraction: parity=%d, anc_date=%d, pnc_date=%d, baby_dob=%d mothers, ebf=%d FLWs",

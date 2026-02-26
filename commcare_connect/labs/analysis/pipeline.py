@@ -26,9 +26,7 @@ Non-Web Contexts (Synchronous):
 Note: stream_analysis() is ALWAYS fast when data is cached (typically <1s),
       so web views don't need to check cache existence beforehand.
 
-Backend selection is based on settings.LABS_ANALYSIS_BACKEND:
-- "python_redis" (default): Redis/file caching with pandas computation
-- "sql": PostgreSQL table caching with SQL computation
+Uses PostgreSQL table caching with SQL computation (SQLBackend).
 """
 
 import logging
@@ -39,7 +37,6 @@ import sentry_sdk
 from django.conf import settings
 from django.http import HttpRequest
 
-from commcare_connect.labs.analysis.backends.protocol import AnalysisBackend
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
 from commcare_connect.labs.analysis.models import FLWAnalysisResult, VisitAnalysisResult
 
@@ -52,33 +49,11 @@ EVENT_RESULT = "result"
 EVENT_ERROR = "error"
 
 
-def _get_backend_name() -> str:
-    """Get configured backend name from settings."""
-    return getattr(settings, "LABS_ANALYSIS_BACKEND", "python_redis")
+def get_backend():
+    """Get the SQL backend instance (lazy import to avoid AppRegistryNotReady)."""
+    from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
 
-
-def _get_backend() -> AnalysisBackend:
-    """Get the configured backend instance."""
-    backend_name = _get_backend_name()
-
-    if backend_name == "sql":
-        from commcare_connect.labs.analysis.backends.sql.backend import SQLBackend
-
-        return SQLBackend()
-    else:
-        from commcare_connect.labs.analysis.backends.python_redis.backend import PythonRedisBackend
-
-        return PythonRedisBackend()
-
-
-# Expose get_backend for callers that need direct backend access
-def get_backend() -> AnalysisBackend:
-    """
-    Get the configured backend instance.
-
-    Most callers should use AnalysisPipeline instead.
-    """
-    return _get_backend()
+    return SQLBackend()
 
 
 class AnalysisPipeline:
@@ -97,11 +72,14 @@ class AnalysisPipeline:
             request: HttpRequest with labs_oauth and labs_context
         """
         self.request = request
-        self.backend = _get_backend()
-        self.backend_name = _get_backend_name()
+        self.backend = get_backend()
+        self.backend_name = "sql"
 
         # Extract context
         self.access_token = request.session.get("labs_oauth", {}).get("access_token")
+
+        # CCHQ OAuth token (for cchq_forms data sources)
+        self.cchq_access_token = request.session.get("commcare_oauth", {}).get("access_token")
         self.labs_context = getattr(request, "labs_context", {})
 
         if not self.access_token:
@@ -117,6 +95,15 @@ class AnalysisPipeline:
         """Get expected visit count from labs context."""
         opportunity = self.labs_context.get("opportunity", {})
         return opportunity.get("visit_count", 0)
+
+    @property
+    def cache_tolerance_pct(self) -> int:
+        """Cache tolerance percentage. Accept cache if it has >= N% of expected visits.
+
+        Reads from PIPELINE_CACHE_TOLERANCE_PCT setting (default 95 for local dev).
+        Set to 100 for strict cache validation (production default).
+        """
+        return getattr(settings, "PIPELINE_CACHE_TOLERANCE_PCT", 95)
 
     # -------------------------------------------------------------------------
     # Raw Data Access (replaces api_cache.py)
@@ -173,7 +160,7 @@ class AnalysisPipeline:
         opp_id = opportunity_id or self.opportunity_id
         if not opp_id:
             return False
-        return self.backend.has_valid_raw_cache(opp_id, self.visit_count)
+        return self.backend.has_valid_raw_cache(opp_id, self.visit_count, tolerance_pct=self.cache_tolerance_pct)
 
     def has_valid_processed_cache(self, config: AnalysisPipelineConfig, opportunity_id: int | None = None) -> bool:
         """
@@ -194,11 +181,12 @@ class AnalysisPipeline:
         if not opp_id:
             return False
 
+        tolerance = self.cache_tolerance_pct
         terminal_stage = config.terminal_stage
         if terminal_stage == CacheStage.AGGREGATED:
-            return self.backend.get_cached_flw_result(opp_id, config, self.visit_count) is not None
+            return self.backend.get_cached_flw_result(opp_id, config, self.visit_count, tolerance_pct=tolerance) is not None
         else:
-            return self.backend.get_cached_visit_result(opp_id, config, self.visit_count) is not None
+            return self.backend.get_cached_visit_result(opp_id, config, self.visit_count, tolerance_pct=tolerance) is not None
 
     def filter_visits_for_audit(
         self,
@@ -214,9 +202,8 @@ class AnalysisPipeline:
         """
         Filter visits based on audit criteria.
 
-        Delegates to backend which implements optimally:
-        - SQL backend: Uses database queries with indexes and window functions
-        - Python/Redis backend: Uses pandas filtering on cached data
+        Delegates to SQL backend which uses database queries with indexes
+        and window functions for optimal performance.
 
         Args:
             opportunity_id: Opportunity ID (defaults to labs_context)
@@ -323,12 +310,21 @@ class AnalysisPipeline:
 
             yield (EVENT_STATUS, {"message": f"Checking {stage_name}-level cache..."})
 
+            tolerance = self.cache_tolerance_pct
+            # For CCHQ form sources, don't validate against opportunity visit count
+            # (CCHQ forms have far fewer rows than Connect visits)
+            is_cchq = config.data_source.type == "cchq_forms"
+            expected_count = 0 if is_cchq else self.visit_count
             if not force_refresh:
                 cached_result = None
                 if terminal_stage == CacheStage.AGGREGATED:
-                    cached_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                    cached_result = self.backend.get_cached_flw_result(
+                        opp_id, config, expected_count, tolerance_pct=tolerance,
+                    )
                 else:
-                    cached_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+                    cached_result = self.backend.get_cached_visit_result(
+                        opp_id, config, expected_count, tolerance_pct=tolerance,
+                    )
 
                 if cached_result:
                     yield (EVENT_STATUS, {"message": f"{stage_name.capitalize()}-level cache HIT!"})
@@ -362,35 +358,54 @@ class AnalysisPipeline:
                         logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                         visit_dicts = None
-                        for event in self.backend.stream_raw_visits(
-                            opportunity_id=opp_id,
-                            access_token=self.access_token,
-                            expected_visit_count=self.visit_count,
-                            force_refresh=force_refresh,
-                        ):
-                            event_type = event[0]
-                            if event_type == "cached":
-                                visit_dicts = event[1]
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                                )
-                                yield (
-                                    EVENT_STATUS,
-                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
-                                )
-                            elif event_type == "progress":
-                                _, bytes_downloaded, total_bytes = event
-                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                            elif event_type == "parsing":
-                                csv_size = event[1]
-                                size_mb = csv_size / (1024 * 1024)
-                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
-                            elif event_type == "complete":
-                                visit_dicts = event[1]
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                                )
-                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                        if unfiltered_config.data_source.type == "cchq_forms":
+                            from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                                fetch_cchq_forms_as_visit_dicts,
+                            )
+
+                            yield (
+                                EVENT_STATUS,
+                                {"message": f"Fetching '{unfiltered_config.data_source.form_name}' from CommCare HQ..."},
+                            )
+                            visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                                request=self.request,
+                                data_source=unfiltered_config.data_source,
+                                access_token=self.access_token,
+                                opportunity_id=opp_id,
+                            )
+                        else:
+                            for event in self.backend.stream_raw_visits(
+                                opportunity_id=opp_id,
+                                access_token=self.access_token,
+                                expected_visit_count=self.visit_count,
+                                force_refresh=force_refresh,
+                                tolerance_pct=tolerance,
+                            ):
+                                event_type = event[0]
+                                if event_type == "cached":
+                                    visit_dicts = event[1]
+                                    logger.info(
+                                        f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                                    )
+                                    yield (
+                                        EVENT_STATUS,
+                                        {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
+                                    )
+                                elif event_type == "progress":
+                                    _, bytes_downloaded, total_bytes = event
+                                    yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                                elif event_type == "parsing":
+                                    csv_size = event[1]
+                                    raw_lines = event[2] if len(event) > 2 else None
+                                    size_mb = csv_size / (1024 * 1024)
+                                    lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
+                                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
+                                elif event_type == "complete":
+                                    visit_dicts = event[1]
+                                    logger.info(
+                                        f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                                    )
+                                    yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
                         if visit_dicts is None:
                             raise RuntimeError("No data received from API")
@@ -409,9 +424,13 @@ class AnalysisPipeline:
                         yield (EVENT_STATUS, {"message": "Applying filters..."})
 
                         if terminal_stage == CacheStage.AGGREGATED:
-                            filtered_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                            filtered_result = self.backend.get_cached_flw_result(
+                                opp_id, config, expected_count, tolerance_pct=tolerance,
+                            )
                         else:
-                            filtered_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+                            filtered_result = self.backend.get_cached_visit_result(
+                                opp_id, config, expected_count, tolerance_pct=tolerance,
+                            )
 
                         if filtered_result:
                             yield (EVENT_STATUS, {"message": "Complete!"})
@@ -444,32 +463,53 @@ class AnalysisPipeline:
                     logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                     visit_dicts = None
-                    for event in self.backend.stream_raw_visits(
-                        opportunity_id=opp_id,
-                        access_token=self.access_token,
-                        expected_visit_count=self.visit_count,
-                        force_refresh=True,  # Force refresh from API
-                    ):
-                        event_type = event[0]
-                        if event_type == "cached":
-                            visit_dicts = event[1]
-                            logger.info(
-                                f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                            )
-                            yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
-                        elif event_type == "progress":
-                            _, bytes_downloaded, total_bytes = event
-                            yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                        elif event_type == "parsing":
-                            csv_size = event[1]
-                            size_mb = csv_size / (1024 * 1024)
-                            yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
-                        elif event_type == "complete":
-                            visit_dicts = event[1]
-                            logger.info(
-                                f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                            )
-                            yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                    if unfiltered_config.data_source.type == "cchq_forms":
+                        from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                            fetch_cchq_forms_as_visit_dicts,
+                        )
+
+                        yield (
+                            EVENT_STATUS,
+                            {"message": f"Fetching '{unfiltered_config.data_source.form_name}' from CommCare HQ..."},
+                        )
+                        visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                            request=self.request,
+                            data_source=unfiltered_config.data_source,
+                            access_token=self.access_token,
+                            opportunity_id=opp_id,
+                        )
+                    else:
+                        for event in self.backend.stream_raw_visits(
+                            opportunity_id=opp_id,
+                            access_token=self.access_token,
+                            expected_visit_count=self.visit_count,
+                            force_refresh=True,  # Force refresh from API
+                        ):
+                            event_type = event[0]
+                            if event_type == "cached":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
+                                )
+                                yield (
+                                    EVENT_STATUS,
+                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
+                                )
+                            elif event_type == "progress":
+                                _, bytes_downloaded, total_bytes = event
+                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+                            elif event_type == "parsing":
+                                csv_size = event[1]
+                                raw_lines = event[2] if len(event) > 2 else None
+                                size_mb = csv_size / (1024 * 1024)
+                                lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
+                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
+                            elif event_type == "complete":
+                                visit_dicts = event[1]
+                                logger.info(
+                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
+                                )
+                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
                     if visit_dicts is None:
                         raise RuntimeError("No data received from API")
@@ -487,9 +527,13 @@ class AnalysisPipeline:
                     yield (EVENT_STATUS, {"message": "Applying filters..."})
 
                     if terminal_stage == CacheStage.AGGREGATED:
-                        filtered_result = self.backend.get_cached_flw_result(opp_id, config, self.visit_count)
+                        filtered_result = self.backend.get_cached_flw_result(
+                            opp_id, config, expected_count, tolerance_pct=tolerance,
+                        )
                     else:
-                        filtered_result = self.backend.get_cached_visit_result(opp_id, config, self.visit_count)
+                        filtered_result = self.backend.get_cached_visit_result(
+                            opp_id, config, expected_count, tolerance_pct=tolerance,
+                        )
 
                     if filtered_result:
                         yield (EVENT_STATUS, {"message": "Complete!"})
@@ -501,6 +545,32 @@ class AnalysisPipeline:
                     else:
                         raise RuntimeError("Failed to read filtered data from cache after force refresh")
 
+            # CCHQ data source: fetch synchronously (no streaming progress)
+            if config.data_source.type == "cchq_forms":
+                from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
+                    fetch_cchq_forms_as_visit_dicts,
+                )
+
+                yield (EVENT_STATUS, {"message": f"Fetching '{config.data_source.form_name}' from CommCare HQ..."})
+
+                visit_dicts = fetch_cchq_forms_as_visit_dicts(
+                    request=self.request,
+                    data_source=config.data_source,
+                    access_token=self.access_token,
+                    opportunity_id=opp_id,
+                )
+
+                if not visit_dicts:
+                    yield (EVENT_STATUS, {"message": "No forms found"})
+                    yield (EVENT_RESULT, VisitAnalysisResult(opportunity_id=opp_id, rows=[], metadata={}))
+                    return
+
+                yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} forms..."})
+                result = self.backend.process_and_cache(self.request, config, opp_id, visit_dicts)
+                yield (EVENT_STATUS, {"message": "Complete!"})
+                yield (EVENT_RESULT, result)
+                return
+
             # Stream raw data fetch with progress (unfiltered path)
             yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
             logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
@@ -511,6 +581,7 @@ class AnalysisPipeline:
                 access_token=self.access_token,
                 expected_visit_count=self.visit_count,
                 force_refresh=force_refresh,
+                tolerance_pct=tolerance,
             ):
                 event_type = event[0]
                 if event_type == "cached":
@@ -522,8 +593,10 @@ class AnalysisPipeline:
                     yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
                 elif event_type == "parsing":
                     csv_size = event[1]
+                    raw_lines = event[2] if len(event) > 2 else None
                     size_mb = csv_size / (1024 * 1024)
-                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data..."})
+                    lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
+                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
                 elif event_type == "complete":
                     visit_dicts = event[1]
                     logger.info(f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits")
