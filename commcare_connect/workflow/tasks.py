@@ -676,3 +676,7 @@ def handle_pipeline_only_job(job_config: dict, access_token: str, progress_callb
         "items": [{"id": i, "status": "loaded"} for i in range(total)],
         "errors": [],
     }
+
+
+# Import job handler modules to trigger registration
+import commcare_connect.workflow.job_handlers  # noqa: F401, E402

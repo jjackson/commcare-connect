@@ -1,3 +1,7 @@
+# Claude Code MCP config (contains tokens)
+.claude/mcp.json
+.mcp.json
+
 ### Python template
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -347,3 +351,6 @@ commcare_connect/custom_analysis/rutf/examples/
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+.worktrees/
+
+.claude

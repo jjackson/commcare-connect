@@ -166,7 +166,7 @@ Foundation layer used by all other apps.
   - `integrations/connect/api_client.py` — `LabsRecordAPIClient`
   - `integrations/connect/oauth.py` — `introspect_token()`, `fetch_user_organization_data()`
   - `integrations/connect/oauth_views.py` — OAuth flow (login, callback, logout)
-  - `analysis/` — Analysis pipeline with pluggable backends (python_redis, sql)
+  - `analysis/` — Analysis pipeline (SQL backend with PostgreSQL cache tables)
   - `explorer/` — LabsRecord data explorer UI
   - `admin_boundaries/` — Geographic boundary data (PostGIS)
 

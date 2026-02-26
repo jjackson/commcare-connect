@@ -13,6 +13,7 @@ Each template file should export a TEMPLATE dict with:
 - definition: Workflow definition dict
 - render_code: JSX render code string
 - pipeline_schema: Optional pipeline schema dict
+- pipeline_schemas: Optional list of pipeline schema dicts (for multi-source templates)
 
 Usage:
     from commcare_connect.workflow.templates import (
@@ -144,7 +145,7 @@ def create_workflow_from_template(
     pipeline_record = None
     pipeline_sources = []
 
-    # Create pipeline if template has one
+    # Create pipeline if template has one (singular schema)
     if pipeline_schema and request:
         from commcare_connect.workflow.data_access import PipelineDataAccess
 
@@ -169,6 +170,24 @@ def create_workflow_from_template(
                 "alias": pipeline_alias,
             }
         ]
+
+    # Handle multiple pipeline schemas (e.g., MBW with 3 sources)
+    pipeline_schemas = template.get("pipeline_schemas", [])
+    if pipeline_schemas and request:
+        from commcare_connect.workflow.data_access import PipelineDataAccess
+
+        pipeline_data_access = PipelineDataAccess(request=request)
+        for ps in pipeline_schemas:
+            record = pipeline_data_access.create_definition(
+                name=ps["name"],
+                description=ps.get("description", ""),
+                schema=ps["schema"],
+            )
+            pipeline_sources.append({
+                "pipeline_id": record.id,
+                "alias": ps["alias"],
+            })
+        pipeline_data_access.close()
 
     # Create the workflow definition with pipeline source if created
     config = template_def.get("config", {})
@@ -196,7 +215,7 @@ def create_workflow_from_template(
 # =============================================================================
 
 # Re-export individual template modules for direct access if needed
-from . import audit_with_ai_review, bulk_image_audit, ocs_outreach, performance_review  # noqa: E402
+from . import audit_with_ai_review, bulk_image_audit, mbw_monitoring_v2, ocs_outreach, performance_review  # noqa: E402
 
 __all__ = [
     "TEMPLATES",
@@ -208,4 +227,5 @@ __all__ = [
     "ocs_outreach",
     "audit_with_ai_review",
     "bulk_image_audit",
+    "mbw_monitoring_v2",
 ]
