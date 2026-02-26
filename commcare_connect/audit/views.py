@@ -501,6 +501,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "opportunity_id": opportunity_id,
                             "related_fields": metadata.get("related_fields", []),
                             "ai_result": assessment_data.get("ai_result", ""),
                             "ai_notes": assessment_data.get("ai_notes", ""),
@@ -533,6 +534,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "opportunity_id": opportunity_id,
                             "ai_result": assessment_data.get("ai_result", ""),
                             "ai_notes": assessment_data.get("ai_notes", ""),
                         }

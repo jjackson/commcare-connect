@@ -382,6 +382,64 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [isSaving, setIsSaving] = React.useState(false);
     const [aiRunning, setAiRunning] = React.useState({});  // {blob_id: true/false}
 
+    // ── FLW table sort/filter state ──────────────────────────────────────────────
+    const [flwSort, setFlwSort] = React.useState({ col: 'flw_name', dir: 'asc' });
+    const [flwFilter, setFlwFilter] = React.useState('');
+    const [oppFilter, setOppFilter] = React.useState('');
+    const [resultFilter, setResultFilter] = React.useState('all');
+
+    const sortFlwTable = (col) => {
+        setFlwSort(prev => ({
+            col,
+            dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc',
+        }));
+    };
+
+    // ── Completion state ─────────────────────────────────────────────────────────
+    const [showCompleteForm, setShowCompleteForm] = React.useState(false);
+    const [completionNotes, setCompletionNotes] = React.useState('');
+    const [isCompleting, setIsCompleting] = React.useState(false);
+    const [completeError, setCompleteError] = React.useState(null);
+
+    const handleComplete = async () => {
+        const config = instance.state?.config || {};
+        const flwRows = buildFlwRows(assessments, config);
+        const allPassing = flwRows.every(r => r.pct >= threshold);
+        const overallResult = allPassing ? 'pass' : 'fail';
+        const visitResults = buildVisitResults(assessments);
+
+        const fd = new FormData();
+        fd.append('overall_result', overallResult);
+        fd.append('notes', completionNotes);
+        fd.append('kpi_notes', '');
+        fd.append('visit_results', JSON.stringify(visitResults));
+
+        setIsCompleting(true);
+        setCompleteError(null);
+        try {
+            const res = await fetch('/audit/api/' + sessionId + '/complete/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCsrfToken() },
+                body: fd,
+            });
+            const data = await res.json();
+            if (data.success) {
+                const completedAt = new Date().toISOString();
+                setPhase('completed');
+                await onUpdateState({
+                    phase: 'completed',
+                    completion: { notes: completionNotes, completed_at: completedAt, overall_result: overallResult },
+                });
+            } else {
+                setCompleteError(data.error || 'Failed to complete review');
+            }
+        } catch (err) {
+            setCompleteError(err.message);
+        } finally {
+            setIsCompleting(false);
+        }
+    };
+
     // Load assessment data when entering review phase
     React.useEffect(() => {
         if (phase !== 'reviewing' || !sessionId) return;
@@ -452,17 +510,19 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // Handle notes change — debounced save
     const notesTimeout = React.useRef(null);
     const handleNotesChange = (id, notes) => {
-        updateAssessment(id, { notes });
+        const updated = assessments.map(a => a.id === id ? { ...a, notes } : a);
+        setAssessments(updated);
         if (notesTimeout.current) clearTimeout(notesTimeout.current);
-        notesTimeout.current = setTimeout(() => saveProgress(), 800);
+        notesTimeout.current = setTimeout(() => saveProgress(updated), 800);
     };
 
     // ── FLW summary helper ───────────────────────────────────────────────────
     const buildFlwRows = (asmnts, config) => {
         const byUser = {};
         for (const a of asmnts) {
-            if (!byUser[a.username]) {
-                byUser[a.username] = {
+            const key = a.username;
+            if (!byUser[key]) {
+                byUser[key] = {
                     flw_name: a.username,
                     opp_name: (config?.selected_opps || []).find(o => String(o.id) === String(a.opportunity_id))?.name
                         || (config?.selected_opps || [])[0]?.name || '—',
@@ -470,8 +530,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     total: 0,
                 };
             }
-            byUser[a.username].total += 1;
-            if (a.status === 'pass') byUser[a.username].passed += 1;
+            byUser[key].total += 1;
+            if (a.status === 'pass') byUser[key].passed += 1;
         }
         return Object.values(byUser).map(row => ({
             ...row,
@@ -761,20 +821,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (!isScalePhoto || !sessionId) return;
             setAiRunning(prev => ({ ...prev, [a.blob_id]: true }));
             try {
-                const fd = new FormData();
-                fd.append('blob_id', a.blob_id);
-                fd.append('visit_id', String(a.visit_id));
+                const reading = (a.related_fields || []).find(rf => rf.value)?.value || '';
+                const body = JSON.stringify({
+                    assessments: [{ visit_id: a.visit_id, blob_id: a.blob_id, reading }],
+                    agent_id: 'scale_validation',
+                    opportunity_id: instance.state?.config?.selected_opps?.[0]?.id,
+                });
                 const res = await fetch('/audit/api/' + sessionId + '/ai-review/', {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken() },
-                    body: fd,
+                    headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+                    body,
                 });
                 const data = await res.json();
-                if (data.success) {
-                    updateAssessment(a.id, {
-                        ai_result: data.result || '',
-                        ai_notes: data.notes || '',
-                    });
+                const result = (data.results || [])[0];
+                if (result) {
+                    updateAssessment(a.id, { ai_result: result.ai_result || '', ai_notes: result.ai_notes || '' });
                 }
             } finally {
                 setAiRunning(prev => ({ ...prev, [a.blob_id]: false }));
@@ -870,12 +931,196 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         );
     };
 
+    // ── Inner component: FLW Summary Table ──────────────────────────────────
+    const FlwSummaryTable = ({ assessments: tableAssessments, threshold: tableThreshold, config, readOnly, overrideRows }) => {
+        const rows = overrideRows || buildFlwRows(tableAssessments || [], config);
+
+        // Filter
+        const filtered = rows.filter(r => {
+            const flwMatch = r.flw_name.toLowerCase().includes(flwFilter.toLowerCase());
+            const oppMatch = r.opp_name.toLowerCase().includes(oppFilter.toLowerCase());
+            const passing = r.pct >= tableThreshold;
+            const resultMatch = resultFilter === 'all'
+                || (resultFilter === 'pass' && passing)
+                || (resultFilter === 'fail' && !passing);
+            return flwMatch && oppMatch && resultMatch;
+        });
+
+        // Sort
+        const sorted = [...filtered].sort((a, b) => {
+            const dir = flwSort.dir === 'asc' ? 1 : -1;
+            const col = flwSort.col;
+            if (col === 'pct' || col === 'passed' || col === 'total') {
+                return (a[col] - b[col]) * dir;
+            }
+            return a[col].localeCompare(b[col]) * dir;
+        });
+
+        const SortIcon = ({ col }) => (
+            <i className={'fa-solid ml-1 text-xs ' + (flwSort.col === col
+                ? (flwSort.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down')
+                : 'fa-sort text-gray-300')}></i>
+        );
+
+        return (
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                    <h2 className="text-base font-semibold text-gray-800">
+                        <i className="fa-solid fa-users mr-2 text-gray-400"></i>
+                        FLW Summary
+                    </h2>
+                    <span className="text-sm text-gray-500">Threshold: {tableThreshold}%</span>
+                </div>
+
+                {!readOnly && (
+                    <div className="px-4 py-3 border-b border-gray-100 flex gap-3 flex-wrap">
+                        <input type="text" placeholder="Filter FLW name..." value={flwFilter}
+                            onChange={e => setFlwFilter(e.target.value)}
+                            className="text-sm border border-gray-300 rounded px-2 py-1.5 w-40" />
+                        <input type="text" placeholder="Filter opp name..." value={oppFilter}
+                            onChange={e => setOppFilter(e.target.value)}
+                            className="text-sm border border-gray-300 rounded px-2 py-1.5 w-40" />
+                        <select value={resultFilter} onChange={e => setResultFilter(e.target.value)}
+                            className="text-sm border border-gray-300 rounded px-2 py-1.5">
+                            <option value="all">All Results</option>
+                            <option value="pass">Pass Only</option>
+                            <option value="fail">Fail Only</option>
+                        </select>
+                    </div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                {[
+                                    { id: 'opp_name', label: 'Opp Name' },
+                                    { id: 'flw_name', label: 'FLW Name' },
+                                    { id: 'passed', label: 'Passed / Assessments' },
+                                    { id: 'pct', label: '% Passed' },
+                                    { id: 'result', label: 'Result' },
+                                ].map(col => (
+                                    <th key={col.id}
+                                        onClick={() => col.id !== 'result' && sortFlwTable(col.id)}
+                                        className={'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ' +
+                                            (col.id !== 'result' ? 'cursor-pointer hover:text-gray-700' : '')}>
+                                        {col.label}
+                                        {col.id !== 'result' && <SortIcon col={col.id} />}
+                                    </th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {sorted.map((row, idx) => {
+                                const passing = row.pct >= tableThreshold;
+                                return (
+                                    <tr key={idx} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 text-sm text-gray-700">{row.opp_name}</td>
+                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.flw_name}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-700">
+                                            <span className="text-green-600 font-medium">{row.passed}</span>
+                                            <span className="text-gray-400 mx-1">/</span>
+                                            <span>{row.total}</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm font-medium">
+                                            <span className={passing ? 'text-green-700' : 'text-red-700'}>
+                                                {row.pct}%
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            {passing
+                                                ? <i className="fa-solid fa-circle-check text-green-500 text-lg" title="Passing"></i>
+                                                : <i className="fa-solid fa-circle-xmark text-red-500 text-lg" title="Failing"></i>}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {sorted.length === 0 && (
+                                <tr>
+                                    <td colSpan="5" className="px-4 py-8 text-center text-gray-400 text-sm">
+                                        No FLWs match the current filters
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
+    // ── Inner component: Complete Section ───────────────────────────────────
+    const CompleteSection = ({ assessments: sectionAssessments }) => {
+        const pendingCount = (sectionAssessments || []).filter(a => a.status === 'pending').length;
+        const hasPending = pendingCount > 0;
+
+        return (
+            <div className="bg-white rounded-lg shadow-sm p-6">
+                <h3 className="text-base font-semibold text-gray-800 mb-4">
+                    <i className="fa-solid fa-flag-checkered mr-2 text-gray-400"></i>
+                    Complete Image Review
+                </h3>
+
+                {hasPending && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                        <div className="flex items-center gap-2 text-amber-800">
+                            <i className="fa-solid fa-triangle-exclamation"></i>
+                            <span className="font-medium">
+                                {pendingCount} photo{pendingCount !== 1 ? 's' : ''} still pending review.
+                                All photos must be reviewed before completing.
+                            </span>
+                        </div>
+                    </div>
+                )}
+
+                {!hasPending && !showCompleteForm && (
+                    <button onClick={() => setShowCompleteForm(true)}
+                        className={'inline-flex items-center px-5 py-2.5 bg-green-600 text-white ' +
+                            'rounded-lg hover:bg-green-700 font-medium'}>
+                        <i className="fa-solid fa-check mr-2"></i>
+                        Complete Image Review
+                    </button>
+                )}
+
+                {showCompleteForm && !hasPending && (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                            <textarea
+                                value={completionNotes}
+                                onChange={e => setCompletionNotes(e.target.value)}
+                                rows={3}
+                                placeholder="Add any notes about this review..."
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                            />
+                        </div>
+                        {completeError && (
+                            <div className="text-red-600 text-sm">{completeError}</div>
+                        )}
+                        <div className="flex gap-3">
+                            <button onClick={handleComplete} disabled={isCompleting}
+                                className={'inline-flex items-center px-5 py-2.5 bg-green-600 text-white ' +
+                                    'rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium'}>
+                                {isCompleting
+                                    ? <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                                    : <i className="fa-solid fa-check mr-2"></i>}
+                                Save
+                            </button>
+                            <button onClick={() => setShowCompleteForm(false)}
+                                className="px-5 py-2.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // ── Inner component: Review ──────────────────────────────────────────────
     const ReviewPhase = () => {
         const config = instance.state?.config || {};
-        const currentThreshold = config.threshold ?? 80;
-        const currentImageType = config.image_type || 'scale_photo';
-        const isScalePhoto = currentImageType === 'scale_photo';
+        const isScalePhoto = imageType === 'scale_photo';
 
         const total = assessments.length;
         const passed = assessments.filter(a => a.status === 'pass').length;
@@ -936,17 +1181,91 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     )}
                 </div>
 
-                {/* FLW Summary Table — placeholder, replaced in Task 7 */}
-                <div id="flw-summary-placeholder"></div>
+                {/* FLW Summary Table */}
+                <FlwSummaryTable assessments={assessments} threshold={threshold}
+                    config={config} readOnly={false} />
 
-                {/* Complete Image Review — placeholder, replaced in Task 8 */}
-                <div id="complete-section-placeholder"></div>
+                {/* Complete Image Review */}
+                <CompleteSection assessments={assessments} />
             </div>
         );
     };
 
-    // ── Placeholder inner components (to be replaced in later tasks) ─────────
-    const CompletedPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Completed.</div>;
+    // ── Inner component: Completed FLW Table (loads data for read-only view) ────
+    const CompletedFlwTable = ({ config, threshold: completedThreshold }) => {
+        const sid = instance.state?.session_id;
+        const [rows, setRows] = React.useState([]);
+        const [loading, setLoading] = React.useState(true);
+
+        React.useEffect(() => {
+            if (!sid) { setLoading(false); return; }
+            fetch('/audit/api/' + sid + '/bulk-data/')
+                .then(r => r.json())
+                .then(data => {
+                    setRows(buildFlwRows(data.assessments || [], config));
+                    setLoading(false);
+                })
+                .catch(() => setLoading(false));
+        }, [sid]);
+
+        if (loading) return (
+            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                <i className="fa-solid fa-spinner fa-spin text-gray-400"></i>
+            </div>
+        );
+
+        return (
+            <FlwSummaryTable assessments={[]} threshold={completedThreshold}
+                config={config} readOnly={true} overrideRows={rows} />
+        );
+    };
+
+    // ── Inner component: Completed Phase ────────────────────────────────────
+    const CompletedPhase = () => {
+        const completion = instance.state?.completion || {};
+        const config = instance.state?.config || {};
+        const completedThreshold = config.threshold ?? 80;
+        const overallResult = completion.overall_result || 'pass';
+        const completedAt = completion.completed_at
+            ? new Date(completion.completed_at).toLocaleDateString('en-US',
+                { month: 'short', day: 'numeric', year: 'numeric' })
+            : '';
+
+        return (
+            <div className="space-y-6">
+                {/* Completion banner */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                    <div className="flex items-start justify-between">
+                        <div>
+                            <h2 className="text-lg font-semibold text-green-800 flex items-center gap-2">
+                                <i className="fa-solid fa-circle-check text-green-600"></i>
+                                Image Review Completed
+                            </h2>
+                            {completedAt && (
+                                <p className="text-sm text-green-600 mt-1">Completed on {completedAt}</p>
+                            )}
+                            {completion.notes && (
+                                <p className="text-sm text-gray-700 mt-3 bg-white/60 rounded p-3 border border-green-100">
+                                    {completion.notes}
+                                </p>
+                            )}
+                        </div>
+                        <span className={'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ' +
+                            (overallResult === 'pass'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800')}>
+                            {overallResult === 'pass'
+                                ? <React.Fragment><i className="fa-solid fa-circle-check"></i> Overall Pass</React.Fragment>
+                                : <React.Fragment><i className="fa-solid fa-circle-xmark"></i> Overall Fail</React.Fragment>}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Read-only FLW summary */}
+                <CompletedFlwTable config={config} threshold={completedThreshold} />
+            </div>
+        );
+    };
 
     // ── Phase router ────────────────────────────────────────────────────────
     return (
