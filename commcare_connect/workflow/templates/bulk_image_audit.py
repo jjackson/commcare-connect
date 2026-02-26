@@ -76,7 +76,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [endDate, setEndDate] = React.useState(
         instance.state?.config?.end_date || ''
     );
-    const [datePreset, setDatePreset] = React.useState('last_week'); // TODO Task 5: persist date_preset in handleCreate config and restore from instance.state?.config?.date_preset
+    const [datePreset, setDatePreset] = React.useState(
+        instance.state?.config?.date_preset || 'last_week'
+    );
     const [lastNCount, setLastNCount] = React.useState(
         instance.state?.config?.count_per_opp || 10
     );
@@ -165,8 +167,201 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         if (!startDate && !endDate) applyPreset('last_week');
     }, []);
 
-    // ── Placeholder: replaced in Task 5 ─────────────────────────────────────
-    const handleCreate = async () => {};
+    // ── Execution state ──────────────────────────────────────────────────────
+    const [isRunning, setIsRunning] = React.useState(false);
+    const [isCancelling, setIsCancelling] = React.useState(false);
+    const [progress, setProgress] = React.useState(null);
+    const [taskId, setTaskId] = React.useState(null);
+    const [sessionId, setSessionId] = React.useState(instance.state?.session_id || null);
+    const cleanupRef = React.useRef(null);
+
+    // Cleanup SSE on unmount
+    React.useEffect(() => {
+        return () => { if (cleanupRef.current) cleanupRef.current(); };
+    }, []);
+
+    // Reconnect to running job on page load (if user refreshed mid-creation)
+    React.useEffect(() => {
+        try {
+            const activeJob = instance.state?.active_job;
+            if (!actions?.streamAuditProgress) return;
+            if (activeJob?.status === 'running' && activeJob?.job_id) {
+                setIsRunning(true);
+                setTaskId(activeJob.job_id);
+                setProgress({
+                    status: 'running',
+                    stage_name: activeJob.stage_name || 'Processing',
+                    processed: activeJob.processed || 0,
+                    total: activeJob.total || 0,
+                });
+                const cleanup = actions.streamAuditProgress(
+                    activeJob.job_id,
+                    (p) => setProgress(p),
+                    async (final) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'completed', ...final });
+                        // Try to find session_id from completion payload
+                        let sid = final?.session_id || final?.sessions?.[0]?.id;
+                        if (!sid) {
+                            // Fallback: fetch from workflow sessions API
+                            try {
+                                const r = await fetch('/audit/api/workflow/' + instance.id + '/sessions/');
+                                const d = await r.json();
+                                sid = d.sessions?.[0]?.id;
+                            } catch (e) { /* ignore */ }
+                        }
+                        if (sid) {
+                            setSessionId(sid);
+                            setPhase('reviewing');
+                            onUpdateState({
+                                phase: 'reviewing',
+                                session_id: sid,
+                                active_job: {
+                                    job_id: activeJob.job_id,
+                                    status: 'completed',
+                                    completed_at: new Date().toISOString(),
+                                },
+                            }).catch(() => {});
+                        }
+                    },
+                    (err) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'failed', error: err });
+                        onUpdateState({
+                            active_job: { job_id: activeJob.job_id, status: 'failed', error: err },
+                        }).catch(() => {});
+                    }
+                );
+                cleanupRef.current = cleanup;
+                return () => { if (cleanup) cleanup(); };
+            }
+        } catch (err) {
+            console.error('[BulkImageAudit] Reconnect error:', err);
+        }
+    }, []); // Run once on mount
+
+    // ── Create handler ───────────────────────────────────────────────────────
+    const handleCreate = async () => {
+        if (selectedOpps.length === 0) return;
+
+        const imageTypeObj = IMAGE_TYPES.find(t => t.id === imageType);
+        const config = {
+            selected_opps: selectedOpps,
+            image_type: imageType,
+            image_path: imageTypeObj.path,
+            audit_mode: auditMode,
+            start_date: auditMode === 'date_range' ? startDate : null,
+            end_date: auditMode === 'date_range' ? endDate : null,
+            count_per_opp: auditMode === 'last_n_per_opp' ? lastNCount : null,
+            sample_percentage: samplePct,
+            threshold: threshold,
+            date_preset: datePreset,
+        };
+
+        setIsRunning(true);
+        setProgress({ status: 'starting', message: 'Initializing...' });
+        setPhase('creating');
+
+        await onUpdateState({ phase: 'creating', config });
+
+        const criteria = {
+            audit_type: auditMode,
+            start_date: auditMode === 'date_range' ? startDate : null,
+            end_date: auditMode === 'date_range' ? endDate : null,
+            count_per_opp: auditMode === 'last_n_per_opp' ? lastNCount : null,
+            sample_percentage: samplePct,
+            related_fields: [{ image_path: imageTypeObj.path, filter_by_image: true }],
+        };
+
+        try {
+            const result = await actions.createAudit({
+                opportunities: selectedOpps,
+                criteria,
+                workflow_run_id: instance.id,
+            });
+
+            if (result.success && result.task_id) {
+                setTaskId(result.task_id);
+                onUpdateState({
+                    active_job: {
+                        job_id: result.task_id,
+                        status: 'running',
+                        started_at: new Date().toISOString(),
+                    },
+                }).catch(() => {});
+
+                const cleanup = actions.streamAuditProgress(
+                    result.task_id,
+                    (p) => setProgress(p),
+                    async (final) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'completed', ...final });
+                        // Try to find session_id from completion payload
+                        let sid = final?.session_id || final?.sessions?.[0]?.id;
+                        if (!sid) {
+                            // Fallback: fetch from workflow sessions API
+                            try {
+                                const r = await fetch('/audit/api/workflow/' + instance.id + '/sessions/');
+                                const d = await r.json();
+                                sid = d.sessions?.[0]?.id;
+                            } catch (e) { /* ignore */ }
+                        }
+                        if (sid) {
+                            setSessionId(sid);
+                            setPhase('reviewing');
+                            onUpdateState({
+                                phase: 'reviewing',
+                                session_id: sid,
+                                active_job: {
+                                    job_id: result.task_id,
+                                    status: 'completed',
+                                    completed_at: new Date().toISOString(),
+                                },
+                            }).catch(() => {});
+                        } else {
+                            setPhase('config');
+                            onUpdateState({ phase: 'config' }).catch(() => {});
+                        }
+                    },
+                    (err) => {
+                        setIsRunning(false);
+                        setProgress({ status: 'failed', error: err });
+                        setPhase('config');
+                        onUpdateState({
+                            phase: 'config',
+                            active_job: { job_id: result.task_id, status: 'failed', error: err },
+                        }).catch(() => {});
+                    }
+                );
+                cleanupRef.current = cleanup;
+            } else {
+                setIsRunning(false);
+                setProgress({ status: 'failed', error: result.error || 'Failed to start' });
+                setPhase('config');
+                onUpdateState({ phase: 'config' }).catch(() => {});
+            }
+        } catch (err) {
+            setIsRunning(false);
+            setProgress({ status: 'failed', error: err.message });
+            setPhase('config');
+            onUpdateState({ phase: 'config' }).catch(() => {});
+        }
+    };
+
+    // ── Cancel handler ───────────────────────────────────────────────────────
+    const handleCancel = async () => {
+        if (!taskId || isCancelling) return;
+        setIsCancelling(true);
+        if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
+        setIsRunning(false);
+        try {
+            await actions.cancelAudit(taskId);
+        } catch (e) { /* ignore */ }
+        setProgress({ status: 'cancelled', message: 'Audit creation cancelled' });
+        setPhase('config');
+        await onUpdateState({ phase: 'config' });
+        setIsCancelling(false);
+    };
 
     // ── Inner component: Visit Selection ────────────────────────────────────
     const VisitSelectionSection = () => (
@@ -380,8 +575,68 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         </div>
     );
 
+    // ── Inner component: Creating ────────────────────────────────────────────
+    const CreatingPhase = () => (
+        <div className="space-y-4">
+            {isRunning && progress && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                            <i className="fa-solid fa-spinner fa-spin text-blue-600"></i>
+                            <span className="font-medium text-blue-800">
+                                {progress.stage_name || 'Processing...'}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {progress.current_stage && progress.total_stages && (
+                                <span className="text-sm text-blue-600">
+                                    Stage {progress.current_stage}/{progress.total_stages}
+                                </span>
+                            )}
+                            <button onClick={handleCancel} disabled={isCancelling}
+                                className={'px-3 py-1 text-sm text-red-600 hover:text-red-800 ' +
+                                    'hover:bg-red-100 rounded transition-colors disabled:opacity-50'}>
+                                <i className="fa-solid fa-times mr-1"></i>Cancel
+                            </button>
+                        </div>
+                    </div>
+                    {progress.total > 0 && (
+                        <div className="w-full bg-blue-200 rounded-full h-2">
+                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                style={{ width: (progress.processed / progress.total * 100) + '%' }}>
+                            </div>
+                        </div>
+                    )}
+                    <div className="mt-2 text-sm text-blue-700">{progress.message}</div>
+                </div>
+            )}
+            {progress?.status === 'failed' && !isRunning && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-red-800">
+                        <i className="fa-solid fa-circle-exclamation"></i>
+                        <span className="font-medium">Error: {progress.error}</span>
+                    </div>
+                    <button onClick={() => setPhase('config')}
+                        className="mt-3 text-sm text-blue-600 hover:underline">
+                        ← Back to configuration
+                    </button>
+                </div>
+            )}
+            {progress?.status === 'cancelled' && !isRunning && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 text-amber-800">
+                        <i className="fa-solid fa-ban"></i>
+                        <span className="font-medium">Audit creation was cancelled</span>
+                    </div>
+                    <button onClick={() => setPhase('config')}
+                        className="mt-3 text-sm text-blue-600 hover:underline">
+                        ← Back to configuration
+                    </button>
+                </div>
+            )}
+        </div>
+    );
     // ── Placeholder inner components (to be replaced in later tasks) ─────────
-    const CreatingPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Creating...</div>;
     const ReviewPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Review phase coming soon...</div>;
     const CompletedPhase = () => <div className="bg-white rounded-lg shadow-sm p-6 text-gray-500">Completed.</div>;
 
