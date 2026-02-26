@@ -7,9 +7,6 @@ Usage:
     # Run full analysis
     python manage.py test_chc_nutrition --opportunity-id 814
 
-    # Test caching functionality
-    python manage.py test_chc_nutrition --opportunity-id 814 --test-cache
-
     # Debug options
     python manage.py test_chc_nutrition --opportunity-id 814 --debug-fields
     python manage.py test_chc_nutrition --opportunity-id 814 --show-form-structure
@@ -23,10 +20,6 @@ from commcare_connect.custom_analysis.chc_nutrition.analysis_config import CHC_N
 from commcare_connect.labs.analysis.models import LocalUserVisit
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.integrations.connect.cli import create_cli_request
-
-# TODO: compute_flw_analysis was removed with the python_redis backend.
-# The test_cache and run_full_analysis methods need to be updated to use
-# AnalysisPipeline.stream_analysis_ignore_events() instead.
 
 logger = logging.getLogger(__name__)
 
@@ -57,16 +50,6 @@ class Command(BaseCommand):
             default=5,
             help="Number of visits to sample for structure analysis (default: 5)",
         )
-        parser.add_argument(
-            "--use-cache",
-            action="store_true",
-            help="Enable file/Redis caching (to test cache performance)",
-        )
-        parser.add_argument(
-            "--test-cache",
-            action="store_true",
-            help="Test cache functionality: run twice and verify cache hits",
-        )
 
     def handle(self, *args, **options):
         opportunity_id = options["opportunity_id"]
@@ -94,15 +77,13 @@ class Command(BaseCommand):
 
         # Run requested operations
         try:
-            if options["test_cache"]:
-                self.test_cache_functionality(request, opportunity_id)
-            elif options["show_form_structure"]:
+            if options["show_form_structure"]:
                 self.analyze_form_structure(request, opportunity_id, options["sample_size"])
             elif options["debug_fields"]:
                 self.debug_field_extraction(request, opportunity_id)
             else:
                 # Default: run full analysis
-                self.run_full_analysis(request, opportunity_id, use_cache=options["use_cache"])
+                self.run_full_analysis(request, opportunity_id)
 
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING("\n\nInterrupted by user"))
@@ -231,18 +212,7 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(self.style.ERROR(f"[MISSING] {field_comp.name:50s} = None"))
 
-    def test_cache_functionality(self, request, opportunity_id):
-        """Test cache functionality with real data.
-
-        TODO: This method needs to be rewritten to use the SQL backend's
-        cache mechanism instead of the removed python_redis AnalysisCacheManager.
-        """
-        self.stdout.write(self.style.WARNING(
-            "Cache testing is not yet implemented for the SQL backend. "
-            "Use --debug-fields or run without --test-cache."
-        ))
-
-    def run_full_analysis(self, request, opportunity_id, use_cache=False):
+    def run_full_analysis(self, request, opportunity_id):
         """Run the full analysis and show results."""
         self.stdout.write("")
         self.stdout.write("=" * 80)
