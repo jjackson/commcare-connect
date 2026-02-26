@@ -1742,7 +1742,7 @@ class PipelineDataAccess(BaseDataAccess):
             terminal_stage = CacheStage.AGGREGATED
 
         # Parse data source config
-        data_source_dict = schema.get("data_source", {})
+        data_source_dict = schema.get("data_source") or {}
         data_source = DataSourceConfig(
             type=data_source_dict.get("type", "connect_csv"),
             form_name=data_source_dict.get("form_name", ""),

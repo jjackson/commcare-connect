@@ -100,16 +100,20 @@ def fetch_cchq_forms_as_visit_dicts(
     form_name = data_source.form_name
     xmlns = None
 
+    fetch_app_id = None
+
     # Strategy 1: Try gs_app_id first (for GS forms in separate supervisor app)
     if data_source.gs_app_id:
         xmlns = client.get_form_xmlns(data_source.gs_app_id, form_name)
         if xmlns:
+            fetch_app_id = data_source.gs_app_id
             logger.info(f"[CCHQ Fetcher] Found xmlns via gs_app_id: {xmlns}")
 
     # Strategy 2: Try the main app_id
     if not xmlns and app_id:
         xmlns = client.get_form_xmlns(app_id, form_name)
         if xmlns:
+            fetch_app_id = app_id
             logger.info(f"[CCHQ Fetcher] Found xmlns via app_id: {xmlns}")
 
     # Strategy 3: Search all apps
@@ -122,7 +126,7 @@ def fetch_cchq_forms_as_visit_dicts(
         logger.warning(f"[CCHQ Fetcher] Could not discover xmlns for '{form_name}', returning empty")
         return []
 
-    forms = client.fetch_forms(xmlns=xmlns, app_id=app_id if app_id else None)
+    forms = client.fetch_forms(xmlns=xmlns, app_id=fetch_app_id)
     logger.info(f"[CCHQ Fetcher] Fetched {len(forms)} '{form_name}' forms from {cc_domain}")
 
     visit_dicts = [normalize_cchq_form_to_visit_dict(form, i) for i, form in enumerate(forms)]

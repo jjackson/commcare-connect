@@ -25,7 +25,6 @@ if not settings.configured:
     django.setup()
 
 import pytest  # noqa: E402
-from unittest.mock import MagicMock, patch  # noqa: E402
 
 from commcare_connect.labs.analysis.config import (  # noqa: E402
     AnalysisPipelineConfig,
