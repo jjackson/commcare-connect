@@ -331,9 +331,16 @@ def send_payment_notification(opportunity_id: int, payment_ids: list[int]):
 
 
 @celery_app.task()
-def send_push_notification_task(user_ids: list[int], title: str, body: str):
+def send_push_notification_task(
+    user_ids: list[int],
+    title: str,
+    body: str,
+    extra_data: dict[str, str] = None,
+):
     usernames = list(User.objects.filter(id__in=user_ids).values_list("username", flat=True))
     data = {"title": title, "body": body}
+    if extra_data is not None:
+        data.update(extra_data)
     message = Message(usernames, data=data)
     send_message(message)
 
@@ -613,7 +620,7 @@ def generate_automated_service_delivery_invoice():
             date=datetime.datetime.utcnow(),
             start_date=start_date,
             end_date=end_date_prev_month,
-            status=InvoiceStatus.PENDING,
+            status=InvoiceStatus.PENDING_NM_REVIEW,
             invoice_number=invoice_number,
             service_delivery=True,
             exchange_rate=exchange_rate,

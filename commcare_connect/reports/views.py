@@ -3,12 +3,13 @@ from urllib.parse import urlencode
 
 import django_filters
 import django_tables2 as tables
+import waffle
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Column, Field, Layout, Row
 from django import forms
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin, UserPassesTestMixin
-from django.db.models import F
+from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
+from django.db.models import F, Max
 from django.http import HttpResponse
 from django.urls import reverse
 from django.utils.functional import cached_property
@@ -17,6 +18,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django_filters.views import FilterView
 from django_tables2.views import SingleTableMixin
 
+from commcare_connect.flags.switch_names import UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import CompletedWork, DeliveryType, InvoiceStatus, Opportunity, PaymentInvoice
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity, Program
@@ -27,11 +29,6 @@ from commcare_connect.reports.tasks import export_invoice_report_task
 from commcare_connect.utils.celery import download_export_file, render_export_status
 from commcare_connect.utils.permission_const import ALL_ORG_ACCESS
 from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE, get_validated_page_size
-
-
-class SuperUserRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
-    def test_func(self):
-        return self.request.user.is_superuser
 
 
 COUNTRY_CURRENCY_CHOICES = [
@@ -169,7 +166,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
     )
 
     status = django_filters.MultipleChoiceFilter(
-        choices=InvoiceStatus.choices,
+        choices=lambda: InvoiceStatus.get_choices(),
         label=_("Status"),
         widget=forms.SelectMultiple(
             attrs={
@@ -254,10 +251,11 @@ class InvoiceReportView(
 
     @classmethod
     def get_invoice_queryset(cls):
-        return (
+        queryset = (
             PaymentInvoice.objects.select_related(
                 "opportunity__managedopportunity__program__organization",
                 "payment",
+                "exchange_rate",
             )
             .annotate(
                 date_paid=F("payment__date_paid"),
@@ -265,6 +263,9 @@ class InvoiceReportView(
             )
             .order_by("-date")
         )
+        if waffle.switch_is_active(UPDATES_TO_MARK_AS_PAID_WORKFLOW):
+            queryset = queryset.annotate(last_status_modified_at=Max("status_events__pgh_created_at"))
+        return queryset
 
     def get_queryset(self):
         return self.get_invoice_queryset()
