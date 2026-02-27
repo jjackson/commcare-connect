@@ -658,6 +658,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 ## Color Coding Reference
 
 ### Follow-Up Rate / GS Score Colors
+
 | Color | Follow-up Rate | GS Score |
 |-------|---------------|----------|
 | Green | ≥ 80% | ≥ 70% |
@@ -665,6 +666,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 | Red | < 60% | < 50% |
 
 ### EBF Colors
+
 | Color | Range |
 |-------|-------|
 | Green | 50-85% |
@@ -672,6 +674,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 | Red | ≤ 30% or > 95% |
 
 ### Eligible 5+ / % Still Eligible Colors
+
 | Color | Range |
 |-------|-------|
 | Green | ≥ 70% |
@@ -679,6 +682,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 | Red | < 50% |
 
 ### Last Active Colors
+
 | Color | Range |
 |-------|-------|
 | Green | ≤ 7 days ago |
@@ -686,6 +690,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 | Red | > 15 days ago |
 
 ### GPS Flags
+
 | Indicator | Threshold |
 |-----------|-----------|
 | Visit flagged | Distance from previous visit to same mother > 5 km |

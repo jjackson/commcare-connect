@@ -111,7 +111,7 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
         if interval is None:
             interval = self.heartbeat_interval
 
-        data_queue: queue.Queue = queue.Queue()
+        data_queue: queue.Queue = queue.Queue(maxsize=100)
         stop_event = threading.Event()
 
         def _producer():
@@ -119,7 +119,12 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                 for item in generator:
                     if stop_event.is_set():
                         break
-                    data_queue.put(("data", item))
+                    while not stop_event.is_set():
+                        try:
+                            data_queue.put(("data", item), timeout=1)
+                            break
+                        except queue.Full:
+                            continue
             except Exception as e:
                 data_queue.put(("error", e))
             finally:

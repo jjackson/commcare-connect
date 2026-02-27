@@ -36,6 +36,14 @@ def extract_gps_location(visit_data: dict) -> str | None:
     return None
 
 
+def _safe_parse_int(x):
+    """Safe int parse; SQL backend matches 'simple_int' pattern from source inspection."""
+    try:
+        return int(x) if x else None  # int(x) if x else None
+    except (ValueError, TypeError):
+        return None
+
+
 MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     experiment="mbw_gps",
@@ -129,7 +137,7 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
         FieldComputation(
             name="app_build_version",
             path="form.meta.app_build_version",
-            transform=lambda x: int(x) if x else None,
+            transform=_safe_parse_int,
             aggregation="first",
             description="App build version (integer)",
         ),

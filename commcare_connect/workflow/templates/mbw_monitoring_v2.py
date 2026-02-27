@@ -342,11 +342,12 @@ def _build_v2_render_code() -> str:
     // Pipeline + Job: Detect loaded pipeline data and run analysis via job handler
     // =========================================================================
 
-    // Helper: check if all 3 pipelines have data
+    // Helper: check if pipelines are ready (visits must have data; others just need to exist)
     var pipelinesReady = pipelines
         && pipelines.visits && pipelines.visits.rows && pipelines.visits.rows.length > 0
-        && pipelines.registrations && pipelines.registrations.rows
-        && pipelines.gs_forms && pipelines.gs_forms.rows;
+        && ['registrations', 'gs_forms'].every(function(key) {
+            return !pipelines[key] || (pipelines[key].rows !== undefined);
+        });
 
     var pipelinesPartial = pipelines && (
         (pipelines.visits && pipelines.visits.rows && pipelines.visits.rows.length > 0)
