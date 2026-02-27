@@ -9,7 +9,7 @@ import json
 import logging
 from collections import Counter
 from collections.abc import Generator
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 
 import sentry_sdk
 from django.conf import settings
@@ -164,7 +164,7 @@ def _get_latest_flw_statuses(
         try:
             for run in wf_access.list_runs():
                 state = run.data.get("state", {})
-                flw_results = state.get("flw_results", {})
+                flw_results = state.get("worker_results", state.get("flw_results", {}))
                 for username, result_data in flw_results.items():
                     if not isinstance(result_data, dict):
                         continue
@@ -417,9 +417,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             yield send_sse_event("Loading FLW data...")
             active_usernames = set()
             flw_names = {}
+            flw_last_active = {}
             for opp_id in opportunity_ids:
                 try:
-                    opp_flw_names = fetch_flw_names(access_token, opp_id)
+                    opp_flw_names = fetch_flw_names(
+                        access_token, opp_id, last_active_out=flw_last_active
+                    )
                     flw_names.update(opp_flw_names)
                     active_usernames.update(opp_flw_names.keys())
                 except Exception as e:
@@ -433,6 +436,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # CCHQ lowercases usernames while Connect may preserve original casing.
             active_usernames = {u.lower() for u in active_usernames}
             flw_names = {k.lower(): v for k, v in flw_names.items()}
+            flw_last_active = {k.lower(): v for k, v in flw_last_active.items()}
 
             # Scope to monitoring session FLWs if applicable
             if session_flw_filter:
@@ -454,6 +458,32 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     active_usernames = session_flw_filter
                 else:
                     active_usernames = intersection
+
+            # Step 2b: Fetch GS forms from CCHQ early (while OAuth token is still fresh)
+            gs_forms = []
+            gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
+            cchq_oauth = request.session.get("commcare_oauth", {})
+            if cchq_oauth.get("access_token") and timezone.now().timestamp() < cchq_oauth.get("expires_at", 0):
+                for opp_id in opportunity_ids:
+                    try:
+                        yield send_sse_event("Fetching GS forms... (metadata)")
+                        metadata = fetch_opportunity_metadata(access_token, opp_id)
+                        cc_domain = metadata.get("cc_domain")
+                        cc_app_id = metadata.get("cc_app_id")
+                        if cc_domain:
+                            yield send_sse_event("Fetching GS forms... (forms)")
+                            forms = fetch_gs_forms(
+                                request, cc_domain, cc_app_id=cc_app_id,
+                                gs_app_id=gs_app_id, bust_cache=bust_cache,
+                                opportunity_id=opp_id,
+                            )
+                            gs_forms.extend(forms)
+                            yield send_sse_event(f"Fetching GS forms... ({len(gs_forms)} forms)")
+                    except Exception as e:
+                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
+            else:
+                logger.info("[MBW Dashboard] Skipping GS fetch — CommCare OAuth not available yet")
+            logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 3: GPS analysis (on ALL visits, then filter by date)
             yield send_sse_event("Analyzing GPS data...")
@@ -478,6 +508,11 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             filtered_gps_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
             gps_result = build_result_from_analyzed_visits(filtered_gps_visits, flw_names)
 
+            # Group visits by FLW for GPS drill-down (avoids separate API call)
+            visits_by_flw = {}
+            for v in filtered_gps_visits:
+                visits_by_flw.setdefault(v.username, []).append(serialize_visit(v))
+
             gps_data = {
                 "total_visits": gps_result.total_visits,
                 "total_flagged": gps_result.total_flagged,
@@ -485,6 +520,8 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "date_range_end": end_date.isoformat(),
                 "flw_summaries": [serialize_flw_summary(flw) for flw in gps_result.flw_summaries],
             }
+            for summary_dict in gps_data["flw_summaries"]:
+                summary_dict["visits"] = visits_by_flw.get(summary_dict["username"], [])
 
             # Step 4: Fetch registration forms from CCHQ
             yield send_sse_event("Fetching registration data...")
@@ -492,7 +529,6 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             overview_data = None
             visit_status_distribution = None
             registration_forms = []
-            gs_forms = []
 
             # Re-check CCHQ OAuth (may have expired during earlier steps)
             cchq_oauth_valid = bool(
@@ -526,26 +562,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                         logger.warning(f"[MBW Dashboard] Registration form fetch failed for opp {opp_id}: {e}")
                 logger.info(f"[MBW Dashboard] Fetched {len(registration_forms)} registration forms")
 
-                # Step 4b: Fetch GS forms from CCHQ (supervisor app, not in Connect pipeline)
-                gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
-                for opp_id in opportunity_ids:
-                    try:
-                        yield send_sse_event("Fetching GS forms... (metadata)")
-                        metadata = fetch_opportunity_metadata(access_token, opp_id)
-                        cc_domain = metadata.get("cc_domain")
-                        cc_app_id = metadata.get("cc_app_id")
-                        if cc_domain:
-                            yield send_sse_event("Fetching GS forms... (forms)")
-                            forms = fetch_gs_forms(
-                                request, cc_domain, cc_app_id=cc_app_id,
-                                gs_app_id=gs_app_id, bust_cache=bust_cache,
-                                opportunity_id=opp_id,
-                            )
-                            gs_forms.extend(forms)
-                            yield send_sse_event(f"Fetching GS forms... ({len(gs_forms)} forms)")
-                    except Exception as e:
-                        logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
-                logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
+                # GS forms already fetched in step 2b (before GPS analysis)
 
             # Step 5: Build follow-up data from registration forms + pipeline completions
             yield send_sse_event("Calculating follow-up metrics...")
@@ -694,11 +711,24 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 }
 
             overview_flws = []
+            now_utc = datetime.now(dt_timezone.utc)
             for username in sorted(active_usernames):
                 display_name = flw_names.get(username, username)
+                la_str = flw_last_active.get(username)
+                last_active_days = None
+                last_active_date = None
+                if la_str:
+                    try:
+                        la_dt = datetime.fromisoformat(la_str.replace("Z", "+00:00"))
+                        last_active_days = max(0, (now_utc - la_dt).days)
+                        last_active_date = la_dt.strftime("%Y-%m-%d %H:%M")
+                    except (ValueError, TypeError):
+                        pass
                 overview_flws.append({
                     "username": username,
                     "display_name": display_name,
+                    "last_active_days": last_active_days,
+                    "last_active_date": last_active_date,
                     "cases_registered": mother_counts.get(username, 0),
                     "eligible_mothers": eligible_mothers_by_flw.get(username, 0),
                     "first_gs_score": first_gs_by_flw.get(username),

@@ -36,33 +36,6 @@ def extract_gps_location(visit_data: dict) -> str | None:
     return None
 
 
-def extract_visit_datetime(visit_data: dict) -> str | None:
-    """
-    Extract visit datetime from form metadata.
-
-    Args:
-        visit_data: Full visit dict with form_json
-
-    Returns:
-        ISO datetime string or None
-    """
-    form_json = visit_data.get("form_json", {})
-    meta = form_json.get("form", {}).get("meta", {})
-    return meta.get("timeEnd")
-
-
-def extract_app_build_version(visit_data: dict) -> int | None:
-    """Extract app build version as an integer from form_json.form.meta."""
-    form_json = visit_data.get("form_json", {})
-    value = form_json.get("form", {}).get("meta", {}).get("app_build_version")
-    if value is not None:
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
-    return None
-
-
 MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
     grouping_key="username",
     experiment="mbw_gps",
@@ -100,7 +73,7 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
         # Visit datetime - for ordering and daily grouping
         FieldComputation(
             name="visit_datetime",
-            extractor=extract_visit_datetime,
+            path="form.meta.timeEnd",
             aggregation="first",
             description="Visit datetime for ordering",
         ),
@@ -155,7 +128,8 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
         # App build version - for filtering GPS metrics by app version
         FieldComputation(
             name="app_build_version",
-            extractor=extract_app_build_version,
+            path="form.meta.app_build_version",
+            transform=lambda x: int(x) if x else None,
             aggregation="first",
             description="App build version (integer)",
         ),
