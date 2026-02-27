@@ -7,6 +7,8 @@ Includes support for both AnalysisPipeline streaming and Celery task progress st
 
 import json
 import logging
+import queue
+import threading
 import time
 from collections.abc import Callable, Generator
 
@@ -69,6 +71,9 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                 yield send_sse_event("Complete!", data={"result": 123})
     """
 
+    heartbeat_enabled = True
+    heartbeat_interval = 20  # seconds between heartbeat comments
+
     def get(self, request):
         """
         Handle GET request and return streaming response.
@@ -79,13 +84,81 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Not authenticated"}, status=401)
 
+        generator = self.stream_data(request)
+        if self.heartbeat_enabled:
+            generator = self._with_heartbeat(generator)
+
         response = StreamingHttpResponse(
-            self.stream_data(request),
+            generator,
             content_type="text/event-stream",
         )
         response["Cache-Control"] = "no-cache"
         response["X-Accel-Buffering"] = "no"  # Disable nginx buffering
         return response
+
+    def _with_heartbeat(self, generator, interval=None):
+        """Wrap a generator with periodic SSE heartbeat comments.
+
+        Prevents ALB/browser timeouts during long-running blocking operations
+        (CSV parsing, data processing) by sending SSE comment lines every
+        ``interval`` seconds when the generator isn't yielding real data.
+
+        SSE comment format ``: heartbeat\\n\\n`` keeps the TCP connection
+        alive but does not trigger EventSource.onmessage on the frontend.
+
+        Set ``heartbeat_enabled = False`` on a subclass to disable.
+        """
+        if interval is None:
+            interval = self.heartbeat_interval
+
+        data_queue: queue.Queue = queue.Queue(maxsize=100)
+        stop_event = threading.Event()
+
+        def _producer():
+            try:
+                for item in generator:
+                    if stop_event.is_set():
+                        break
+                    while not stop_event.is_set():
+                        try:
+                            data_queue.put(("data", item), timeout=1)
+                            break
+                        except queue.Full:
+                            continue
+            except Exception as e:  # noqa: BLE001
+                try:
+                    data_queue.put(("error", e), timeout=1)
+                except queue.Full:
+                    pass
+            finally:
+                try:
+                    data_queue.put(("done", None), timeout=1)
+                except queue.Full:
+                    pass
+                try:
+                    generator.close()
+                except (GeneratorExit, RuntimeError):
+                    pass
+
+        thread = threading.Thread(target=_producer, daemon=True)
+        thread.start()
+
+        try:
+            while True:
+                try:
+                    msg_type, value = data_queue.get(timeout=interval)
+                    if msg_type == "data":
+                        yield value
+                    elif msg_type == "done":
+                        break
+                    elif msg_type == "error":
+                        raise value
+                except queue.Empty:
+                    # No data for `interval` seconds — send SSE comment to keep alive
+                    yield ": heartbeat\n\n"
+        finally:
+            stop_event.set()
+            thread.join(timeout=2)
 
     def stream_data(self, request) -> Generator[str, None, None]:
         """

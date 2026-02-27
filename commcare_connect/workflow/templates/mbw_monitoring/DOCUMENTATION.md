@@ -491,7 +491,7 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 
 Used for: Visit form data, FLW names, opportunity metadata
 
-- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 12 fields per visit using FieldComputations (3 use `extractor`, 9 use `path`).
+- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 13 fields per visit using FieldComputations (1 uses `extractor` — `gps_location`, 12 use `path`).
 - **FLW names**: `fetch_flw_names()` from `labs/analysis/data_access.py`
 - **Opportunity metadata**: `GET /export/opportunity/{id}/` -> extracts `cc_domain` and `cc_app_id` from `deliver_app` or `learn_app`
 
@@ -559,17 +559,17 @@ The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 13 FieldComputatio
 | `case_id` | path | `form.case.@case_id` | |
 | `mother_case_id` | path | `form.parents.parent.case.@case_id` | |
 | `form_name` | path | `form.@name` | Has trailing space variant ("ANC Visit ") |
-| `visit_datetime` | extractor | `extract_visit_datetime(visit_data)` | Reads `form_json.form.meta.timeEnd` |
+| `visit_datetime` | path | `form.meta.timeEnd` | ISO datetime string |
 | `entity_id_deliver` | paths | `form.mbw_visit.deliver.entity_id` (+ alt) | |
 | `entity_name` | paths | `form.mbw_visit.deliver.entity_name` (+ alt) | |
 | `parity` | path | `form.confirm_visit_information.parity__of_...` | From ANC forms only |
 | `anc_completion_date` | path | `form.visit_completion.anc_completion_date` | From ANC forms only |
 | `pnc_completion_date` | path | `form.pnc_completion_date` | From PNC forms only |
 | `baby_dob` | path | `form.capture_the_following_birth_details.baby_dob` | From PNC forms only |
-| `app_build_version` | extractor | `extract_app_build_version(visit_data)` | Integer from `form_json.form.meta.app_build_version` |
+| `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | Integer; SQL: regex-guarded `::INTEGER` cast |
 | `bf_status` | paths | `form.feeding_history.{pnc,oneweek,onemonth,threemonth,sixmonth}_current_bf_status` | Multi-choice, space-separated; "ebf" = exclusive breastfeeding. From postnatal forms only (not ANC). |
 
-**Important**: Three fields (`gps_location`, `visit_datetime`, `app_build_version`) use the `extractor` parameter instead of `path+transform`. This is required because the PythonRedis backend cannot pass the full visit dict to transform functions - it only passes the extracted path value. The `extractor` parameter receives the full `visit._data` dict directly.
+**Important**: `gps_location` uses the `extractor` parameter because CommCare's XML-to-JSON conversion produces either a dict (`{"#text": "lat lon alt acc", ...}`) or a plain string for `form.meta.location` — a simple path can't handle both. The SQL backend supports extractors via post-processing (adds `NULL` placeholder in SQL, calls extractor in Python after query). `visit_datetime` and `app_build_version` were converted from extractors to path-based extraction for SQL efficiency.
 
 ---
 
@@ -1149,13 +1149,13 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 | GS Score | `form.checklist_percentage` | 0-100 integer |
 | Visit datetime | `form.meta.timeEnd` | For oldest-first sorting |
 
-### Pipeline FieldComputation Extractors
+### Pipeline FieldComputation — Special Extraction
 
-| Field | Source in `visit._data` | Notes |
-|-------|------------------------|-------|
-| `gps_location` | `form_json.form.meta.location.#text` or string | |
-| `visit_datetime` | `form_json.form.meta.timeEnd` | ISO datetime |
-| `app_build_version` | `form_json.form.meta.app_build_version` | Parsed to integer |
+| Field | Mode | Source | Notes |
+|-------|------|--------|-------|
+| `gps_location` | extractor | `form_json.form.meta.location` (dict or string) | SQL: NULL placeholder + Python post-processing |
+| `visit_datetime` | path | `form.meta.timeEnd` | Direct JSONB extraction |
+| `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | SQL: regex-guarded `::INTEGER` cast |
 
 ---
 

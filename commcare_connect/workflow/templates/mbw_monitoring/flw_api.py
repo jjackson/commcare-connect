@@ -61,7 +61,7 @@ class OpportunityFLWListAPIView(LoginRequiredMixin, View):
             # Enrich with audit history and task indicators
             flw_history = self._build_flw_history(request)
             for flw in all_flws:
-                flw["history"] = flw_history.get(flw["username"], {})
+                flw["history"] = flw_history.get(flw["username"].lower(), flw_history.get(flw["username"], {}))
 
             return JsonResponse({
                 "success": True,
@@ -131,7 +131,7 @@ class OpportunityFLWListAPIView(LoginRequiredMixin, View):
 
             for run in all_runs:
                 state = run.data.get("state", {})
-                flw_results = state.get("flw_results", {})
+                flw_results = state.get("worker_results", state.get("flw_results", {}))
                 if not flw_results:
                     continue
                 for username, result_data in flw_results.items():
