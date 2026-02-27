@@ -126,6 +126,7 @@ PIPELINE_SCHEMAS = [
                 "type": "cchq_forms",
                 "form_name": "Gold Standard Visit Checklist",
                 "app_id_source": "opportunity",
+                "gs_app_id": "2ca67a89dd8a2209d75ed5599b45a5d1",
             },
             "grouping_key": "case_id",
             "terminal_stage": "visit_level",
@@ -183,6 +184,7 @@ def _build_v2_render_code() -> str:
     var [jobError, setJobError] = React.useState(null);
     var [jobRunning, setJobRunning] = React.useState(false);
     var [analysisComplete, setAnalysisComplete] = React.useState(false);
+    var [oauthStatus, setOauthStatus] = React.useState(null);
     var jobCleanupRef = React.useRef(null);"""
 
     code = code.replace(_SSE_STATE, _PIPELINE_STATE)
@@ -322,6 +324,21 @@ def _build_v2_render_code() -> str:
     }, [step, instance.id, refreshTrigger]);"""
 
     _PIPELINE_LOADING = """    // =========================================================================
+    // OAuth: Check auth status on dashboard load
+    // =========================================================================
+    React.useEffect(function() {
+        if (step !== 'dashboard') return;
+        fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
+        .then(function(r) { return r.json(); })
+        .then(function(status) {
+            setOauthStatus(status);
+        })
+        .catch(function() {
+            // Network error — leave oauthStatus null so UI doesn't block
+        });
+    }, [step]);
+
+    // =========================================================================
     // Pipeline + Job: Detect loaded pipeline data and run analysis via job handler
     // =========================================================================
 
@@ -547,66 +564,9 @@ def _build_v2_render_code() -> str:
     )
 
     # =====================================================================
-    # 4. Replace OAuth expired state check — not needed in v2 (pipelines
-    #    handle auth automatically via the workflow runner)
+    # 4. OAuth expired state check — KEPT in v2 (pipelines need auth too)
     # =====================================================================
-    _OAUTH_EXPIRED_BLOCK = """    // ---- OAuth expired state ----
-    if (oauthStatus && (!oauthStatus.connect?.active || !oauthStatus.commcare?.active)) {
-        var expiredServices = [];
-        if (!oauthStatus.connect?.active) expiredServices.push({ name: 'Connect', key: 'connect', url: oauthStatus.connect?.authorize_url });
-        if (!oauthStatus.commcare?.active) expiredServices.push({ name: 'CommCare HQ', key: 'commcare', url: oauthStatus.commcare?.authorize_url });
-        if (!oauthStatus.ocs?.active) expiredServices.push({ name: 'OCS', key: 'ocs', url: oauthStatus.ocs?.authorize_url });
-        var activeServices = [];
-        if (oauthStatus.connect?.active) activeServices.push('Connect');
-        if (oauthStatus.commcare?.active) activeServices.push('CommCare HQ');
-        if (oauthStatus.ocs?.active) activeServices.push('OCS');
-
-        return (
-            <div className="space-y-4">
-                <div className="bg-white rounded-lg shadow-sm p-6">
-                    <h2 className="text-xl font-bold text-gray-900">{instance.state?.title || 'MBW Monitoring'}</h2>
-                    <p className="text-gray-500 mt-1">Authentication required before loading data</p>
-                </div>
-                <div className="bg-red-50 border border-red-300 rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <i className="fa-solid fa-triangle-exclamation text-red-600"></i>
-                        <span className="font-semibold text-red-800">OAuth tokens expired</span>
-                    </div>
-                    <p className="text-sm text-red-700 mb-4">
-                        One or more authentication tokens have expired. Please re-authorize before loading data.
-                    </p>
-                    <div className="space-y-2 mb-4">
-                        {expiredServices.map(function(svc) {
-                            return (
-                                <div key={svc.key} className="flex items-center gap-3">
-                                    <i className="fa-solid fa-circle-xmark text-red-500"></i>
-                                    <span className="text-sm font-medium text-gray-800 w-32">{svc.name}</span>
-                                    {svc.url ? (
-                                        <a href={svc.url} className="px-3 py-1.5 bg-red-600 text-white text-sm rounded hover:bg-red-700 no-underline">
-                                            Authorize {svc.name}
-                                        </a>
-                                    ) : (
-                                        <span className="text-sm text-gray-500">No authorization URL available</span>
-                                    )}
-                                </div>
-                            );
-                        })}
-                        {activeServices.map(function(name) {
-                            return (
-                                <div key={name} className="flex items-center gap-3">
-                                    <i className="fa-solid fa-circle-check text-green-500"></i>
-                                    <span className="text-sm font-medium text-gray-800 w-32">{name}</span>
-                                    <span className="text-sm text-green-600">Active</span>"""
-
-    # Find the end of the OAuth block (ends with the closing of the return div)
-    # We need to find the exact boundary. Let's replace from the start marker
-    # to just before the loading state marker.
-    _OAUTH_END_MARKER = """    // ---- Loading state ----"""
-
-    oauth_start = code.find("    // ---- OAuth expired state ----")
-    oauth_end = code.find(_OAUTH_END_MARKER)
-    if oauth_start >= 0 and oauth_end > oauth_start:
-        code = code[:oauth_start] + _OAUTH_END_MARKER + code[oauth_end + len(_OAUTH_END_MARKER):]
+    # No changes needed — the v1 OAuth expired state block is preserved as-is.
 
     # =====================================================================
     # 5. Replace Loading state with pipeline/job loading UI
@@ -914,19 +874,7 @@ def _build_v2_render_code() -> str:
         "                    </button>\n",
     )
 
-    # Replace OCS OAuth check (uses oauthStatus)
-    code = code.replace(
-        "oauthStatus && !oauthStatus.ocs?.active ? (",
-        "false ? (",
-    )
-    code = code.replace(
-        "{oauthStatus.ocs?.authorize_url ? (",
-        "{false ? (",
-    )
-    code = code.replace(
-        "<a href={oauthStatus.ocs.authorize_url}",
-        '<a href="#"',
-    )
+    # OCS OAuth check — KEPT in v2 (uses oauthStatus, same as v1)
 
     # Replace fromSnapshot reference in follow-up drilldown
     code = code.replace("fromSnapshot ? ", "false ? ")
@@ -939,6 +887,12 @@ def _build_v2_render_code() -> str:
     code = code.replace(
         "Data loaded from cache",
         "Data loaded via pipeline analysis",
+    )
+
+    # Replace OAuth Retry button to reload page (no refreshTrigger in v2)
+    code = code.replace(
+        "setRefreshTrigger(function(c) { return c + 1; });",
+        "window.location.reload();",
     )
 
     # Replace App Version Apply button SSE references

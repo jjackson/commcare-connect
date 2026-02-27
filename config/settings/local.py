@@ -15,12 +15,13 @@ CSRF_TRUSTED_ORIGINS = ["https://*.127.0.0.1", "https://*.loca.lt"] + env.list("
 
 # django-debug-toolbar
 # ------------------------------------------------------------------------------
-INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
-MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]  # noqa: F405
-DEBUG_TOOLBAR_CONFIG = {
-    "DISABLE_PANELS": ["debug_toolbar.panels.redirects.RedirectsPanel"],
-    "SHOW_TEMPLATE_CONTEXT": True,
-}
+# Disabled — causes cProfile race conditions on concurrent requests
+# INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
+# MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]  # noqa: F405
+# DEBUG_TOOLBAR_CONFIG = {
+#     "DISABLE_PANELS": ["debug_toolbar.panels.redirects.RedirectsPanel"],
+#     "SHOW_TEMPLATE_CONTEXT": True,
+# }
 INTERNAL_IPS = ["127.0.0.1", "10.0.2.2"]
 
 # Celery
@@ -89,8 +90,6 @@ MIDDLEWARE.insert(_auth_idx + 2, "commcare_connect.labs.middleware.LabsURLWhitel
 MIDDLEWARE.insert(_auth_idx + 3, "commcare_connect.labs.context.LabsContextMiddleware")
 
 # Pipeline cache settings for local development
-# Accept cache if it has >=98% of expected visits (small delta from new data between runs)
-PIPELINE_CACHE_TOLERANCE_PCT = 98
 # 24-hour cache TTL for dev (production default: 1 hour)
 PIPELINE_CACHE_TTL_HOURS = 24
 

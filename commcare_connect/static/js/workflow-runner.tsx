@@ -725,6 +725,12 @@ function WorkflowRunner({
         String(initialData.opportunity_id),
       );
     }
+    // Forward tolerance param from page URL to pipeline stream
+    const pageParams = new URLSearchParams(window.location.search);
+    const tolerance = pageParams.get('tolerance');
+    if (tolerance) {
+      url.searchParams.set('tolerance', tolerance);
+    }
 
     const eventSource = new EventSource(url.toString());
 

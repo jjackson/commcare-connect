@@ -100,10 +100,19 @@ class AnalysisPipeline:
     def cache_tolerance_pct(self) -> int:
         """Cache tolerance percentage. Accept cache if it has >= N% of expected visits.
 
-        Reads from PIPELINE_CACHE_TOLERANCE_PCT setting (default 95 for local dev).
-        Set to 100 for strict cache validation (production default).
+        Reads from ?tolerance= query param first, then PIPELINE_CACHE_TOLERANCE_PCT
+        setting (default 100 for production).
         """
-        return getattr(settings, "PIPELINE_CACHE_TOLERANCE_PCT", 95)
+        if self.request and hasattr(self.request, "GET"):
+            param = self.request.GET.get("tolerance")
+            if param is not None:
+                try:
+                    val = int(param)
+                    if 1 <= val <= 100:
+                        return val
+                except (ValueError, TypeError):
+                    pass
+        return getattr(settings, "PIPELINE_CACHE_TOLERANCE_PCT", 100)
 
     # -------------------------------------------------------------------------
     # Raw Data Access (replaces api_cache.py)
