@@ -59,10 +59,16 @@ def _build_visit_dict(row: dict) -> dict:
     """Build a visit context dict from a raw SQL row for transform/extractor post-processing."""
     form_json = row.get("form_json", {})
     if isinstance(form_json, str):
-        form_json = json.loads(form_json) if form_json else {}
+        try:
+            form_json = json.loads(form_json) if form_json else {}
+        except (ValueError, json.JSONDecodeError):
+            form_json = {}
     images = row.get("images", [])
     if isinstance(images, str):
-        images = json.loads(images) if images else []
+        try:
+            images = json.loads(images) if images else []
+        except (ValueError, json.JSONDecodeError):
+            images = []
     return {
         "form_json": form_json,
         "images": images,
@@ -449,6 +455,8 @@ class SQLBackend:
 
             # Apply post-processing transforms that need full visit context
             # (e.g., extract_images_with_question_ids needs both form_json and images)
+            # Build visit_dict once per row (lazy); transforms must not mutate it.
+            visit_dict = None
             for field in config.fields:
                 if field.name not in computed_field_names:
                     continue
@@ -463,7 +471,8 @@ class SQLBackend:
                     # If transform takes 'visit_data' param, it needs full context
                     if "visit_data" in params or len(params) == 0:
                         try:
-                            visit_dict = _build_visit_dict(row)
+                            if visit_dict is None:
+                                visit_dict = _build_visit_dict(row)
                             computed[field.name] = field.transform(visit_dict)
                         except Exception as e:
                             logger.warning(f"Transform for {field.name} failed: {e}")
@@ -471,7 +480,8 @@ class SQLBackend:
 
                 elif field.extractor and callable(field.extractor):
                     try:
-                        visit_dict = _build_visit_dict(row)
+                        if visit_dict is None:
+                            visit_dict = _build_visit_dict(row)
                         computed[field.name] = field.extractor(visit_dict)
                     except Exception as e:
                         logger.warning(f"Extractor for {field.name} failed: {e}")

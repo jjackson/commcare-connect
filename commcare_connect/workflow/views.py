@@ -217,6 +217,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                         period_end=week_end.isoformat(),
                         initial_state={"worker_states": {}},
                     )
+                except Exception as e:
+                    logger.exception(f"Failed to create run for opp {opportunity_id}: {e}")
+                    return super().get(request, *args, **kwargs)
                 finally:
                     data_access.close()
                 params = request.GET.copy()

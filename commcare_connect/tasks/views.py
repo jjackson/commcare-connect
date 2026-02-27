@@ -7,7 +7,7 @@ implementation using TaskDataAccess for OAuth-based API access.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -1092,7 +1092,7 @@ def task_ai_save_transcript(request, task_id):
             if session.get("session_id") == session_id:
                 session["saved_transcript"] = {
                     "messages": messages,
-                    "saved_at": datetime.now().isoformat(),
+                    "saved_at": datetime.now(timezone.utc).isoformat(),
                     "saved_by": request.user.get_display_name(),
                 }
                 updated = True
