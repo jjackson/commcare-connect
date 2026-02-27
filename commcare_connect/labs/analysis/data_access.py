@@ -55,7 +55,7 @@ def fetch_flw_names(
                 # If last_active was requested, only use cache if la data is also cached
                 if last_active_out is not None:
                     la_cached = cache.get(f"flw_last_active_{opportunity_id}")
-                    if la_cached:
+                    if la_cached is not None:
                         last_active_out.update(la_cached)
                     else:
                         cached = None  # Force fresh fetch to populate last_active

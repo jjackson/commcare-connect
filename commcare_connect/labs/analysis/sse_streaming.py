@@ -126,9 +126,15 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                         except queue.Full:
                             continue
             except Exception as e:
-                data_queue.put(("error", e))
+                try:
+                    data_queue.put(("error", e), timeout=1)
+                except queue.Full:
+                    pass
             finally:
-                data_queue.put(("done", None))
+                try:
+                    data_queue.put(("done", None), timeout=1)
+                except queue.Full:
+                    pass
 
         thread = threading.Thread(target=_producer, daemon=True)
         thread.start()
