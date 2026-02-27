@@ -360,6 +360,9 @@ def build_visit_extraction_query(
     # Check if any field needs full visit context (form_json, images)
     needs_full_context = False
     for field in config.fields:
+        if field.extractor and callable(field.extractor):
+            needs_full_context = True
+            break
         if field.transform and callable(field.transform):
             import inspect
 
@@ -378,6 +381,12 @@ def build_visit_extraction_query(
 
     # Add computed fields from config (no aggregation, just extraction + transform)
     for field in config.fields:
+        # Handle extractor fields — need post-processing with full visit context
+        if field.extractor and callable(field.extractor):
+            select_parts.append(f"NULL as {field.name}")
+            computed_field_names.append(field.name)
+            continue
+
         # Skip fields that will be computed from full visit context (special markers like __images__)
         if field.transform and callable(field.transform):
             import inspect

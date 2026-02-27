@@ -46,7 +46,8 @@ class CurrentVersionMiddleware:
 class CustomPGHistoryMiddleware(HistoryMiddleware):
     def get_context(self, request):
         context = super().get_context(request)
-        if request.user.is_authenticated:
+        # Skip for LabsUser (transient, no _meta) — pghistory needs a real Django model user
+        if request.user.is_authenticated and hasattr(request.user, "_meta"):
             self._add_user_details_to_context(request, context)
         return context
 
