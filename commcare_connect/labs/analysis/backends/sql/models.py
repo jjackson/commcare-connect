@@ -29,7 +29,7 @@ class RawVisitCache(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Visit data (mirrors UserVisitDataSerializer columns)
-    visit_id = models.IntegerField(db_index=True, help_text="Original visit ID from Connect")
+    visit_id = models.CharField(max_length=255, db_index=True, help_text="Visit ID (numeric for Connect, UUID for CCHQ)")
     username = models.CharField(max_length=255, db_index=True)
     deliver_unit = models.CharField(max_length=500, blank=True)
     deliver_unit_id = models.IntegerField(null=True, blank=True)
@@ -88,7 +88,7 @@ class ComputedVisitCache(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Visit identification
-    visit_id = models.IntegerField(db_index=True)
+    visit_id = models.CharField(max_length=255, db_index=True)
     username = models.CharField(max_length=255, db_index=True)
 
     # Base visit fields (denormalized from RawVisitCache to avoid joins)
