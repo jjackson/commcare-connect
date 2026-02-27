@@ -785,13 +785,13 @@ def task_initiate_ai(request, task_id):
         session_data = {
             "task_id": str(task.id),
             "opportunity_id": str(task.opportunity_id),
-            "username": task.username,
+            "username": task.task_username,
             "created_by": request.user.username if hasattr(request.user, "username") else "unknown",
         }
 
         # Trigger bot with OCS using OAuth
         ocs_client = OCSDataAccess(request=request)
-        ocs_client.trigger_bot(
+        result = ocs_client.trigger_bot(
             identifier=identifier,
             platform=platform,
             experiment_id=experiment,
@@ -801,7 +801,26 @@ def task_initiate_ai(request, task_id):
         )
         ocs_client.close()
 
-        # Add AI session event - session_id will be linked via polling after OCS creates it
+        # Log the full response to discover its shape
+        logger.info(f"trigger_bot response for task {task_id}: {result}")
+
+        # Extract session_id from trigger_bot response
+        session_id = None
+        status = "pending"
+        if isinstance(result, dict):
+            session_id = (
+                result.get("session", {}).get("id")
+                or result.get("session_id")
+                or result.get("id")
+            )
+            if session_id:
+                session_id = str(session_id)
+                status = "completed"
+                logger.info(f"Session linked immediately from trigger_bot: {session_id}")
+            else:
+                logger.warning(f"trigger_bot response has no session_id. Keys: {list(result.keys())}")
+
+        # Add AI session event with session_id if available from trigger_bot response
         actor_name = request.user.get_display_name()
         session_params = {
             "identifier": identifier,
@@ -812,8 +831,8 @@ def task_initiate_ai(request, task_id):
         task.add_ai_session(
             actor=actor_name,
             session_params=session_params,
-            session_id=None,
-            status="pending",
+            session_id=session_id,
+            status=status,
         )
 
         # Save task via data access
@@ -823,7 +842,8 @@ def task_initiate_ai(request, task_id):
         return JsonResponse(
             {
                 "success": True,
-                "message": "AI conversation initiated. The session ID can be linked manually once available.",
+                "message": "AI conversation initiated.",
+                "session_id": session_id,
             }
         )
 

@@ -469,6 +469,30 @@ class SQLBackend:
                             logger.warning(f"Transform for {field.name} failed: {e}")
                             computed[field.name] = None
 
+                elif field.extractor and callable(field.extractor):
+                    try:
+                        import json
+
+                        form_json = row.get("form_json", {})
+                        if isinstance(form_json, str):
+                            form_json = json.loads(form_json) if form_json else {}
+
+                        images = row.get("images", [])
+                        if isinstance(images, str):
+                            images = json.loads(images) if images else []
+
+                        visit_dict = {
+                            "form_json": form_json,
+                            "images": images,
+                            "username": row.get("username"),
+                            "visit_date": row.get("visit_date"),
+                            "entity_name": row.get("entity_name"),
+                        }
+                        computed[field.name] = field.extractor(visit_dict)
+                    except Exception as e:
+                        logger.warning(f"Extractor for {field.name} failed: {e}")
+                        computed[field.name] = None
+
             # Parse visit_date
             visit_date_val = row.get("visit_date")
             if visit_date_val and isinstance(visit_date_val, date):
@@ -495,7 +519,7 @@ class SQLBackend:
         # Cache computed visits (store base fields as columns to avoid joins later)
         computed_cache_data = [
             {
-                "visit_id": int(row.id),
+                "visit_id": row.id,
                 "username": row.username,
                 # Handle both date and datetime objects
                 "visit_date": row.visit_date.date()

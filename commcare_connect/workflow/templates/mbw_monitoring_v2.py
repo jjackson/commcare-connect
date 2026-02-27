@@ -345,8 +345,8 @@ def _build_v2_render_code() -> str:
     // Helper: check if all 3 pipelines have data
     var pipelinesReady = pipelines
         && pipelines.visits && pipelines.visits.rows && pipelines.visits.rows.length > 0
-        && pipelines.registrations && pipelines.registrations.rows && pipelines.registrations.rows.length > 0
-        && pipelines.gs_forms && pipelines.gs_forms.rows && pipelines.gs_forms.rows.length > 0;
+        && pipelines.registrations && pipelines.registrations.rows
+        && pipelines.gs_forms && pipelines.gs_forms.rows;
 
     var pipelinesPartial = pipelines && (
         (pipelines.visits && pipelines.visits.rows && pipelines.visits.rows.length > 0)
@@ -647,14 +647,14 @@ def _build_v2_render_code() -> str:
                             <span className="text-xs text-gray-500 ml-auto">{visitCount > 0 ? visitCount + ' rows' : 'Loading...'}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <i className={'fa-solid ' + (regCount > 0 ? 'fa-circle-check text-green-500' : 'fa-spinner fa-spin text-blue-500')}></i>
+                            <i className={'fa-solid ' + (regCount > 0 ? 'fa-circle-check text-green-500' : (pipelines && pipelines.registrations && pipelines.registrations.rows ? 'fa-circle-check text-amber-500' : 'fa-spinner fa-spin text-blue-500'))}></i>
                             <span className="text-sm text-gray-700">Registration Forms</span>
-                            <span className="text-xs text-gray-500 ml-auto">{regCount > 0 ? regCount + ' rows' : 'Loading...'}</span>
+                            <span className="text-xs text-gray-500 ml-auto">{regCount > 0 ? regCount + ' rows' : (pipelines && pipelines.registrations && pipelines.registrations.rows ? '0 rows (none found)' : 'Loading...')}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <i className={'fa-solid ' + (gsCount > 0 ? 'fa-circle-check text-green-500' : 'fa-spinner fa-spin text-blue-500')}></i>
+                            <i className={'fa-solid ' + (gsCount > 0 ? 'fa-circle-check text-green-500' : (pipelines && pipelines.gs_forms && pipelines.gs_forms.rows ? 'fa-circle-check text-amber-500' : 'fa-spinner fa-spin text-blue-500'))}></i>
                             <span className="text-sm text-gray-700">Gold Standard Forms</span>
-                            <span className="text-xs text-gray-500 ml-auto">{gsCount > 0 ? gsCount + ' rows' : 'Loading...'}</span>
+                            <span className="text-xs text-gray-500 ml-auto">{gsCount > 0 ? gsCount + ' rows' : (pipelines && pipelines.gs_forms && pipelines.gs_forms.rows ? '0 rows (none found)' : 'Loading...')}</span>
                         </div>
                     </div>
                 </div>
@@ -698,7 +698,7 @@ def _build_v2_render_code() -> str:
                             <div>
                                 <span className="font-medium text-green-800">All pipelines loaded</span>
                                 <p className="text-sm text-green-600 mt-1">
-                                    {visitCount} visits, {regCount} registrations, {gsCount} GS forms ready for analysis.
+                                    {visitCount} visits, {regCount} registrations, {gsCount} GS forms loaded.
                                 </p>
                             </div>
                             <button onClick={runAnalysis}
