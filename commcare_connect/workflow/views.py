@@ -206,18 +206,22 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 from django.shortcuts import redirect
 
                 data_access = WorkflowDataAccess(request=request)
-                today = datetime.now().date()
-                week_start = today - timedelta(days=today.weekday())
-                week_end = week_start + timedelta(days=6)
-                run = data_access.create_run(
-                    definition_id=definition_id,
-                    opportunity_id=opportunity_id,
-                    period_start=week_start.isoformat(),
-                    period_end=week_end.isoformat(),
-                    initial_state={"worker_states": {}},
-                )
-                data_access.close()
-                return redirect(f"{request.path}?run_id={run.id}")
+                try:
+                    today = datetime.now().date()
+                    week_start = today - timedelta(days=today.weekday())
+                    week_end = week_start + timedelta(days=6)
+                    run = data_access.create_run(
+                        definition_id=definition_id,
+                        opportunity_id=opportunity_id,
+                        period_start=week_start.isoformat(),
+                        period_end=week_end.isoformat(),
+                        initial_state={"worker_states": {}},
+                    )
+                finally:
+                    data_access.close()
+                params = request.GET.copy()
+                params["run_id"] = str(run.id)
+                return redirect(f"{request.path}?{params.urlencode()}")
 
         return super().get(request, *args, **kwargs)
 

@@ -5,6 +5,7 @@ Uses PostgreSQL tables for caching AND computation.
 All analysis is done via SQL queries, not Python/pandas.
 """
 
+import json
 import logging
 from collections.abc import Generator
 from datetime import date, datetime
@@ -51,6 +52,23 @@ def _model_to_visit_dict(row) -> dict:
         "date_created": row.date_created.isoformat() if row.date_created else None,
         "completed_work_id": row.completed_work_id,
         "images": row.images,
+    }
+
+
+def _build_visit_dict(row: dict) -> dict:
+    """Build a visit context dict from a raw SQL row for transform/extractor post-processing."""
+    form_json = row.get("form_json", {})
+    if isinstance(form_json, str):
+        form_json = json.loads(form_json) if form_json else {}
+    images = row.get("images", [])
+    if isinstance(images, str):
+        images = json.loads(images) if images else []
+    return {
+        "form_json": form_json,
+        "images": images,
+        "username": row.get("username"),
+        "visit_date": row.get("visit_date"),
+        "entity_name": row.get("entity_name"),
     }
 
 
@@ -445,25 +463,7 @@ class SQLBackend:
                     # If transform takes 'visit_data' param, it needs full context
                     if "visit_data" in params or len(params) == 0:
                         try:
-                            import json
-
-                            # Build full visit dict for transform
-                            # Note: form_json and images come back as JSON strings from SQL
-                            form_json = row.get("form_json", {})
-                            if isinstance(form_json, str):
-                                form_json = json.loads(form_json) if form_json else {}
-
-                            images = row.get("images", [])
-                            if isinstance(images, str):
-                                images = json.loads(images) if images else []
-
-                            visit_dict = {
-                                "form_json": form_json,
-                                "images": images,
-                                "username": row.get("username"),
-                                "visit_date": row.get("visit_date"),
-                                "entity_name": row.get("entity_name"),
-                            }
+                            visit_dict = _build_visit_dict(row)
                             computed[field.name] = field.transform(visit_dict)
                         except Exception as e:
                             logger.warning(f"Transform for {field.name} failed: {e}")
@@ -471,23 +471,7 @@ class SQLBackend:
 
                 elif field.extractor and callable(field.extractor):
                     try:
-                        import json
-
-                        form_json = row.get("form_json", {})
-                        if isinstance(form_json, str):
-                            form_json = json.loads(form_json) if form_json else {}
-
-                        images = row.get("images", [])
-                        if isinstance(images, str):
-                            images = json.loads(images) if images else []
-
-                        visit_dict = {
-                            "form_json": form_json,
-                            "images": images,
-                            "username": row.get("username"),
-                            "visit_date": row.get("visit_date"),
-                            "entity_name": row.get("entity_name"),
-                        }
+                        visit_dict = _build_visit_dict(row)
                         computed[field.name] = field.extractor(visit_dict)
                     except Exception as e:
                         logger.warning(f"Extractor for {field.name} failed: {e}")

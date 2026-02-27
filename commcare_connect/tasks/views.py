@@ -801,15 +801,21 @@ def task_initiate_ai(request, task_id):
         )
         ocs_client.close()
 
-        # Log the full response to discover its shape
-        logger.info(f"trigger_bot response for task {task_id}: {result}")
+        # Log minimal diagnostics (avoid leaking participant data)
+        logger.info(
+            "trigger_bot response for task %s: status=%s keys=%s",
+            task_id,
+            result.get("status") if isinstance(result, dict) else type(result).__name__,
+            list(result.keys()) if isinstance(result, dict) else None,
+        )
 
         # Extract session_id from trigger_bot response
         session_id = None
         status = "pending"
         if isinstance(result, dict):
+            session = result.get("session")
             session_id = (
-                result.get("session", {}).get("id")
+                (session.get("id") if isinstance(session, dict) else None)
                 or result.get("session_id")
                 or result.get("id")
             )

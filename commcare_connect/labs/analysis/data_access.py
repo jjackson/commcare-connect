@@ -52,13 +52,16 @@ def fetch_flw_names(
         try:
             cached = cache.get(cache_key)
             if cached is not None:
-                # Also populate last_active from cache if requested
+                # If last_active was requested, only use cache if la data is also cached
                 if last_active_out is not None:
                     la_cached = cache.get(f"flw_last_active_{opportunity_id}")
                     if la_cached:
                         last_active_out.update(la_cached)
-                logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
-                return cached
+                    else:
+                        cached = None  # Force fresh fetch to populate last_active
+                if cached is not None:
+                    logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
+                    return cached
         except Exception as e:
             logger.warning(f"Cache get failed for {cache_key}: {e}")
 
