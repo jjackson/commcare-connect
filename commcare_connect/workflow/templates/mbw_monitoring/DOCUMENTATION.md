@@ -491,7 +491,7 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 
 Used for: Visit form data, FLW names, opportunity metadata
 
-- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 12 fields per visit using FieldComputations (3 use `extractor`, 9 use `path`).
+- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 13 fields per visit using FieldComputations (1 uses `extractor` — `gps_location`, 12 use `path`).
 - **FLW names**: `fetch_flw_names()` from `labs/analysis/data_access.py`
 - **Opportunity metadata**: `GET /export/opportunity/{id}/` -> extracts `cc_domain` and `cc_app_id` from `deliver_app` or `learn_app`
 

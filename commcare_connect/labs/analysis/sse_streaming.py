@@ -125,7 +125,7 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                             break
                         except queue.Full:
                             continue
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 try:
                     data_queue.put(("error", e), timeout=1)
                 except queue.Full:
@@ -134,6 +134,10 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                 try:
                     data_queue.put(("done", None), timeout=1)
                 except queue.Full:
+                    pass
+                try:
+                    generator.close()
+                except (GeneratorExit, RuntimeError):
                     pass
 
         thread = threading.Thread(target=_producer, daemon=True)

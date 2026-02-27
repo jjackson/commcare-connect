@@ -201,13 +201,13 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
             labs_context = getattr(request, "labs_context", {})
             opportunity_id = labs_context.get("opportunity_id")
             if opportunity_id:
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
                 from django.shortcuts import redirect
 
                 data_access = WorkflowDataAccess(request=request)
                 try:
-                    today = datetime.now().date()
+                    today = datetime.now(timezone.utc).date()
                     week_start = today - timedelta(days=today.weekday())
                     week_end = week_start + timedelta(days=6)
                     run = data_access.create_run(
@@ -218,7 +218,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                         initial_state={"worker_states": {}},
                     )
                 except Exception as e:
-                    logger.exception(f"Failed to create run for opp {opportunity_id}: {e}")
+                    logger.exception("Failed to create run for opp %s", opportunity_id)
                     return super().get(request, *args, **kwargs)
                 finally:
                     data_access.close()
