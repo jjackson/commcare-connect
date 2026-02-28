@@ -94,9 +94,10 @@ class SQLCacheManager:
         ).exists()
 
     def get_raw_visit_count(self) -> int:
-        """Get count of cached raw visits."""
+        """Get count of cached raw visits (excludes in-progress sentinel rows)."""
         return RawVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
+            visit_count__gt=0,
             expires_at__gt=timezone.now(),
         ).count()
 
@@ -167,10 +168,11 @@ class SQLCacheManager:
         # Unique negative sentinel per writer — prevents finalize cross-contamination
         self._pending_visit_count = -random.randint(1, 2**31 - 1)
         self._pending_expires_at = self._get_expires_at()
-        RawVisitCache.objects.filter(opportunity_id=self.opportunity_id).delete()
+        # Don't delete here — old rows remain visible to readers until finalize().
+        # This prevents Writer B's start() from wiping Writer A's in-progress batches.
         logger.info(
-            f"[SQLCache] Cleared raw cache for opp {self.opportunity_id}, "
-            f"preparing for ~{visit_count} visits"
+            f"[SQLCache] Preparing raw cache for opp {self.opportunity_id}, "
+            f"~{visit_count} visits (sentinel={self._pending_visit_count})"
         )
 
     def store_raw_visits_batch(self, visit_dicts: list[dict]) -> int:
@@ -217,23 +219,33 @@ class SQLCacheManager:
         """
         Atomically make batched rows visible by setting the real visit_count.
 
-        Must be called after all store_raw_visits_batch() calls. Updates only
-        THIS writer's sentinel rows to the actual parsed count, making them
-        visible to has_valid_raw_cache() in a single atomic UPDATE.
+        Must be called after all store_raw_visits_batch() calls. In a single
+        transaction: removes any other writer's rows (old finalized or other
+        in-progress sentinel), then promotes THIS writer's sentinel rows to
+        the actual parsed count — making them visible to has_valid_raw_cache().
         """
-        updated = RawVisitCache.objects.filter(
-            opportunity_id=self.opportunity_id,
-            visit_count=self._pending_visit_count,
-        ).update(visit_count=actual_count)
+        with transaction.atomic():
+            # Remove rows that don't belong to this writer (old cache + other writers)
+            RawVisitCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+            ).exclude(
+                visit_count=self._pending_visit_count,
+            ).delete()
+            # Make this writer's rows visible
+            updated = RawVisitCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+                visit_count=self._pending_visit_count,
+            ).update(visit_count=actual_count)
         logger.info(
             f"[SQLCache] Finalized {updated} raw visits for opp {self.opportunity_id} "
             f"(visit_count={actual_count})"
         )
 
     def get_raw_visits_queryset(self):
-        """Get queryset of cached raw visits."""
+        """Get queryset of cached raw visits (excludes in-progress sentinel rows)."""
         return RawVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
+            visit_count__gt=0,
             expires_at__gt=timezone.now(),
         )
 

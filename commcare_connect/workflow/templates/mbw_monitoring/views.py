@@ -292,7 +292,14 @@ def _ensure_cchq_oauth(request, timeout=300):
     Yields SSE events only if user intervention is needed. After returning, the
     caller should re-check ``request.session.get("commcare_oauth")`` to see
     whether re-auth succeeded or timed out.
+
+    Only waits once per request — if a previous call already timed out, subsequent
+    calls return immediately to avoid compounding stalls.
     """
+    # Short-circuit if a previous call in this request already timed out
+    if getattr(request, "_cchq_oauth_unavailable", False):
+        return
+
     import time
     from importlib import import_module
 
@@ -350,7 +357,8 @@ def _ensure_cchq_oauth(request, timeout=300):
             yield send_sse_event("CommCare re-authorized! Resuming data load...")
             return
 
-    # Timeout — continue with partial data
+    # Timeout — mark so subsequent calls in this request skip the wait
+    request._cchq_oauth_unavailable = True
     logger.warning("[MBW Dashboard] CCHQ re-auth timeout after %ds", timeout)
     yield send_sse_event(
         "Authorization timeout \u2014 continuing without CommCare HQ data. "

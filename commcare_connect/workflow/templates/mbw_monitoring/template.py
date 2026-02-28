@@ -295,6 +295,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
             .then(function(r) { return r.json(); })
             .then(function(status) {
+                if (cancelled) return;
                 var expired = [];
                 if (!status.connect?.active) expired.push('connect');
                 if (!status.commcare?.active) expired.push('commcare');
@@ -309,6 +310,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 startSSEStream(bustCache);
             })
             .catch(function() {
+                if (cancelled) return;
                 // Network error checking OAuth — proceed anyway, SSE will fail with its own error
                 startSSEStream(bustCache);
             });
@@ -1032,7 +1034,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     </div>
                 </div>
                 {sseAuthRequired && (
-                    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    <div role="dialog" aria-modal="true" tabIndex="-1"
+                         onKeyDown={function(e) { if (e.key === 'Escape') setSseAuthRequired(null); }}
+                         style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
                         <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
                             <div className="flex items-center gap-2 text-amber-800 mb-3">
                                 <i className="fa-solid fa-link-slash text-lg"></i>
