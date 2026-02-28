@@ -850,14 +850,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # Each section is JSON-serialized independently; the frontend accumulates
             # them in sseSectionsRef and merges on the final "Complete!" event.
 
-            # Section 1: GPS data (small — send first, free early)
-            yield send_sse_event("Sending data...")
-            yield send_sse_event(
-                "data_section", {"section": "gps", "gps_data": gps_data}
-            )
-            del gps_data
-
-            # Save snapshot before freeing followup_data (best-effort)
+            # Save snapshot first (needs all data still in memory)
             if session_id and monitoring_session:
                 yield send_sse_event("Saving snapshot...")
                 slim_followup = {**followup_data} if followup_data else {}
@@ -877,6 +870,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     slim_followup["flw_drilldown"] = slim_drilldown
 
                 snapshot_payload = {
+                    "gps_data": gps_data,
                     "followup_data": slim_followup,
                     "overview_data": overview_data,
                     "active_usernames": sorted(active_usernames),
@@ -891,6 +885,13 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 except Exception as e:
                     logger.warning(f"[MBW Dashboard] Snapshot save failed: {e}")
                 del slim_followup, snapshot_payload
+
+            # Section 1: GPS data (small — send first, free early)
+            yield send_sse_event("Sending data...")
+            yield send_sse_event(
+                "data_section", {"section": "gps", "gps_data": gps_data}
+            )
+            del gps_data
 
             # Section 2: Follow-up data (largest — flw_drilldown has per-visit details)
             yield send_sse_event(
