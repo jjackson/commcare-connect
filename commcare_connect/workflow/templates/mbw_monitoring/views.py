@@ -5,6 +5,7 @@ Three-tab dashboard (Overview, GPS Analysis, Follow-Up Rate) with SSE data loadi
 client-side filtering, and interactive features.
 """
 
+import gc
 import json
 import logging
 from collections import Counter
@@ -562,6 +563,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 )
 
             gps_result = analyze_gps_metrics(visits_for_gps, flw_names)
+            del visits_for_gps  # Free GPS visit dicts (~1-2 MB)
 
             # Filter GPS by date range
             filtered_gps_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
@@ -581,6 +583,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             }
             for summary_dict in gps_data["flw_summaries"]:
                 summary_dict["visits"] = visits_by_flw.get(summary_dict["username"], [])
+            del filtered_gps_visits, visits_by_flw  # Free AnalyzedVisit refs + grouping dict
 
             # Step 4: Fetch registration forms from CCHQ
             yield send_sse_event("Fetching registration data...")
@@ -706,6 +709,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 list(gs_scores_by_flw.keys())[:3],
                 list(active_usernames)[:3],
             )
+            del gs_forms, gs_scores_by_flw  # Free raw GS form dicts
 
             # Compute quality/fraud overview metrics
             quality_metrics = compute_overview_quality_metrics(
@@ -721,9 +725,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 all_pipeline_rows, active_usernames, registration_forms=registration_forms
             )
 
-            # Free pipeline rows — no longer needed after this point.
-            # For 50K visits, this frees ~10 MB of VisitRow objects.
+            # Free pipeline rows and registration forms — no longer needed.
             del all_pipeline_rows
+            del registration_forms  # Free ~24k raw CCHQ form dicts (biggest win)
             if pipeline_result:
                 pipeline_result.rows = []
 
@@ -736,6 +740,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # Compute median meters/visit and minutes/visit from GPS visits
             meters_per_visit_by_flw = compute_median_meters_per_visit(gps_result.visits)
             minutes_per_visit_by_flw = compute_median_minutes_per_visit(gps_result.visits)
+            del gps_result  # Free GPSAnalysisResult with ~60k VisitWithGPS objects
 
             # Build completed visits and followup rate from follow-up data
             completed_by_flw = {}
@@ -753,6 +758,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     if mother_metadata.get(mid, {}).get("properties", {}).get("eligible_full_intervention_bonus") == "1"
                 )
                 eligible_mothers_by_flw[flw_username] = eligible_count
+            del mother_metadata  # Free ~15k mother metadata dicts
 
             # Compute "cases still eligible" per FLW from drill-down data
             # Among eligible mothers, count those still on track (5+ completed OR <= 1 missed)
@@ -775,6 +781,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "total": total_eligible,
                     "pct": round(still_on_track / total_eligible * 100) if total_eligible > 0 else 0,
                 }
+            del visit_cases_by_flw  # Free grouped visit cases
 
             overview_flws = []
             now_utc = datetime.now(dt_timezone.utc)
@@ -812,6 +819,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "flw_summaries": overview_flws,
                 "visit_status_distribution": visit_status_distribution,
             }
+
+            # Force garbage collection to reclaim memory from freed structures
+            # (registration_forms, gps_result, mother_metadata, visit_cases_by_flw, etc.)
+            gc.collect()
 
             # Step 7: FLW Performance by assessment status
             yield send_sse_event("Computing FLW performance metrics...")
