@@ -822,6 +822,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # Fetch open tasks so the frontend can grey out the Task button and
             # provide inline task management (task_id needed for detail/update APIs)
+            yield send_sse_event("Fetching tasks...")
             open_tasks = {}
             task_data_access = None
             try:
@@ -844,37 +845,14 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     task_data_access.close()
             open_task_usernames = sorted(open_tasks.keys())
 
-            # Build combined response
-            response_data = {
-                "success": True,
-                "opportunity_id": opportunity_id,
-                "opportunity_name": labs_context.get("opportunity_name", ""),
-                "from_cache": from_cache,
-                "dev_fixture": getattr(settings, "MBW_DEV_FIXTURE", False),
-                "gps_data": gps_data,
-                "followup_data": followup_data,
-                "overview_data": overview_data,
-                "active_usernames": sorted(active_usernames),
-                "flw_names": flw_names,
-                "open_tasks": open_tasks,
-                "open_task_usernames": open_task_usernames,
-                "performance_data": performance_data,
-            }
+            # ---- Sectioned SSE streaming ----
+            # Send data in sections to avoid serializing the full payload at once.
+            # Each section is JSON-serialized independently; the frontend accumulates
+            # them in sseSectionsRef and merges on the final "Complete!" event.
 
-            # Include monitoring session data if active
-            if monitoring_session:
-                response_data["monitoring_session"] = {
-                    "id": monitoring_session.id,
-                    "title": monitoring_session.title,
-                    "status": monitoring_session.status,
-                    "flw_results": monitoring_session.flw_results,
-                    "progress": monitoring_session.get_monitoring_progress_stats(),
-                    "selected_flw_usernames": monitoring_session.selected_flw_usernames,
-                }
-
-            # Save dashboard snapshot to run record (best-effort)
+            # Save snapshot first (needs all data still in memory)
             if session_id and monitoring_session:
-                # Strip case_id from visit objects to reduce size
+                yield send_sse_event("Saving snapshot...")
                 slim_followup = {**followup_data} if followup_data else {}
                 if "flw_drilldown" in slim_followup:
                     slim_drilldown = {}
@@ -906,8 +884,55 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     logger.info(f"[MBW Dashboard] Saved snapshot for run {session_id}")
                 except Exception as e:
                     logger.warning(f"[MBW Dashboard] Snapshot save failed: {e}")
+                del slim_followup, snapshot_payload
 
-            yield send_sse_event("Complete!", response_data)
+            # Section 1: GPS data (small — send first, free early)
+            yield send_sse_event("Sending data...")
+            yield send_sse_event(
+                "data_section", {"section": "gps", "gps_data": gps_data}
+            )
+            del gps_data
+
+            # Section 2: Follow-up data (largest — flw_drilldown has per-visit details)
+            yield send_sse_event(
+                "data_section", {"section": "followup", "followup_data": followup_data}
+            )
+            del followup_data
+
+            # Section 3: Overview + performance + lists
+            yield send_sse_event(
+                "data_section",
+                {
+                    "section": "overview",
+                    "overview_data": overview_data,
+                    "performance_data": performance_data,
+                    "active_usernames": sorted(active_usernames),
+                    "flw_names": flw_names,
+                    "open_tasks": open_tasks,
+                    "open_task_usernames": open_task_usernames,
+                },
+            )
+            del overview_data, performance_data
+
+            # Final: small metadata only — frontend merges with accumulated sections
+            complete_meta = {
+                "success": True,
+                "opportunity_id": opportunity_id,
+                "opportunity_name": labs_context.get("opportunity_name", ""),
+                "from_cache": from_cache,
+                "dev_fixture": getattr(settings, "MBW_DEV_FIXTURE", False),
+            }
+            if monitoring_session:
+                complete_meta["monitoring_session"] = {
+                    "id": monitoring_session.id,
+                    "title": monitoring_session.title,
+                    "status": monitoring_session.status,
+                    "flw_results": monitoring_session.flw_results,
+                    "progress": monitoring_session.get_monitoring_progress_stats(),
+                    "selected_flw_usernames": monitoring_session.selected_flw_usernames,
+                }
+
+            yield send_sse_event("Complete!", complete_meta)
 
         except Exception as e:
             logger.error(f"[MBW Dashboard] Stream failed: {e}", exc_info=True)
