@@ -491,7 +491,7 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 
 Used for: Visit form data, FLW names, opportunity metadata
 
-- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 13 fields per visit using FieldComputations (1 uses `extractor` — `gps_location`, 12 use `path`).
+- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 13 fields per visit using FieldComputations (all path-based; `gps_location` uses a two-path COALESCE for dict/string handling).
 - **FLW names**: `fetch_flw_names()` from `labs/analysis/data_access.py`
 - **Opportunity metadata**: `GET /export/opportunity/{id}/` -> extracts `cc_domain` and `cc_app_id` from `deliver_app` or `learn_app`
 
@@ -569,7 +569,7 @@ The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 13 FieldComputatio
 | `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | Integer; SQL: regex-guarded `::INTEGER` cast |
 | `bf_status` | paths | `form.feeding_history.{pnc,oneweek,onemonth,threemonth,sixmonth}_current_bf_status` | Multi-choice, space-separated; "ebf" = exclusive breastfeeding. From postnatal forms only (not ANC). |
 
-**Important**: `gps_location` uses the `extractor` parameter because CommCare's XML-to-JSON conversion produces either a dict (`{"#text": "lat lon alt acc", ...}`) or a plain string for `form.meta.location` — a simple path can't handle both. The SQL backend supports extractors via post-processing (adds `NULL` placeholder in SQL, calls extractor in Python after query). `visit_datetime` and `app_build_version` were converted from extractors to path-based extraction for SQL efficiency.
+**Important**: `gps_location` uses a two-path COALESCE (`form.meta.location.#text`, `form.meta.location`) because CommCare's XML-to-JSON conversion produces either a dict (`{"#text": "lat lon alt acc", ...}`) or a plain string for `form.meta.location`. The COALESCE extracts `#text` from the dict case, falling back to the string case — all in SQL, no Python post-processing. All 13 fields are now path-based; no extractors remain.
 
 ---
 
@@ -1153,7 +1153,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 
 | Field | Mode | Source | Notes |
 |-------|------|--------|-------|
-| `gps_location` | extractor | `form_json.form.meta.location` (dict or string) | SQL: NULL placeholder + Python post-processing |
+| `gps_location` | paths | `form.meta.location.#text`, `form.meta.location` | COALESCE: dict `#text` key or string fallback |
 | `visit_datetime` | path | `form.meta.timeEnd` | Direct JSONB extraction |
 | `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | SQL: regex-guarded `::INTEGER` cast |
 
