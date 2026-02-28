@@ -661,6 +661,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 all_pipeline_rows, active_usernames, registration_forms=registration_forms
             )
 
+            # Free pipeline rows — no longer needed after this point.
+            # For 50K visits, this frees ~10 MB of VisitRow objects.
+            del all_pipeline_rows
+            if pipeline_result:
+                pipeline_result.rows = []
+
             # Build GPS median distances per FLW (revisit distance)
             gps_median_by_flw = {}
             for flw in gps_result.flw_summaries:

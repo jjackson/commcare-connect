@@ -149,6 +149,58 @@ class SQLCacheManager:
 
         logger.info(f"[SQLCache] Stored {len(rows)} raw visits for opp {self.opportunity_id}")
 
+    def store_raw_visits_start(self, visit_count: int):
+        """
+        Delete existing raw cache and prepare for batched inserts.
+
+        Must be called before store_raw_visits_batch(). Stores metadata
+        (visit_count, expires_at) for subsequent batch inserts.
+        """
+        self._pending_visit_count = visit_count
+        self._pending_expires_at = self._get_expires_at()
+        RawVisitCache.objects.filter(opportunity_id=self.opportunity_id).delete()
+        logger.info(f"[SQLCache] Cleared raw cache for opp {self.opportunity_id}, preparing for {visit_count} visits")
+
+    def store_raw_visits_batch(self, visit_dicts: list[dict]) -> int:
+        """
+        Insert a batch of raw visits. Call store_raw_visits_start() first.
+
+        Returns:
+            Number of rows inserted
+        """
+        rows = []
+        for v in visit_dicts:
+            rows.append(
+                RawVisitCache(
+                    opportunity_id=self.opportunity_id,
+                    visit_count=self._pending_visit_count,
+                    expires_at=self._pending_expires_at,
+                    visit_id=v.get("id", 0),
+                    username=v.get("username") or "",
+                    deliver_unit=v.get("deliver_unit") or "",
+                    deliver_unit_id=v.get("deliver_unit_id"),
+                    entity_id=v.get("entity_id") or "",
+                    entity_name=v.get("entity_name") or "",
+                    visit_date=_parse_date(v.get("visit_date")),
+                    status=v.get("status") or "",
+                    reason=v.get("reason") or "",
+                    location=v.get("location") or "",
+                    flagged=v.get("flagged") or False,
+                    flag_reason=v.get("flag_reason") or {},
+                    form_json=v.get("form_json") or {},
+                    completed_work=v.get("completed_work") or {},
+                    status_modified_date=_parse_datetime(v.get("status_modified_date")),
+                    review_status=v.get("review_status") or "",
+                    review_created_on=_parse_datetime(v.get("review_created_on")),
+                    justification=v.get("justification") or "",
+                    date_created=_parse_datetime(v.get("date_created")),
+                    completed_work_id=v.get("completed_work_id"),
+                    images=v.get("images") or [],
+                )
+            )
+        RawVisitCache.objects.bulk_create(rows, batch_size=1000)
+        return len(rows)
+
     def get_raw_visits_queryset(self):
         """Get queryset of cached raw visits."""
         return RawVisitCache.objects.filter(

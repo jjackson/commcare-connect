@@ -367,6 +367,7 @@ class AnalysisPipeline:
                         logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                         visit_dicts = None
+                        raw_data_already_stored = False
                         if unfiltered_config.data_source.type == "cchq_forms":
                             from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
                                 fetch_cchq_forms_as_visit_dicts,
@@ -393,6 +394,7 @@ class AnalysisPipeline:
                                 event_type = event[0]
                                 if event_type == "cached":
                                     visit_dicts = event[1]
+                                    raw_data_already_stored = True
                                     logger.info(
                                         f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
                                     )
@@ -411,6 +413,7 @@ class AnalysisPipeline:
                                     yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
                                 elif event_type == "complete":
                                     visit_dicts = event[1]
+                                    raw_data_already_stored = True
                                     logger.info(
                                         f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
                                     )
@@ -426,7 +429,11 @@ class AnalysisPipeline:
                             "with unfiltered config"
                         )
 
-                        self.backend.process_and_cache(self.request, unfiltered_config, opp_id, visit_dicts)
+                        self.backend.process_and_cache(
+                            self.request, unfiltered_config, opp_id, visit_dicts,
+                            skip_raw_store=raw_data_already_stored,
+                        )
+                        del visit_dicts
 
                         # Now read from cache with ORIGINAL FILTERED config
                         logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
@@ -472,6 +479,7 @@ class AnalysisPipeline:
                     logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
                     visit_dicts = None
+                    raw_data_already_stored = False
                     if unfiltered_config.data_source.type == "cchq_forms":
                         from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
                             fetch_cchq_forms_as_visit_dicts,
@@ -497,6 +505,7 @@ class AnalysisPipeline:
                             event_type = event[0]
                             if event_type == "cached":
                                 visit_dicts = event[1]
+                                raw_data_already_stored = True
                                 logger.info(
                                     f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
                                 )
@@ -515,6 +524,7 @@ class AnalysisPipeline:
                                 yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
                             elif event_type == "complete":
                                 visit_dicts = event[1]
+                                raw_data_already_stored = True
                                 logger.info(
                                     f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
                                 )
@@ -529,7 +539,11 @@ class AnalysisPipeline:
                         f"[Pipeline/{self.backend_name}] Processing {len(visit_dicts)} visits with unfiltered config"
                     )
 
-                    self.backend.process_and_cache(self.request, unfiltered_config, opp_id, visit_dicts)
+                    self.backend.process_and_cache(
+                        self.request, unfiltered_config, opp_id, visit_dicts,
+                        skip_raw_store=raw_data_already_stored,
+                    )
+                    del visit_dicts
 
                     # Read back with filters
                     logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
@@ -585,6 +599,7 @@ class AnalysisPipeline:
             logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
             visit_dicts = None
+            raw_data_already_stored = False
             for event in self.backend.stream_raw_visits(
                 opportunity_id=opp_id,
                 access_token=self.access_token,
@@ -595,6 +610,7 @@ class AnalysisPipeline:
                 event_type = event[0]
                 if event_type == "cached":
                     visit_dicts = event[1]
+                    raw_data_already_stored = True
                     logger.info(f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits")
                     yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
                 elif event_type == "progress":
@@ -608,6 +624,7 @@ class AnalysisPipeline:
                     yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
                 elif event_type == "complete":
                     visit_dicts = event[1]
+                    raw_data_already_stored = True
                     logger.info(f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits")
                     yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
 
@@ -618,7 +635,11 @@ class AnalysisPipeline:
             yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})
             logger.info(f"[Pipeline/{self.backend_name}] Processing {len(visit_dicts)} visits")
 
-            result = self.backend.process_and_cache(self.request, config, opp_id, visit_dicts)
+            result = self.backend.process_and_cache(
+                self.request, config, opp_id, visit_dicts,
+                skip_raw_store=raw_data_already_stored,
+            )
+            del visit_dicts
 
             yield (EVENT_STATUS, {"message": "Complete!"})
             logger.info(f"[Pipeline/{self.backend_name}] Complete: {len(result.rows)} rows")
