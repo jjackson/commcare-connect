@@ -277,6 +277,59 @@ class AnalysisPipeline:
 
         raise RuntimeError("Analysis pipeline completed without returning a result")
 
+    def _consume_raw_visits_stream(
+        self, opp_id: int, force_refresh: bool = False, tolerance_pct: int = 100
+    ) -> Generator[tuple[str, Any], None, None]:
+        """
+        Consume stream_raw_visits events and yield SSE pipeline events.
+
+        Translates backend events (cached/progress/parsing/complete) into
+        pipeline events (EVENT_STATUS/EVENT_DOWNLOAD). After iteration,
+        self._visit_dicts and self._raw_data_already_stored are set.
+
+        Usage:
+            yield from self._consume_raw_visits_stream(opp_id, ...)
+            visit_dicts = self._visit_dicts
+            raw_data_already_stored = self._raw_data_already_stored
+        """
+        self._visit_dicts = None
+        self._raw_data_already_stored = False
+
+        for event in self.backend.stream_raw_visits(
+            opportunity_id=opp_id,
+            access_token=self.access_token,
+            expected_visit_count=self.visit_count,
+            force_refresh=force_refresh,
+            tolerance_pct=tolerance_pct,
+        ):
+            event_type = event[0]
+            if event_type == "cached":
+                self._visit_dicts = event[1]
+                self._raw_data_already_stored = True
+                logger.info(
+                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(self._visit_dicts)} visits"
+                )
+                yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(self._visit_dicts)} visits)..."})
+            elif event_type == "progress":
+                _, bytes_downloaded, total_bytes = event
+                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
+            elif event_type == "parsing":
+                csv_size = event[1]
+                raw_lines = event[2] if len(event) > 2 else None
+                size_mb = csv_size / (1024 * 1024)
+                lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
+                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
+            elif event_type == "complete":
+                self._visit_dicts = event[1]
+                self._raw_data_already_stored = True
+                logger.info(
+                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(self._visit_dicts)} visits"
+                )
+                yield (EVENT_STATUS, {"message": f"Downloaded {len(self._visit_dicts)} visits"})
+
+        if self._visit_dicts is None:
+            raise RuntimeError("No data received from API")
+
     def stream_analysis(
         self,
         config: AnalysisPipelineConfig,
@@ -366,8 +419,6 @@ class AnalysisPipeline:
                         yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
                         logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
-                        visit_dicts = None
-                        raw_data_already_stored = False
                         if unfiltered_config.data_source.type == "cchq_forms":
                             from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
                                 fetch_cchq_forms_as_visit_dicts,
@@ -383,41 +434,13 @@ class AnalysisPipeline:
                                 access_token=self.access_token,
                                 opportunity_id=opp_id,
                             )
+                            raw_data_already_stored = False
                         else:
-                            for event in self.backend.stream_raw_visits(
-                                opportunity_id=opp_id,
-                                access_token=self.access_token,
-                                expected_visit_count=self.visit_count,
-                                force_refresh=force_refresh,
-                                tolerance_pct=tolerance,
-                            ):
-                                event_type = event[0]
-                                if event_type == "cached":
-                                    visit_dicts = event[1]
-                                    raw_data_already_stored = True
-                                    logger.info(
-                                        f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                                    )
-                                    yield (
-                                        EVENT_STATUS,
-                                        {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
-                                    )
-                                elif event_type == "progress":
-                                    _, bytes_downloaded, total_bytes = event
-                                    yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                                elif event_type == "parsing":
-                                    csv_size = event[1]
-                                    raw_lines = event[2] if len(event) > 2 else None
-                                    size_mb = csv_size / (1024 * 1024)
-                                    lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
-                                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
-                                elif event_type == "complete":
-                                    visit_dicts = event[1]
-                                    raw_data_already_stored = True
-                                    logger.info(
-                                        f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                                    )
-                                    yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                            yield from self._consume_raw_visits_stream(
+                                opp_id, force_refresh=force_refresh, tolerance_pct=tolerance,
+                            )
+                            visit_dicts = self._visit_dicts
+                            raw_data_already_stored = self._raw_data_already_stored
 
                         if visit_dicts is None:
                             raise RuntimeError("No data received from API")
@@ -478,8 +501,6 @@ class AnalysisPipeline:
                     yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
                     logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
-                    visit_dicts = None
-                    raw_data_already_stored = False
                     if unfiltered_config.data_source.type == "cchq_forms":
                         from commcare_connect.labs.analysis.backends.sql.cchq_fetcher import (
                             fetch_cchq_forms_as_visit_dicts,
@@ -495,40 +516,13 @@ class AnalysisPipeline:
                             access_token=self.access_token,
                             opportunity_id=opp_id,
                         )
+                        raw_data_already_stored = False
                     else:
-                        for event in self.backend.stream_raw_visits(
-                            opportunity_id=opp_id,
-                            access_token=self.access_token,
-                            expected_visit_count=self.visit_count,
-                            force_refresh=True,  # Force refresh from API
-                        ):
-                            event_type = event[0]
-                            if event_type == "cached":
-                                visit_dicts = event[1]
-                                raw_data_already_stored = True
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits"
-                                )
-                                yield (
-                                    EVENT_STATUS,
-                                    {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."},
-                                )
-                            elif event_type == "progress":
-                                _, bytes_downloaded, total_bytes = event
-                                yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                            elif event_type == "parsing":
-                                csv_size = event[1]
-                                raw_lines = event[2] if len(event) > 2 else None
-                                size_mb = csv_size / (1024 * 1024)
-                                lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
-                                yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
-                            elif event_type == "complete":
-                                visit_dicts = event[1]
-                                raw_data_already_stored = True
-                                logger.info(
-                                    f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits"
-                                )
-                                yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
+                        yield from self._consume_raw_visits_stream(
+                            opp_id, force_refresh=True,
+                        )
+                        visit_dicts = self._visit_dicts
+                        raw_data_already_stored = self._raw_data_already_stored
 
                     if visit_dicts is None:
                         raise RuntimeError("No data received from API")
@@ -598,38 +592,11 @@ class AnalysisPipeline:
             yield (EVENT_STATUS, {"message": "Connecting to Connect API..."})
             logger.info(f"[Pipeline/{self.backend_name}] Downloading visit data for opp {opp_id}...")
 
-            visit_dicts = None
-            raw_data_already_stored = False
-            for event in self.backend.stream_raw_visits(
-                opportunity_id=opp_id,
-                access_token=self.access_token,
-                expected_visit_count=self.visit_count,
-                force_refresh=force_refresh,
-                tolerance_pct=tolerance,
-            ):
-                event_type = event[0]
-                if event_type == "cached":
-                    visit_dicts = event[1]
-                    raw_data_already_stored = True
-                    logger.info(f"[Pipeline/{self.backend_name}] Raw data CACHE HIT: {len(visit_dicts)} visits")
-                    yield (EVENT_STATUS, {"message": f"Using cached raw data ({len(visit_dicts)} visits)..."})
-                elif event_type == "progress":
-                    _, bytes_downloaded, total_bytes = event
-                    yield (EVENT_DOWNLOAD, {"bytes": bytes_downloaded, "total": total_bytes})
-                elif event_type == "parsing":
-                    csv_size = event[1]
-                    raw_lines = event[2] if len(event) > 2 else None
-                    size_mb = csv_size / (1024 * 1024)
-                    lines_msg = f" ({raw_lines} raw lines)" if raw_lines else ""
-                    yield (EVENT_STATUS, {"message": f"Parsing {size_mb:.1f} MB of data{lines_msg}..."})
-                elif event_type == "complete":
-                    visit_dicts = event[1]
-                    raw_data_already_stored = True
-                    logger.info(f"[Pipeline/{self.backend_name}] Downloaded and parsed {len(visit_dicts)} visits")
-                    yield (EVENT_STATUS, {"message": f"Downloaded {len(visit_dicts)} visits"})
-
-            if visit_dicts is None:
-                raise RuntimeError("No data received from API")
+            yield from self._consume_raw_visits_stream(
+                opp_id, force_refresh=force_refresh, tolerance_pct=tolerance,
+            )
+            visit_dicts = self._visit_dicts
+            raw_data_already_stored = self._raw_data_already_stored
 
             # Process with backend
             yield (EVENT_STATUS, {"message": f"Processing {len(visit_dicts)} visits..."})

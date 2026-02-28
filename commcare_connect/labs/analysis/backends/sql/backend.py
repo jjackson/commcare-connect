@@ -230,15 +230,9 @@ class SQLBackend:
             yield ("parsing", csv_size, raw_line_count)
 
             # Parse and store in streaming batches (memory-efficient)
-            visit_count, slim_dicts = self._parse_and_store_streaming(
+            _, slim_dicts = self._parse_and_store_streaming(
                 csv_tmpfile, opportunity_id, raw_line_count
             )
-
-            if visit_count != raw_line_count - 1:  # -1 for header
-                logger.warning(
-                    f"[SQL] CSV parsing dropped rows: {raw_line_count - 1} raw data lines "
-                    f"but only {visit_count} parsed. Delta: {raw_line_count - 1 - visit_count} lost"
-                )
 
             yield ("complete", slim_dicts)
 
@@ -280,6 +274,9 @@ class SQLBackend:
             for v in batch:
                 v["form_json"] = {}
             slim_dicts.extend(batch)
+
+        # Atomically make rows visible with accurate count
+        cache_manager.store_raw_visits_finalize(actual_count)
 
         logger.info(f"[SQL] Streamed {actual_count} visits to DB, keeping {len(slim_dicts)} slim dicts")
         return actual_count, slim_dicts

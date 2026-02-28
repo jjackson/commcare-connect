@@ -175,6 +175,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // =========================================================================
     React.useEffect(function() {
         if (!instance.opportunity_id) return;
+        // Skip FLW history fetch when reopening a saved run — dashboard loads from snapshot
+        var existingWorkers = instance.state?.selected_workers || instance.state?.selected_flws || [];
+        if (existingWorkers.length > 0) return;
         setHistoryLoading(true);
         fetch('/custom_analysis/mbw_monitoring/api/opportunity-flws/', {
             method: 'POST',
@@ -203,6 +206,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         var flws = instance.state?.selected_workers || instance.state?.selected_flws || [];
         if (flws.length === 0) return;
 
+        var cancelled = false;  // Guard against stale async callbacks (React StrictMode double-mount)
+
         setSseComplete(false);
         setSseError(null);
         setSseAuthorizeUrl(null);
@@ -211,6 +216,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setSnapshotTimestamp(null);
 
         function startSSEStream(bustCache) {
+            if (cancelled) return;
             var end = new Date();
             var start = new Date();
             start.setDate(end.getDate() - 30);
@@ -272,6 +278,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         // Check OAuth status before starting SSE stream
         function checkOAuthAndStream(bustCache) {
+            if (cancelled) return;
             setOauthStatus(null);
             setSseMessages(['Checking authentication...']);
             fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
@@ -302,6 +309,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                if (cancelled) return;
                 if (data.has_snapshot && data.success) {
                     setDashData(data);
                     setSseComplete(true);
@@ -320,6 +328,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
 
         return function() {
+            cancelled = true;  // Prevent stale callbacks from firing
             if (sseCleanupRef.current) sseCleanupRef.current();
         };
     }, [step, instance.id, refreshTrigger]);
