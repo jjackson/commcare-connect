@@ -7,35 +7,6 @@ Extracts GPS coordinates and case linking information for distance analysis.
 from commcare_connect.labs.analysis import AnalysisPipelineConfig, CacheStage, FieldComputation
 
 
-def extract_gps_location(visit_data: dict) -> str | None:
-    """
-    Extract GPS location string from visit data.
-
-    GPS can be in multiple locations:
-    - metadata.location (top-level, already parsed)
-    - form.meta.location.#text (nested in form)
-
-    Args:
-        visit_data: Full visit dict with form_json
-
-    Returns:
-        GPS string "lat lon altitude accuracy" or None
-    """
-    # First try top-level metadata.location (already extracted by pipeline)
-    form_json = visit_data.get("form_json", {})
-
-    # Try form.meta.location.#text path
-    meta = form_json.get("form", {}).get("meta", {})
-    location = meta.get("location", {})
-
-    if isinstance(location, dict):
-        return location.get("#text")
-    elif isinstance(location, str):
-        return location
-
-    return None
-
-
 def _safe_parse_int(x):
     """Safe int parse; SQL backend matches 'simple_int' pattern from source inspection."""
     try:
@@ -50,10 +21,14 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
     terminal_stage=CacheStage.VISIT_LEVEL,  # Visit-level for GPS analysis
     linking_field="entity_id",  # Use entity_id for linking visits
     fields=[
-        # GPS location - extract from form metadata
+        # GPS location - extract from form metadata (path-based, not Python extractor,
+        # to avoid loading form_json for all visits into memory)
         FieldComputation(
             name="gps_location",
-            extractor=extract_gps_location,
+            paths=[
+                "form.meta.location.#text",  # dict location with #text key
+                "form.meta.location",         # string location fallback
+            ],
             aggregation="first",
             description="GPS location string (lat lon altitude accuracy)",
         ),

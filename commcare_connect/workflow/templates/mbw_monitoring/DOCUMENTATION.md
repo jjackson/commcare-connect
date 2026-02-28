@@ -555,7 +555,7 @@ The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 13 FieldComputatio
 
 | Name | Type | Path / Extractor | Notes |
 |------|------|-----------------|-------|
-| `gps_location` | extractor | `extract_gps_location(visit_data)` | Reads `form_json.form.meta.location` |
+| `gps_location` | paths | `form.meta.location.#text`, `form.meta.location` | COALESCE: dict `#text` key or string fallback |
 | `case_id` | path | `form.case.@case_id` | |
 | `mother_case_id` | path | `form.parents.parent.case.@case_id` | |
 | `form_name` | path | `form.@name` | Has trailing space variant ("ANC Visit ") |
