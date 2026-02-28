@@ -60,6 +60,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseAuthorizeUrl, setSseAuthorizeUrl] = React.useState(null);
     var [sseComplete, setSseComplete] = React.useState(false);
     var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
+    var sseSectionsRef = React.useRef({});
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
@@ -237,6 +238,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 params.set('app_version_val', appliedAppVersionVal);
             }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
+            sseSectionsRef.current = {};
             var es = new EventSource(url);
 
             es.onmessage = function(event) {
@@ -260,13 +262,23 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     }
                     // Auto-dismiss modal when stream resumes
                     setSseAuthRequired(null);
+                    // Accumulate data sections (sent before Complete! to reduce memory)
+                    if (parsed.message === 'data_section' && parsed.data && parsed.data.section) {
+                        var sectionData = Object.assign({}, parsed.data);
+                        delete sectionData.section;
+                        Object.assign(sseSectionsRef.current, sectionData);
+                        return;
+                    }
                     if (parsed.message === 'Complete!' && parsed.data) {
-                        setDashData(parsed.data);
+                        // Merge accumulated sections with final metadata
+                        var fullData = Object.assign({}, sseSectionsRef.current, parsed.data);
+                        sseSectionsRef.current = {};
+                        setDashData(fullData);
                         setSseComplete(true);
                         setFromSnapshot(false);
                         setSnapshotTimestamp(null);
-                        if (parsed.data.monitoring_session?.flw_results) {
-                            setWorkerResults(parsed.data.monitoring_session.flw_results);
+                        if (fullData.monitoring_session?.flw_results) {
+                            setWorkerResults(fullData.monitoring_session.flw_results);
                         }
                         es.close();
                     } else if (parsed.message) {
