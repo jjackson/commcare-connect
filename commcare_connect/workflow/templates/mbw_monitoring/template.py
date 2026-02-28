@@ -59,6 +59,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseError, setSseError] = React.useState(null);
     var [sseAuthorizeUrl, setSseAuthorizeUrl] = React.useState(null);
     var [sseComplete, setSseComplete] = React.useState(false);
+    var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
@@ -249,6 +250,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         es.close();
                         return;
                     }
+                    // Mid-stream auth prompt (stream is alive — don't close!)
+                    if (parsed.auth_required) {
+                        setSseAuthRequired({
+                            message: parsed.message,
+                            authorize_url: parsed.authorize_url
+                        });
+                        return;
+                    }
+                    // Auto-dismiss modal when stream resumes
+                    setSseAuthRequired(null);
                     if (parsed.message === 'Complete!' && parsed.data) {
                         setDashData(parsed.data);
                         setSseComplete(true);
@@ -1020,6 +1031,32 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         })}
                     </div>
                 </div>
+                {sseAuthRequired && (
+                    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+                            <div className="flex items-center gap-2 text-amber-800 mb-3">
+                                <i className="fa-solid fa-link-slash text-lg"></i>
+                                <h3 className="font-bold text-lg m-0">Re-authorization Required</h3>
+                            </div>
+                            <p className="text-gray-700 mb-4">{sseAuthRequired.message}</p>
+                            <div className="flex items-center gap-3">
+                                <a href={sseAuthRequired.authorize_url} target="_blank" rel="noopener noreferrer"
+                                   className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 inline-block no-underline">
+                                    <i className="fa-solid fa-arrow-right-to-bracket mr-1"></i>
+                                    Authorize CommCare
+                                </a>
+                                <button onClick={function() { setSseAuthRequired(null); }}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                                    Dismiss
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-3 mb-0">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                Authorize in the new tab, then return here. The stream will resume automatically.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
