@@ -7,6 +7,8 @@ All analysis is done via SQL queries, not Python/pandas.
 
 import json
 import logging
+import os
+import tempfile
 from collections.abc import Generator
 from datetime import date, datetime
 from decimal import Decimal
@@ -18,7 +20,7 @@ from django.conf import settings
 from django.http import HttpRequest
 from django.utils.dateparse import parse_date
 
-from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes
+from commcare_connect.labs.analysis.backends.csv_parsing import parse_csv_bytes, parse_csv_file_chunks
 from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
 from commcare_connect.labs.analysis.backends.sql.query_builder import execute_flw_aggregation, execute_visit_extraction
 from commcare_connect.labs.analysis.config import AnalysisPipelineConfig, CacheStage
@@ -27,7 +29,7 @@ from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, Vis
 logger = logging.getLogger(__name__)
 
 
-def _model_to_visit_dict(row) -> dict:
+def _model_to_visit_dict(row, skip_form_json=False) -> dict:
     """Convert RawVisitCache model instance to visit dict."""
     return {
         "id": row.visit_id,
@@ -43,7 +45,7 @@ def _model_to_visit_dict(row) -> dict:
         "location": row.location,
         "flagged": row.flagged,
         "flag_reason": row.flag_reason,
-        "form_json": row.form_json,
+        "form_json": {} if skip_form_json else row.form_json,
         "completed_work": row.completed_work,
         "status_modified_date": row.status_modified_date.isoformat() if row.status_modified_date else None,
         "review_status": row.review_status,
@@ -150,7 +152,16 @@ class SQLBackend:
         Stream raw visit data with progress events.
 
         SQL backend checks RawVisitCache first. If hit, yields immediately.
-        Otherwise streams download from API with progress.
+        Otherwise streams download to temp file, then parses and stores in
+        memory-efficient batches (1000 rows at a time).
+
+        On cache hit, yields slim dicts (no form_json) since the raw data
+        is already in the database for SQL extraction.
+
+        On cache miss, downloads to temp file (0 bytes in Python memory),
+        parses CSV in chunks, stores each chunk to DB with form_json,
+        and yields slim dicts (form_json stripped after DB storage).
+        Peak memory: ~50 MB instead of ~2 GB.
         """
         cache_manager = SQLCacheManager(opportunity_id, config=None)
 
@@ -158,12 +169,13 @@ class SQLBackend:
         if not force_refresh and expected_visit_count:
             if cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
-                visit_dicts = self._load_from_cache(cache_manager, skip_form_json=False, filter_visit_ids=None)
+                # Load slim dicts (no form_json) — SQL extraction reads from DB directly
+                visit_dicts = self._load_from_cache(cache_manager, skip_form_json=True, filter_visit_ids=None)
                 yield ("cached", visit_dicts)
                 return
 
-        # Cache miss - stream download from API
-        logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, streaming from API")
+        # Cache miss - stream download to temp file (0 bytes in Python memory)
+        logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, streaming to temp file")
 
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
         headers = {
@@ -174,58 +186,100 @@ class SQLBackend:
         # Use shared progress interval from SSE streaming module
         from commcare_connect.labs.analysis.sse_streaming import DOWNLOAD_PROGRESS_INTERVAL_BYTES
 
-        chunks = []
-        bytes_downloaded = 0
         progress_interval = DOWNLOAD_PROGRESS_INTERVAL_BYTES  # 5MB progress intervals
+        csv_tmpfile = None
 
         try:
-            with httpx.stream("GET", url, headers=headers, timeout=580.0) as response:
-                response.raise_for_status()
-                total_bytes = int(response.headers.get("content-length", 0))
-                last_progress_at = 0
+            # Download directly to temp file — never hold CSV bytes in memory
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
+                csv_tmpfile = f.name
+                raw_line_count = 0
+                bytes_downloaded = 0
 
-                for chunk in response.iter_bytes(chunk_size=65536):
-                    chunks.append(chunk)
-                    # Use num_bytes_downloaded to track actual network traffic (compressed bytes)
-                    bytes_downloaded = response.num_bytes_downloaded
+                try:
+                    with httpx.stream("GET", url, headers=headers, timeout=580.0) as response:
+                        response.raise_for_status()
+                        total_bytes = int(response.headers.get("content-length", 0))
+                        last_progress_at = 0
 
-                    # Yield progress every 5MB for real-time UI updates
-                    if bytes_downloaded - last_progress_at >= progress_interval:
-                        yield ("progress", bytes_downloaded, total_bytes)
-                        last_progress_at = bytes_downloaded
+                        for chunk in response.iter_bytes(chunk_size=65536):
+                            f.write(chunk)
+                            raw_line_count += chunk.count(b"\n")
+                            bytes_downloaded = response.num_bytes_downloaded
 
-                # Always yield final progress to ensure UI shows 100%
-                if bytes_downloaded > last_progress_at:
-                    yield ("progress", bytes_downloaded, total_bytes)
+                            if bytes_downloaded - last_progress_at >= progress_interval:
+                                yield ("progress", bytes_downloaded, total_bytes)
+                                last_progress_at = bytes_downloaded
 
-        except httpx.TimeoutException as e:
-            logger.error(f"[SQL] Timeout downloading for opp {opportunity_id}: {e}")
-            sentry_sdk.capture_exception(e)
-            raise RuntimeError("Connect API timeout") from e
+                        # Always yield final progress to ensure UI shows 100%
+                        if bytes_downloaded > last_progress_at:
+                            yield ("progress", bytes_downloaded, total_bytes)
 
-        csv_bytes = b"".join(chunks)
+                except httpx.TimeoutException as e:
+                    logger.error(f"[SQL] Timeout downloading for opp {opportunity_id}: {e}")
+                    sentry_sdk.capture_exception(e)
+                    raise RuntimeError("Connect API timeout") from e
 
-        # Count raw CSV lines to diagnose truncation vs parsing issues
-        raw_line_count = csv_bytes.count(b"\n")
-        logger.info(
-            f"[SQL] Download complete: {len(csv_bytes)} bytes, "
-            f"{raw_line_count} raw lines (expect ~{expected_visit_count}+1 if complete)"
-        )
-
-        # Yield status before slow CSV parsing so frontend can show progress
-        yield ("parsing", len(csv_bytes), raw_line_count)
-
-        visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
-        if len(visit_dicts) != raw_line_count - 1:  # -1 for header
-            logger.warning(
-                f"[SQL] CSV parsing dropped rows: {raw_line_count - 1} raw data lines "
-                f"but only {len(visit_dicts)} parsed. Delta: {raw_line_count - 1 - len(visit_dicts)} lost"
+            csv_size = os.path.getsize(csv_tmpfile)
+            logger.info(
+                f"[SQL] Download complete: {csv_size} bytes on disk, "
+                f"{raw_line_count} raw lines (expect ~{expected_visit_count}+1 if complete)"
             )
 
-        # NOTE: Don't store to SQL here - let process_and_cache handle it.
-        # Storage happens in process_and_cache after pipeline yields "Processing X visits..."
+            # Yield status before slow CSV parsing so frontend can show progress
+            yield ("parsing", csv_size, raw_line_count)
 
-        yield ("complete", visit_dicts)
+            # Parse and store in streaming batches (memory-efficient)
+            _, slim_dicts = self._parse_and_store_streaming(
+                csv_tmpfile, opportunity_id, raw_line_count
+            )
+
+            yield ("complete", slim_dicts)
+
+        finally:
+            if csv_tmpfile and os.path.exists(csv_tmpfile):
+                os.unlink(csv_tmpfile)
+
+    def _parse_and_store_streaming(
+        self, csv_path: str, opportunity_id: int, raw_line_count: int
+    ) -> tuple[int, list[dict]]:
+        """
+        Parse CSV from file and store to DB in streaming batches.
+
+        For each chunk of 1000 rows:
+        1. Parse rows from CSV (with form_json) — ~15 MB per chunk
+        2. Store to RawVisitCache via bulk_create
+        3. Strip form_json from dicts — frees ~15 MB
+        4. Append slim dicts to result list — ~200 bytes per dict
+
+        Returns:
+            (visit_count, slim_dicts) where slim_dicts have form_json={}
+            Peak memory: ~50 MB instead of ~2 GB
+        """
+        cache_manager = SQLCacheManager(opportunity_id, config=None)
+        estimated_count = max(0, raw_line_count - 1)
+
+        # Clear existing cache and prepare for batched inserts
+        cache_manager.store_raw_visits_start(estimated_count)
+
+        slim_dicts = []
+        actual_count = 0
+
+        for batch in parse_csv_file_chunks(csv_path, opportunity_id, chunksize=1000):
+            # Store full dicts (with form_json) to DB
+            cache_manager.store_raw_visits_batch(batch)
+            actual_count += len(batch)
+
+            # Strip form_json to save memory, keep slim versions for pipeline
+            for v in batch:
+                v["form_json"] = {}
+            slim_dicts.extend(batch)
+
+        # Atomically make rows visible with accurate count
+        cache_manager.store_raw_visits_finalize(actual_count)
+
+        logger.info(f"[SQL] Streamed {actual_count} visits to DB, keeping {len(slim_dicts)} slim dicts")
+        return actual_count, slim_dicts
 
     def has_valid_raw_cache(self, opportunity_id: int, expected_visit_count: int, tolerance_pct: int = 100) -> bool:
         """Check if valid raw cache exists in SQL."""
@@ -250,10 +304,7 @@ class SQLBackend:
 
         visits = []
         for row in qs.iterator():
-            visit = _model_to_visit_dict(row)
-            if skip_form_json:
-                visit["form_json"] = {}
-            visits.append(visit)
+            visits.append(_model_to_visit_dict(row, skip_form_json=skip_form_json))
 
         logger.info(f"[SQL] Loaded {len(visits)} visits from RawVisitCache")
         return visits
@@ -395,26 +446,35 @@ class SQLBackend:
         config: AnalysisPipelineConfig,
         opportunity_id: int,
         visit_dicts: list[dict],
+        skip_raw_store: bool = False,
     ) -> FLWAnalysisResult | VisitAnalysisResult:
         """
         Process visits using SQL and cache results.
 
         For VISIT_LEVEL:
-        1. Store raw visits in SQL
+        1. Store raw visits in SQL (unless skip_raw_store=True)
         2. Execute visit extraction query (no aggregation)
         3. Cache computed visits and return VisitAnalysisResult
 
         For AGGREGATED:
-        1. Store raw visits in SQL
+        1. Store raw visits in SQL (unless skip_raw_store=True)
         2. Execute FLW aggregation query
         3. Cache and return FLWAnalysisResult
+
+        Args:
+            skip_raw_store: If True, skip storing raw visits (already stored
+                during streaming parse or already in cache from a cache hit).
+                visit_dicts are only used for len() when this is True.
         """
         cache_manager = SQLCacheManager(opportunity_id, config)
         visit_count = len(visit_dicts)
 
-        # Step 1: Store raw visits to SQL (idempotent - replaces existing)
-        logger.info(f"[SQL] Storing {visit_count} raw visits to SQL")
-        cache_manager.store_raw_visits(visit_dicts, visit_count)
+        # Step 1: Store raw visits to SQL (skip if already stored during streaming)
+        if not skip_raw_store:
+            logger.info(f"[SQL] Storing {visit_count} raw visits to SQL")
+            cache_manager.store_raw_visits(visit_dicts, visit_count)
+        else:
+            logger.info(f"[SQL] Skipping raw store ({visit_count} visits already in DB)")
 
         # Branch based on terminal stage
         if config.terminal_stage == CacheStage.VISIT_LEVEL:
