@@ -63,6 +63,7 @@ from commcare_connect.workflow.templates.mbw_monitoring.session_adapter import (
     save_flw_result as save_flw_result_helper,
 )
 from commcare_connect.labs.analysis.data_access import fetch_flw_names
+from commcare_connect.labs.integrations.commcare.api_client import CommCareDataAccess
 from commcare_connect.workflow.data_access import WorkflowDataAccess
 from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
@@ -283,6 +284,88 @@ class MBWMonitoringDashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
+def _ensure_cchq_oauth(request, timeout=300):
+    """
+    Ensure CCHQ OAuth is valid. Try auto-refresh first, then poll for re-auth.
+
+    This is a generator — caller must use ``yield from _ensure_cchq_oauth(request)``.
+    Yields SSE events only if user intervention is needed. After returning, the
+    caller should re-check ``request.session.get("commcare_oauth")`` to see
+    whether re-auth succeeded or timed out.
+
+    Only waits once per request — if a previous call already timed out, subsequent
+    calls return immediately to avoid compounding stalls.
+    """
+    # Short-circuit if a previous call in this request already timed out
+    if getattr(request, "_cchq_oauth_unavailable", False):
+        return
+
+    import time
+    from importlib import import_module
+
+    # Phase 1: Try auto-refresh (silent — user never notices)
+    commcare_access = CommCareDataAccess(request=request, domain="")
+    if commcare_access.check_token_valid():
+        return
+
+    logger.info("[MBW Dashboard] CCHQ OAuth expired and refresh failed — requesting re-auth")
+
+    # Phase 2: Build authorize URL
+    referer = request.headers.get("Referer", "")
+    if referer and "://" in referer:
+        after_scheme = referer.split("://", 1)[1]
+        slash_pos = after_scheme.find("/")
+        next_page = after_scheme[slash_pos:] if slash_pos >= 0 else "/labs/overview/"
+    else:
+        next_page = referer if referer.startswith("/") else "/labs/overview/"
+    if not next_page or not next_page.startswith("/") or next_page.startswith("//"):
+        next_page = "/labs/overview/"
+    authorize_url = (
+        reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_page})
+    )
+
+    # Send auth_required event (frontend shows modal, keeps EventSource open)
+    event = {
+        "message": (
+            "CommCare authorization expired. "
+            "Please re-authorize in a new tab."
+        ),
+        "complete": False,
+        "auth_required": True,
+        "authorize_url": authorize_url,
+    }
+    yield f"data: {json.dumps(event)}\n\n"
+
+    # Poll session DB for re-auth (heartbeat wrapper keeps SSE alive)
+    engine = import_module(settings.SESSION_ENGINE)
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        time.sleep(10)
+        # Re-read session from DB (bypass in-memory cache)
+        fresh_session = engine.SessionStore(
+            session_key=request.session.session_key
+        )
+        fresh_oauth = fresh_session.get("commcare_oauth", {})
+        if (
+            fresh_oauth.get("access_token")
+            and timezone.now().timestamp() < fresh_oauth.get("expires_at", 0)
+        ):
+            # User re-authenticated — update in-memory session and resume
+            request.session["commcare_oauth"] = fresh_oauth
+            logger.info("[MBW Dashboard] CCHQ OAuth re-authenticated, resuming stream")
+            yield send_sse_event("CommCare re-authorized! Resuming data load...")
+            return
+
+    # Timeout — mark so subsequent calls in this request skip the wait
+    request._cchq_oauth_unavailable = True
+    logger.warning("[MBW Dashboard] CCHQ re-auth timeout after %ds", timeout)
+    yield send_sse_event(
+        "Authorization timeout \u2014 continuing without CommCare HQ data. "
+        "Re-authorize and click 'Refresh Data' to load complete results."
+    )
+
+
 class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
     """
     SSE streaming endpoint that loads ALL dashboard data in one connection.
@@ -307,42 +390,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 yield send_sse_event("Error", error="No OAuth token found. Please log in to Connect.")
                 return
 
-            # Check CommCare HQ OAuth — block if expired (require re-authorization)
-            commcare_oauth = request.session.get("commcare_oauth", {})
-            commcare_expires_at = commcare_oauth.get("expires_at", 0)
-            cchq_oauth_valid = bool(
-                commcare_oauth.get("access_token")
-                and timezone.now().timestamp() < commcare_expires_at
-            )
-            if not cchq_oauth_valid:
-                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing — blocking stream")
-                # Build authorize URL with return to the current page (Referer)
-                referer = request.headers.get("Referer", "")
-                if referer and "://" in referer:
-                    # Extract path from full URL (e.g. https://host/path/?q → /path/?q)
-                    after_scheme = referer.split("://", 1)[1]
-                    slash_pos = after_scheme.find("/")
-                    next_page = after_scheme[slash_pos:] if slash_pos >= 0 else "/labs/overview/"
-                else:
-                    next_page = referer if referer.startswith("/") else "/labs/overview/"
-                # Sanitize: reject protocol-relative or scheme URLs
-                if not next_page or not next_page.startswith("/") or next_page.startswith("//") or "://" in next_page:
-                    next_page = "/labs/overview/"
-                authorize_url = reverse("labs:commcare_initiate") + "?" + urlencode({"next": next_page})
-
-                error_msg = (
-                    "CommCare HQ authorization required. "
-                    "Please authorize CommCare access to load dashboard data."
-                )
-                # Include authorize_url as extra field for frontend to render a button
-                event = {
-                    "message": "Error",
-                    "complete": False,
-                    "error": error_msg,
-                    "authorize_url": authorize_url,
-                }
-                yield f"data: {json.dumps(event)}\n\n"
-                return
+            # Ensure CCHQ OAuth before starting (auto-refresh or pause for re-auth).
+            # Unlike the old blocking check, this lets the pipeline proceed with
+            # Connect data even if CCHQ auth needs user intervention later.
+            yield from _ensure_cchq_oauth(request)
 
             # Parse date range (for GPS filtering only)
             default_start, default_end = get_default_date_range()
@@ -459,11 +510,19 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 else:
                     active_usernames = intersection
 
-            # Step 2b: Fetch GS forms from CCHQ early (while OAuth token is still fresh)
+            # Step 2b: Fetch GS forms from CCHQ (with mid-stream re-auth support)
             gs_forms = []
             gs_app_id = monitoring_session.gs_app_id if monitoring_session else None
+
+            # Ensure CCHQ OAuth is valid (auto-refresh → poll for re-auth)
+            yield from _ensure_cchq_oauth(request)
             cchq_oauth = request.session.get("commcare_oauth", {})
-            if cchq_oauth.get("access_token") and timezone.now().timestamp() < cchq_oauth.get("expires_at", 0):
+            cchq_oauth_valid = bool(
+                cchq_oauth.get("access_token")
+                and timezone.now().timestamp() < cchq_oauth.get("expires_at", 0)
+            )
+
+            if cchq_oauth_valid:
                 for opp_id in opportunity_ids:
                     try:
                         yield send_sse_event("Fetching GS forms... (metadata)")
@@ -482,7 +541,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     except Exception as e:
                         logger.warning(f"[MBW Dashboard] GS form fetch failed for opp {opp_id}: {e}")
             else:
-                logger.info("[MBW Dashboard] Skipping GS fetch — CommCare OAuth not available yet")
+                logger.info("[MBW Dashboard] Skipping GS fetch — CCHQ OAuth not available after re-auth attempt")
             logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 3: GPS analysis (on ALL visits, then filter by date)
@@ -530,7 +589,8 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             visit_status_distribution = None
             registration_forms = []
 
-            # Re-check CCHQ OAuth (may have expired during earlier steps)
+            # Re-check CCHQ OAuth (may have expired during GPS analysis)
+            yield from _ensure_cchq_oauth(request)
             cchq_oauth_valid = bool(
                 request.session.get("commcare_oauth", {}).get("access_token")
                 and timezone.now().timestamp()
@@ -538,10 +598,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             )
 
             if not cchq_oauth_valid:
-                logger.warning("[MBW Dashboard] CommCare OAuth expired or missing, skipping CCHQ data")
+                logger.warning("[MBW Dashboard] CommCare OAuth not available after re-auth attempt")
                 yield send_sse_event(
                     "Fetching registration data... skipped "
-                    "(CommCare authorization expired \u2014 please re-authorize CommCare HQ)"
+                    "(CommCare authorization not available)"
                 )
             else:
                 for opp_id in opportunity_ids:
@@ -660,6 +720,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             mother_counts = count_mothers_from_pipeline(
                 all_pipeline_rows, active_usernames, registration_forms=registration_forms
             )
+
+            # Free pipeline rows — no longer needed after this point.
+            # For 50K visits, this frees ~10 MB of VisitRow objects.
+            del all_pipeline_rows
+            if pipeline_result:
+                pipeline_result.rows = []
 
             # Build GPS median distances per FLW (revisit distance)
             gps_median_by_flw = {}

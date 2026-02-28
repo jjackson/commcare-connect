@@ -59,6 +59,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseError, setSseError] = React.useState(null);
     var [sseAuthorizeUrl, setSseAuthorizeUrl] = React.useState(null);
     var [sseComplete, setSseComplete] = React.useState(false);
+    var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
     var [fromSnapshot, setFromSnapshot] = React.useState(false);
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
@@ -175,6 +176,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // =========================================================================
     React.useEffect(function() {
         if (!instance.opportunity_id) return;
+        // Skip FLW history fetch when reopening a saved run — dashboard loads from snapshot
+        var existingWorkers = instance.state?.selected_workers || instance.state?.selected_flws || [];
+        if (existingWorkers.length > 0) return;
         setHistoryLoading(true);
         fetch('/custom_analysis/mbw_monitoring/api/opportunity-flws/', {
             method: 'POST',
@@ -203,6 +207,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         var flws = instance.state?.selected_workers || instance.state?.selected_flws || [];
         if (flws.length === 0) return;
 
+        var cancelled = false;  // Guard against stale async callbacks (React StrictMode double-mount)
+
         setSseComplete(false);
         setSseError(null);
         setSseAuthorizeUrl(null);
@@ -211,6 +217,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setSnapshotTimestamp(null);
 
         function startSSEStream(bustCache) {
+            if (cancelled) return;
             var end = new Date();
             var start = new Date();
             start.setDate(end.getDate() - 30);
@@ -243,6 +250,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         es.close();
                         return;
                     }
+                    // Mid-stream auth prompt (stream is alive — don't close!)
+                    if (parsed.auth_required) {
+                        setSseAuthRequired({
+                            message: parsed.message,
+                            authorize_url: parsed.authorize_url
+                        });
+                        return;
+                    }
+                    // Auto-dismiss modal when stream resumes
+                    setSseAuthRequired(null);
                     if (parsed.message === 'Complete!' && parsed.data) {
                         setDashData(parsed.data);
                         setSseComplete(true);
@@ -272,11 +289,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         // Check OAuth status before starting SSE stream
         function checkOAuthAndStream(bustCache) {
+            if (cancelled) return;
             setOauthStatus(null);
             setSseMessages(['Checking authentication...']);
             fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
             .then(function(r) { return r.json(); })
             .then(function(status) {
+                if (cancelled) return;
                 var expired = [];
                 if (!status.connect?.active) expired.push('connect');
                 if (!status.commcare?.active) expired.push('commcare');
@@ -291,6 +310,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 startSSEStream(bustCache);
             })
             .catch(function() {
+                if (cancelled) return;
                 // Network error checking OAuth — proceed anyway, SSE will fail with its own error
                 startSSEStream(bustCache);
             });
@@ -302,6 +322,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                if (cancelled) return;
                 if (data.has_snapshot && data.success) {
                     setDashData(data);
                     setSseComplete(true);
@@ -320,6 +341,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
 
         return function() {
+            cancelled = true;  // Prevent stale callbacks from firing
             if (sseCleanupRef.current) sseCleanupRef.current();
         };
     }, [step, instance.id, refreshTrigger]);
@@ -1011,6 +1033,34 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         })}
                     </div>
                 </div>
+                {sseAuthRequired && (
+                    <div role="dialog" aria-modal="true" tabIndex="-1"
+                         onKeyDown={function(e) { if (e.key === 'Escape') setSseAuthRequired(null); }}
+                         style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+                            <div className="flex items-center gap-2 text-amber-800 mb-3">
+                                <i className="fa-solid fa-link-slash text-lg"></i>
+                                <h3 className="font-bold text-lg m-0">Re-authorization Required</h3>
+                            </div>
+                            <p className="text-gray-700 mb-4">{sseAuthRequired.message}</p>
+                            <div className="flex items-center gap-3">
+                                <a href={sseAuthRequired.authorize_url} target="_blank" rel="noopener noreferrer"
+                                   className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 inline-block no-underline">
+                                    <i className="fa-solid fa-arrow-right-to-bracket mr-1"></i>
+                                    Authorize CommCare
+                                </a>
+                                <button onClick={function() { setSseAuthRequired(null); }}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                                    Dismiss
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-3 mb-0">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                Authorize in the new tab, then return here. The stream will resume automatically.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
