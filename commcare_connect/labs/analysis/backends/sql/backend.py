@@ -29,7 +29,7 @@ from commcare_connect.labs.analysis.models import FLWAnalysisResult, FLWRow, Vis
 logger = logging.getLogger(__name__)
 
 
-def _model_to_visit_dict(row) -> dict:
+def _model_to_visit_dict(row, skip_form_json=False) -> dict:
     """Convert RawVisitCache model instance to visit dict."""
     return {
         "id": row.visit_id,
@@ -45,7 +45,7 @@ def _model_to_visit_dict(row) -> dict:
         "location": row.location,
         "flagged": row.flagged,
         "flag_reason": row.flag_reason,
-        "form_json": row.form_json,
+        "form_json": {} if skip_form_json else row.form_json,
         "completed_work": row.completed_work,
         "status_modified_date": row.status_modified_date.isoformat() if row.status_modified_date else None,
         "review_status": row.review_status,
@@ -304,10 +304,7 @@ class SQLBackend:
 
         visits = []
         for row in qs.iterator():
-            visit = _model_to_visit_dict(row)
-            if skip_form_json:
-                visit["form_json"] = {}
-            visits.append(visit)
+            visits.append(_model_to_visit_dict(row, skip_form_json=skip_form_json))
 
         logger.info(f"[SQL] Loaded {len(visits)} visits from RawVisitCache")
         return visits
