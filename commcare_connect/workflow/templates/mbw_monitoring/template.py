@@ -245,6 +245,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 try {
                     var parsed = JSON.parse(event.data);
                     if (parsed.error) {
+                        sseSectionsRef.current = {};
                         setSseError(parsed.error);
                         if (parsed.authorize_url) {
                             setSseAuthorizeUrl(parsed.authorize_url);
@@ -290,13 +291,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             };
 
             es.onerror = function() {
+                sseSectionsRef.current = {};
                 if (!sseComplete) {
                     setSseError('Connection lost. Please refresh the page.');
                 }
                 es.close();
             };
 
-            sseCleanupRef.current = function() { es.close(); };
+            sseCleanupRef.current = function() { sseSectionsRef.current = {}; es.close(); };
         }
 
         // Check OAuth status before starting SSE stream
