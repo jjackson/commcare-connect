@@ -79,6 +79,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [completeNotes, setCompleteNotes] = React.useState('');
     var [completing, setCompleting] = React.useState(false);
     var [snapshotSaving, setSnapshotSaving] = React.useState(false);
+    var snapshotSaveInFlightRef = React.useRef(null);
     var [workerResults, setWorkerResults] = React.useState(savedResults);
     var [savingResult, setSavingResult] = React.useState(null);
 
@@ -701,12 +702,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // Save snapshot — reused by manual button and auto-save on Complete
     var saveSnapshot = function() {
         if (!instance.id || !dashData) return Promise.resolve(false);
+        if (snapshotSaveInFlightRef.current) return snapshotSaveInFlightRef.current;
         setSnapshotSaving(true);
         var snapshotUrl = '/custom_analysis/mbw_monitoring/api/save-snapshot/';
         if (instance.opportunity_id) {
             snapshotUrl += '?opportunity_id=' + encodeURIComponent(instance.opportunity_id);
         }
-        return fetch(snapshotUrl, {
+        var req = fetch(snapshotUrl, {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() },
@@ -714,16 +716,28 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            setSnapshotSaving(false);
-            if (data.success) { showToast('Snapshot saved'); setDataSource('saved'); setSnapshotTimestamp(data.timestamp || new Date().toISOString()); return true; }
-            else { showToast('Failed to save snapshot: ' + (data.error || 'Unknown error')); return false; }
+            if (data.success) {
+                showToast('Snapshot saved');
+                setDataSource('saved');
+                setSnapshotTimestamp(data.timestamp || new Date().toISOString());
+                return true;
+            } else {
+                showToast('Failed to save snapshot: ' + (data.error || 'Unknown error'));
+                return false;
+            }
         })
         .catch(function(err) {
-            setSnapshotSaving(false);
             console.error('Snapshot save failed:', err);
             showToast('Failed to save snapshot');
             return false;
+        })
+        .finally(function() {
+            setSnapshotSaving(false);
+            snapshotSaveInFlightRef.current = null;
         });
+
+        snapshotSaveInFlightRef.current = req;
+        return req;
     };
 
     // Complete session — auto-saves snapshot first (best-effort)

@@ -1300,18 +1300,27 @@ class MBWSaveSnapshotView(LoginRequiredMixin, View):
         if not isinstance(snapshot_data, dict):
             return JsonResponse({"error": "snapshot_data must be a JSON object"}, status=400)
 
+        # Load the run to validate it exists and derive opportunity_id
+        data_access = WorkflowDataAccess(request=request)
+        try:
+            run = data_access.get_run(run_id)
+        finally:
+            data_access.close()
+
+        if not run:
+            return JsonResponse({"error": "Run not found"}, status=404)
+
         # Re-read GPS visits from pipeline cache if not already embedded
         gps_data = snapshot_data.get("gps_data")
+        if gps_data is not None and not isinstance(gps_data, dict):
+            return JsonResponse({"error": "gps_data must be a JSON object"}, status=400)
         if gps_data:
             has_visits = any(
                 s.get("visits") for s in gps_data.get("flw_summaries", [])
             )
             if not has_visits:
-                # Prefer opportunity_id from POST body, fall back to middleware context
-                labs_context = getattr(request, "labs_context", {})
-                opp_id = body.get("opportunity_id") or labs_context.get("opportunity_id")
                 snapshot_data["gps_data"] = _rebuild_gps_with_visits(
-                    request, gps_data, opportunity_id=opp_id
+                    request, gps_data, opportunity_id=run.opportunity_id
                 )
 
         try:
