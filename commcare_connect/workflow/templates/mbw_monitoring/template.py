@@ -715,7 +715,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         .then(function(r) { return r.json(); })
         .then(function(data) {
             setSnapshotSaving(false);
-            if (data.success) { showToast('Snapshot saved'); setDataSource('saved'); setSnapshotTimestamp(new Date().toISOString()); return true; }
+            if (data.success) { showToast('Snapshot saved'); setDataSource('saved'); setSnapshotTimestamp(data.timestamp || new Date().toISOString()); return true; }
             else { showToast('Failed to save snapshot: ' + (data.error || 'Unknown error')); return false; }
         })
         .catch(function(err) {
@@ -772,7 +772,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             return;
         }
         // Check embedded visits first (available when loaded from snapshot)
-        var flw = gpsFlws.find(function(f) { return f.username === expandedGps; });
+        var currentGpsFlws = (dashData && dashData.gps_data && dashData.gps_data.flw_summaries) || [];
+        var flw = currentGpsFlws.find(function(f) { return f.username === expandedGps; });
         if (flw && flw.visits && flw.visits.length > 0) {
             setGpsDetail({ success: true, visits: flw.visits });
             setGpsDetailLoading(false);
@@ -810,7 +811,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 }
             });
         return function() { cancelled = true; };
-    }, [expandedGps, gpsFlws, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
+    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -3205,7 +3206,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             </div>
                                                         ) : (
                                                             <div className="p-6 text-center text-gray-500">
-                                                                {dataSource === 'snapshot' ? 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.' : 'No due visits found for this FLW.'}
+                                                                {dataSource === 'snapshot' ? (isCompleted ? 'Drill-down data not available in snapshot.' : 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.') : 'No due visits found for this FLW.'}
                                                             </div>
                                                         )}
                                                     </td>
