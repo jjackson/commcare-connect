@@ -61,7 +61,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseComplete, setSseComplete] = React.useState(false);
     var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
     var sseSectionsRef = React.useRef({});
-    var [fromSnapshot, setFromSnapshot] = React.useState(false);
+    var [dataSource, setDataSource] = React.useState('live');  // 'live' | 'saved' | 'snapshot'
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
     var [oauthStatus, setOauthStatus] = React.useState(null);
@@ -78,6 +78,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [showCompleteModal, setShowCompleteModal] = React.useState(false);
     var [completeNotes, setCompleteNotes] = React.useState('');
     var [completing, setCompleting] = React.useState(false);
+    var [snapshotSaving, setSnapshotSaving] = React.useState(false);
+    var snapshotSaveInFlightRef = React.useRef(null);
     var [workerResults, setWorkerResults] = React.useState(savedResults);
     var [savingResult, setSavingResult] = React.useState(null);
 
@@ -214,7 +216,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setSseError(null);
         setSseAuthorizeUrl(null);
         setSseMessages([]);
-        setFromSnapshot(false);
+        setDataSource('live');
         setSnapshotTimestamp(null);
 
         function startSSEStream(bustCache) {
@@ -232,6 +234,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
             if (bustCache) {
                 params.set('bust_cache', '1');
+            }
+            if (instance.opportunity_id) {
+                params.set('opportunity_id', String(instance.opportunity_id));
             }
             if (appliedAppVersionOp && appliedAppVersionVal) {
                 params.set('app_version_op', appliedAppVersionOp);
@@ -276,8 +281,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         sseSectionsRef.current = {};
                         setDashData(fullData);
                         setSseComplete(true);
-                        setFromSnapshot(false);
-                        setSnapshotTimestamp(null);
+                        setDataSource('live');
+                        setSnapshotTimestamp(new Date().toISOString());
                         if (fullData.monitoring_session?.flw_results) {
                             setWorkerResults(fullData.monitoring_session.flw_results);
                         }
@@ -340,7 +345,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 if (data.has_snapshot && data.success) {
                     setDashData(data);
                     setSseComplete(true);
-                    setFromSnapshot(true);
+                    setDataSource('snapshot');
                     setSnapshotTimestamp(data.snapshot_timestamp);
                     if (data.monitoring_session?.flw_results) {
                         setWorkerResults(data.monitoring_session.flw_results);
@@ -694,14 +699,60 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
     };
 
-    // Complete session
+    // Save snapshot — reused by manual button and auto-save on Complete
+    var saveSnapshot = function() {
+        if (!instance.id || !dashData) return Promise.resolve(false);
+        if (snapshotSaveInFlightRef.current) return snapshotSaveInFlightRef.current;
+        setSnapshotSaving(true);
+        var snapshotUrl = '/custom_analysis/mbw_monitoring/api/save-snapshot/';
+        if (instance.opportunity_id) {
+            snapshotUrl += '?opportunity_id=' + encodeURIComponent(instance.opportunity_id);
+        }
+        var req = fetch(snapshotUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() },
+            body: JSON.stringify({ run_id: instance.id, opportunity_id: instance.opportunity_id, snapshot_data: dashData })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showToast('Snapshot saved');
+                setDataSource('saved');
+                setSnapshotTimestamp(data.timestamp || new Date().toISOString());
+                return true;
+            } else {
+                showToast('Failed to save snapshot: ' + (data.error || 'Unknown error'));
+                return false;
+            }
+        })
+        .catch(function(err) {
+            console.error('Snapshot save failed:', err);
+            showToast('Failed to save snapshot');
+            return false;
+        })
+        .finally(function() {
+            setSnapshotSaving(false);
+            snapshotSaveInFlightRef.current = null;
+        });
+
+        snapshotSaveInFlightRef.current = req;
+        return req;
+    };
+
+    // Complete session — auto-saves snapshot first (best-effort)
     var handleComplete = function() {
         if (!actions || !actions.completeRun) {
             showToast('Complete not available — please hard-refresh (Cmd+Shift+R)');
             return;
         }
         setCompleting(true);
-        actions.completeRun(instance.id, { overall_result: 'completed', notes: completeNotes })
+        // Save snapshot first, then complete the run
+        (dashData ? saveSnapshot() : Promise.resolve(false))
+            .catch(function() { return false; })
+            .then(function() {
+                return actions.completeRun(instance.id, { overall_result: 'completed', notes: completeNotes });
+            })
             .then(function(resp) {
                 if (resp && resp.success !== false) {
                     setShowCompleteModal(false);
@@ -719,14 +770,62 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
     };
 
-    // GPS detail - use visits already embedded in gpsFlws from the SSE response
+    // GPS detail — toggle which FLW is expanded; the useEffect below handles fetching
     var fetchGpsDetail = function(username) {
         if (expandedGps === username) { setExpandedGps(null); return; }
         setExpandedGps(username);
         setSelectedMother(null);
-        var flw = gpsFlws.find(function(f) { return f.username === username; });
-        setGpsDetail({ success: true, visits: (flw && flw.visits) || [] });
     };
+
+    // Fetch GPS visits when expandedGps changes (useEffect runs after render commit,
+    // avoiding the inline-fetch-in-click-handler issue that silently failed to fire)
+    React.useEffect(function() {
+        if (!expandedGps) {
+            setGpsDetail(null);
+            setGpsDetailLoading(false);
+            return;
+        }
+        // Check embedded visits first (available when loaded from snapshot)
+        var currentGpsFlws = (dashData && dashData.gps_data && dashData.gps_data.flw_summaries) || [];
+        var flw = currentGpsFlws.find(function(f) { return f.username === expandedGps; });
+        if (flw && flw.visits && flw.visits.length > 0) {
+            setGpsDetail({ success: true, visits: flw.visits });
+            setGpsDetailLoading(false);
+            return;
+        }
+        // Fetch from API (SSE data doesn't embed visits to save memory)
+        setGpsDetailLoading(true);
+        setGpsDetail(null);
+        var cancelled = false;
+        var end = new Date();
+        var start = new Date();
+        start.setDate(end.getDate() - 30);
+        var params = new URLSearchParams({
+            start_date: start.toISOString().split('T')[0],
+            end_date: end.toISOString().split('T')[0]
+        });
+        if (instance.opportunity_id) {
+            params.set('opportunity_id', String(instance.opportunity_id));
+        }
+        if (appliedAppVersionOp && appliedAppVersionVal) {
+            params.set('app_version_op', appliedAppVersionOp);
+            params.set('app_version_val', appliedAppVersionVal);
+        }
+        var url = '/custom_analysis/mbw_monitoring/api/gps/'
+            + encodeURIComponent(expandedGps) + '/?' + params.toString();
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!cancelled) { setGpsDetail(data); setGpsDetailLoading(false); }
+            })
+            .catch(function() {
+                if (!cancelled) {
+                    setGpsDetail({ success: false, visits: [] });
+                    setGpsDetailLoading(false);
+                }
+            });
+        return function() { cancelled = true; };
+    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -1801,7 +1900,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             </span>
                         ) : (
                             <button onClick={function() { setShowCompleteModal(true); }}
-                                    className="inline-flex items-center px-3 py-1.5 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                                    disabled={snapshotSaving}
+                                    className={"inline-flex items-center px-3 py-1.5 text-sm text-white rounded-md " + (snapshotSaving ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700")}>
                                 <i className="fa-solid fa-check mr-1"></i> Complete Audit
                             </button>
                         )}
@@ -1840,23 +1940,35 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     })}
                 </nav>
                 <div className="flex items-center gap-3 ml-auto">
-                    {fromSnapshot && snapshotTimestamp && (
+                    {snapshotTimestamp && (
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                             <span>Data from: {new Date(snapshotTimestamp).toLocaleString()}</span>
-                            <span className="text-amber-600 text-xs font-medium">(snapshot)</span>
+                            <span className={dataSource === 'snapshot' ? 'text-amber-600 text-xs font-medium' : dataSource === 'saved' ? 'text-blue-600 text-xs font-medium' : 'text-green-600 text-xs font-medium'}>{dataSource === 'snapshot' ? '(snapshot)' : dataSource === 'saved' ? '(saved)' : '(live)'}</span>
                         </div>
                     )}
+                    {!isCompleted && sseComplete && dashData && (
+                        <button onClick={saveSnapshot} disabled={snapshotSaving}
+                                className={'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ' +
+                                    (snapshotSaving
+                                        ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                                        : 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100')}>
+                            <i className={'fa-solid ' + (snapshotSaving ? 'fa-spinner fa-spin' : 'fa-camera')}></i>
+                            {snapshotSaving ? 'Saving...' : 'Save Snapshot'}
+                        </button>
+                    )}
+                    {!isCompleted && (
                     <button onClick={function() {
                         setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
-                    }} disabled={!sseComplete}
+                    }} disabled={!sseComplete || snapshotSaving}
                     className={'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ' +
-                        (sseComplete
+                        (sseComplete && !snapshotSaving
                             ? 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
                             : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed')}>
                         {'\u21BB'} Refresh Data
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -2643,6 +2755,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                     </div>
                                                 </td>
                                             </tr>,
+                                            isExpanded && gpsDetailLoading && (
+                                                <tr key={g.username + '_loading'}>
+                                                    <td colSpan={9} className="p-0 border-b-2 border-blue-200">
+                                                        <div className="bg-blue-50 px-6 py-4 border-t border-blue-200 text-center">
+                                                            <i className="fa-solid fa-spinner fa-spin text-blue-600 mr-2"></i>
+                                                            <span className="text-sm text-gray-600">Loading visit details...</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ),
                                             isExpanded && gpsDetail && (function() {
                                                 var displayVisits = selectedMother
                                                     ? (gpsDetail.visits || []).filter(function(v) { return v.mother_case_id === selectedMother || v.case_id === selectedMother; })
@@ -3099,7 +3221,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             </div>
                                                         ) : (
                                                             <div className="p-6 text-center text-gray-500">
-                                                                {fromSnapshot ? 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.' : 'No due visits found for this FLW.'}
+                                                                {dataSource === 'snapshot' ? (isCompleted ? 'Drill-down data not available in snapshot.' : 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.') : 'No due visits found for this FLW.'}
                                                             </div>
                                                         )}
                                                     </td>
