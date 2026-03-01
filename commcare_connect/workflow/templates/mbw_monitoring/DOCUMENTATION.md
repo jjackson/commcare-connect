@@ -70,7 +70,7 @@ User Browser
     |
     +-- SSE /custom_analysis/mbw_monitoring/stream/
     |   +-- MBWMonitoringStreamView (streams all dashboard data)
-    |       +-- Step 1: AnalysisPipeline -> Connect API (visit forms, 12 fields)
+    |       +-- Step 1: AnalysisPipeline -> Connect API (visit forms, 13 fields)
     |       +-- Step 2: Connect API -> FLW names
     |       +-- Step 3: GPS analysis (Haversine distances)
     |       +-- Step 4a: CCHQ Form API -> Registration forms (mother metadata)
@@ -86,6 +86,11 @@ User Browser
     |
     +-- GET /custom_analysis/mbw_monitoring/api/gps/<username>/
     |   +-- MBWGPSDetailView (JSON drill-down for GPS visits)
+    |   +-- Params: start_date, end_date (default: today-30 to today),
+    |   |          opportunity_id, app_version_op, app_version_val
+    |
+    +-- POST /custom_analysis/mbw_monitoring/api/save-snapshot/
+    |   +-- MBWSaveSnapshotView (save dashboard snapshot with GPS visits)
     |
     +-- GET /custom_analysis/mbw_monitoring/api/opportunity-flws/
     |   +-- OpportunityFLWListAPIView (FLW list with audit history)
@@ -214,7 +219,7 @@ interface WorkflowProps {
   workers: WorkerData[];           // FLW list from Connect API
   pipelines: Record<string, PipelineResult>;  // Pipeline data keyed by alias (not used by MBW)
   links: LinkHelpers;              // URL helpers: auditUrl(), taskUrl()
-  actions: ActionHandlers;         // 16 action methods (see Action Handler System section)
+  actions: ActionHandlers;         // 20 action methods (see Action Handler System section)
   onUpdateState: (newState: Record<string, unknown>) => Promise<void>;  // Persist state changes
 }
 ```
@@ -254,10 +259,23 @@ interface WorkflowProps {
 After the user selects FLWs and enters the dashboard step, the render code opens an SSE connection:
 
 ```javascript
-var eventSource = new EventSource(
-    '/custom_analysis/mbw_monitoring/stream/?' + params.toString()
-);
+var params = new URLSearchParams({
+    run_id: String(instance.id),
+    start_date: startStr,   // today - 30 days
+    end_date: endStr         // today
+});
+if (instance.opportunity_id) {
+    params.set('opportunity_id', String(instance.opportunity_id));
+}
+if (appliedAppVersionOp && appliedAppVersionVal) {
+    params.set('app_version_op', appliedAppVersionOp);
+    params.set('app_version_val', appliedAppVersionVal);
+}
+var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
+var es = new EventSource(url);
 ```
+
+**Note**: The `opportunity_id` parameter is required to avoid 302 redirects from `LabsContextMiddleware`.
 
 The stream view executes 7 steps, yielding progress messages at each stage:
 
@@ -272,17 +290,58 @@ The stream view executes 7 steps, yielding progress messages at each stage:
 | 6 | In-memory | Overview metrics (merge follow-up rate, GS score, GPS, quality metrics) | None (computed) |
 | 7 | Connect API (audit sessions + workflow runs) | FLW Performance by assessment status (latest status per FLW + aggregated case metrics) | None (computed) |
 
-The final SSE event contains the combined payload for all four tabs, which is stored in React state via `setDashData()`.
+#### Sectioned SSE Streaming (OOM Prevention)
+
+Data is NOT sent as one large final payload. Instead, the backend sends 3 separate `data_section` SSE events to prevent OOM on large opportunities (50K+ visits):
+
+1. **GPS section** — `gps_data` (FLW summaries without visits, date range, flag threshold)
+2. **Follow-up section** — `followup_data` (per-FLW/per-mother metrics, visit status distribution)
+3. **Overview + Performance section** — `overview_data`, `performance`, monitoring session metadata
+
+Each section is freed from server memory immediately after sending (`del` + `gc.collect()`). The frontend accumulates sections in `sseSectionsRef.current` and merges them when the final `"Complete!"` event arrives:
+
+```javascript
+es.onmessage = function(event) {
+    var parsed = JSON.parse(event.data);
+    if (parsed.data_section) {
+        Object.assign(sseSectionsRef.current, parsed.data_section);
+    }
+    if (parsed.message === 'Complete!' && parsed.data) {
+        var fullData = Object.assign({}, sseSectionsRef.current, parsed.data);
+        sseSectionsRef.current = {};
+        setDashData(fullData);
+    }
+};
+```
+
+#### Additional OOM Optimizations
+
+- **Stream-parse-and-store**: CSV downloads go to a temp file (0 bytes in Python), parsed in 1000-row chunks, stored to DB immediately. Peak memory: ~50 MB instead of ~2 GB.
+- **Intermediate structure freeing**: `del` statements release large dicts after each SSE section is sent.
+- **`skip_raw_store=True`**: Prevents slim dicts (no form_json) from overwriting full form_json already stored to DB during streaming.
+- **GPS visits excluded from SSE**: `serialize_flw_summary()` does NOT include a `visits` key. GPS visit details are lazy-loaded via `/api/gps/<username>/` when the user drills down.
 
 ### Dashboard Data Snapshotting
 
-After the first successful SSE data load, the backend saves a snapshot of all computed dashboard data to the workflow run record at `run.data["snapshot"]`. On subsequent opens, the frontend checks for a snapshot first via `GET /api/snapshot/?run_id=X` and renders immediately if found, skipping SSE streaming entirely.
+On subsequent page opens, the frontend checks for a snapshot first via `GET /api/snapshot/?run_id=X&opportunity_id=Y` and renders immediately if found, skipping SSE streaming entirely.
+
+**Saving snapshots:**
+- **Manual**: A "Save Snapshot" button in the tab bar triggers `POST /api/save-snapshot/`. The backend calls `_rebuild_gps_with_visits()` to embed GPS visit details from `ComputedVisitCache` (local SQL, not a pipeline re-run), then saves to `run.data["snapshot"]`.
+- **Auto on Complete**: When the user clicks "Complete Audit", a snapshot is auto-saved before marking the run complete.
+
+**`_rebuild_gps_with_visits()` (views.py):** Queries the `ComputedVisitCache` via `SQLCacheManager` to re-read GPS visits from the local SQL computed cache. This is a fast local DB query (~20s) instead of a full pipeline re-download (~8 min). If the computed cache is cold/expired, it skips visit embedding — the frontend falls back to API lazy-loading on drill-down.
 
 **Lifecycle-based size management:**
 - **In-progress runs**: Full snapshot including `followup_data.flw_drilldown` (~2.2MB for 100 FLWs). Assessors need drill-down access while working.
 - **Completed runs**: On completion, `flw_drilldown` is stripped from the snapshot (~200KB). Historical reference only needs summary tables.
 
-**Refresh**: A "Refresh Data" button in the tab bar forces a new SSE connection, re-computes all metrics, and saves a new snapshot.
+**Data freshness indicator:** The tab bar always shows "Data from: \<timestamp\>" with a colored badge:
+- **(live)** in green — data came from the SSE stream (fresh)
+- **(snapshot)** in amber — data loaded from or saved as a snapshot
+
+**Completed audit behavior:**
+- "Save Snapshot" and "Refresh Data" buttons are hidden when `isCompleted` (i.e., `instance.status === 'completed'`)
+- "Complete Audit" button is replaced with a "Completed" badge
 
 **Storage**: Snapshot is stored at `run.data["snapshot"]`, a sibling to `run.data["state"]`, so `update_run_state()` shallow-merge won't interfere.
 
@@ -831,6 +890,7 @@ Note: "Suspended" is a **label only** - it does NOT trigger any action on Connec
 | GS Forms | CCHQ Gold Standard forms | `mbw_gs_forms:{domain}` | 1hr | Per domain |
 | Metadata Cache | Opportunity metadata | `mbw_opp_metadata:{opp_id}` | 1hr | Per opportunity_id |
 | HQ Case Cache | Visit + mother cases | `mbw_visit_cases:{domain}` | 1hr prod / 24hr dev | Per domain |
+| Computed Visit Cache | Visit-level computed fields (GPS, case IDs, dates, etc.) | `opportunity_id` + `config_hash` | Configurable TTL | Per opportunity, indexed by username |
 | Dashboard Snapshot | Computed dashboard metrics | `run.data["snapshot"]` | Permanent (updated on refresh) | Per run |
 
 ### Tolerance-Based Cache Validation
@@ -990,7 +1050,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Column selector | Overview | Toggle 16 columns with Show All / Minimal presets |
 | Column sorting | All | Click column headers to sort asc/desc |
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
-| GPS drill-down | GPS | Individual visit GPS details |
+| GPS drill-down | GPS | Click "Details" sets `expandedGps` state; `useEffect([expandedGps])` checks for embedded visits (snapshot) first, then lazy-loads from `/api/gps/<username>/` |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
 | Visit status distribution | Overview | Per-visit-type stacked bar chart (6 bars) with toggleable legend and "Not Due Yet" category |
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |
@@ -1009,7 +1069,11 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Cross-app xmlns discovery | Backend | GS form xmlns found by searching all apps in domain |
 | Tolerance-based caching | Backend | 3-tier cache validation (count, percentage, time) |
 | In-page OCS Task + AI modal | Overview | Auto-creates task with pre-filled fields, opens AI bot config with auto-populated prompt based on FLW performance data and red flag indicators |
-| Dashboard data snapshotting | All | Saves computed metrics after first load; instant reopen from snapshot; "Refresh Data" button for current data |
+| Dashboard data snapshotting | All | "Save Snapshot" button saves metrics + GPS visits (from ComputedVisitCache); instant reopen from snapshot; "Refresh Data" forces new SSE stream |
+| Data freshness indicator | All | "Data from: \<time\> (live/snapshot)" in tab bar — green for SSE, amber for snapshot |
+| Completed audit UX | All | Save Snapshot and Refresh Data buttons hidden on completed audits |
+| Sectioned SSE streaming | Backend | Data sent in 3 separate `data_section` events to prevent OOM; each freed after sending |
+| Stream-parse-and-store | Backend | CSV downloads go to temp file, parsed in 1000-row chunks, stored to DB immediately; peak ~50 MB |
 | GS App ID configuration | FLW Selection | Configurable Gold Standard app ID with default value; removed download-all-forms fallback |
 | Connect ID column | FLW Selection | Shows worker Connect ID in the FLW selection table |
 | Clickable selection rows | FLW Selection | Entire row toggles checkbox, not just the small checkbox |
@@ -1078,7 +1142,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 |------|---------|
 | `template.py` | DEFINITION dict + RENDER_CODE JSX string (~1,860 lines) + TEMPLATE export |
 | `__init__.py` | Registers template in workflow template registry |
-| `views.py` | SSE streaming endpoint + MBW API views (GPS detail, FLW results, session) |
+| `views.py` | SSE streaming endpoint + MBW API views (GPS detail, snapshot save/load, FLW results, session). Key functions: `_rebuild_gps_with_visits()` (ComputedVisitCache query for snapshot fidelity) |
 | `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching |
 | `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, quality metrics |
 | `gps_analysis.py` | GPS metrics computation (Haversine, flagging, daily travel) |
@@ -1163,7 +1227,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 
 ### Action Buttons Not Working (Missing Action Handlers)
 
-**Symptom**: Clicking assessment/task/complete buttons does nothing. Console shows fewer than 16 action keys.
+**Symptom**: Clicking assessment/task/complete buttons does nothing. Console shows fewer than 20 action keys.
 
 **Cause**: After `npm run dev`, `collectstatic` was not run. Django's manifest still points to the old bundle.
 
@@ -1209,3 +1273,28 @@ Also apply `min-w-0` on React flex items in `workflow-runner.tsx` and `overflow-
 **Cause**: The SSE endpoint at `/custom_analysis/mbw_monitoring/stream/` requires both Connect OAuth and CommCare OAuth tokens.
 
 **Fix**: Ensure both OAuth tokens are valid in the session. Check server logs for 401/403 errors.
+
+### OOM / "Connection Lost" on Large Opportunities
+
+**Symptom**: Dashboard crashes mid-load on opportunities with 40K+ visits. Server logs show the SSE stream starts but never completes. Container may restart (OOM kill).
+
+**Cause**: Without the streaming optimizations, loading 50K+ visits (~700 MB CSV) causes Python memory to spike above container limits (~1 GB).
+
+**Mitigations** (already implemented):
+1. **Stream-parse-and-store**: CSV goes to temp file, parsed in 1000-row chunks. See `backend.py:_parse_and_store_streaming()`.
+2. **Sectioned SSE**: Data sent in 3 separate sections, each freed after sending. See `views.py` SSE streaming logic.
+3. **Intermediate `del` statements**: Large dicts freed with `del` + `gc.collect()` between pipeline stages.
+4. **GPS visits excluded from SSE**: `serialize_flw_summary()` omits `visits` key; drill-down lazy-loads from API.
+
+**Debug**: Check RSS logging in server output — lines like `[MBW Dashboard] RSS at after pipeline download: 991.0 MB`. If RSS exceeds container memory, the OOM kill is the cause.
+
+### GPS Drill-Down Not Working
+
+**Symptom**: Clicking "Details" on GPS tab shows spinner that never resolves, or shows a render error.
+
+**Cause**: The GPS drill-down uses a `React.useEffect([expandedGps])` that fetches from `/api/gps/<username>/`. Common issues:
+- Missing `opportunity_id` in the URL → 302 redirect from `LabsContextMiddleware` → fetch fails silently
+- Undefined variables in the `useEffect` callback → `ReferenceError` stops execution
+- Computed cache cold/expired → API returns empty results
+
+**Fix**: Check browser Network tab for the `/api/gps/` request. Check server logs for the GPS detail endpoint. Verify `opportunity_id` is in the fetch URL params.

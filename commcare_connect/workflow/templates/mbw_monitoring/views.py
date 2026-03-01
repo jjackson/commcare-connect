@@ -8,6 +8,8 @@ client-side filtering, and interactive features.
 import gc
 import json
 import logging
+import platform
+import resource
 from collections import Counter
 from collections.abc import Generator
 from datetime import date, datetime, timedelta, timezone as dt_timezone
@@ -70,6 +72,14 @@ from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
 logger = logging.getLogger(__name__)
+
+
+def _log_rss(label: str) -> None:
+    """Log current RSS (max resident set size) for memory diagnostics."""
+    rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    # macOS returns bytes, Linux returns kilobytes
+    rss_mb = rss_kb / (1024 * 1024) if platform.system() == "Darwin" else rss_kb / 1024
+    logger.info("[MBW Dashboard] RSS at %s: %.1f MB", label, rss_mb)
 
 
 def _check_app_version(version, op: str, val: int) -> bool:
@@ -464,6 +474,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             total_rows = len(pipeline_result.rows)
             logger.info(f"[MBW Dashboard] Pipeline returned {total_rows} visits across {len(opportunity_ids)} opportunities")
+            _log_rss(f"after pipeline download ({total_rows} visits)")
 
             # Step 2: Get active Connect users and FLW names (per opportunity, merge)
             yield send_sse_event("Loading FLW data...")
@@ -546,6 +557,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             logger.info(f"[MBW Dashboard] Fetched {len(gs_forms)} GS forms from CCHQ")
 
             # Step 3: GPS analysis (on ALL visits, then filter by date)
+            _log_rss("before GPS analysis")
             yield send_sse_event("Analyzing GPS data...")
 
             visits_for_gps = build_gps_visit_dicts(pipeline_result.rows, active_usernames)
@@ -569,10 +581,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             filtered_gps_visits = filter_visits_by_date(gps_result.visits, start_date, end_date)
             gps_result = build_result_from_analyzed_visits(filtered_gps_visits, flw_names)
 
-            # Group visits by FLW for GPS drill-down (avoids separate API call)
-            visits_by_flw = {}
-            for v in filtered_gps_visits:
-                visits_by_flw.setdefault(v.username, []).append(serialize_visit(v))
+            # GPS visits are NOT embedded in the SSE response to save ~30 MB of memory.
+            # The frontend fetches per-FLW visits on demand via MBWGPSDetailView API.
+            # Snapshots include visits (re-computed server-side during save).
+            del filtered_gps_visits
 
             gps_data = {
                 "total_visits": gps_result.total_visits,
@@ -581,9 +593,6 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "date_range_end": end_date.isoformat(),
                 "flw_summaries": [serialize_flw_summary(flw) for flw in gps_result.flw_summaries],
             }
-            for summary_dict in gps_data["flw_summaries"]:
-                summary_dict["visits"] = visits_by_flw.get(summary_dict["username"], [])
-            del filtered_gps_visits, visits_by_flw  # Free AnalyzedVisit refs + grouping dict
 
             # Step 4: Fetch registration forms from CCHQ
             yield send_sse_event("Fetching registration data...")
@@ -823,6 +832,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # Force garbage collection to reclaim memory from freed structures
             # (registration_forms, gps_result, mother_metadata, visit_cases_by_flw, etc.)
             gc.collect()
+            _log_rss("after gc.collect (before FLW performance)")
 
             # Step 7: FLW Performance by assessment status
             yield send_sse_event("Computing FLW performance metrics...")
@@ -860,42 +870,10 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             # Send data in sections to avoid serializing the full payload at once.
             # Each section is JSON-serialized independently; the frontend accumulates
             # them in sseSectionsRef and merges on the final "Complete!" event.
-
-            # Save snapshot first (needs all data still in memory)
-            if session_id and monitoring_session:
-                yield send_sse_event("Saving snapshot...")
-                slim_followup = {**followup_data} if followup_data else {}
-                if "flw_drilldown" in slim_followup:
-                    slim_drilldown = {}
-                    for uname, mothers in slim_followup["flw_drilldown"].items():
-                        slim_drilldown[uname] = [
-                            {
-                                **m,
-                                "visits": [
-                                    {k: v for k, v in vis.items() if k != "case_id"}
-                                    for vis in m.get("visits", [])
-                                ],
-                            }
-                            for m in mothers
-                        ]
-                    slim_followup["flw_drilldown"] = slim_drilldown
-
-                snapshot_payload = {
-                    "gps_data": gps_data,
-                    "followup_data": slim_followup,
-                    "overview_data": overview_data,
-                    "active_usernames": sorted(active_usernames),
-                    "flw_names": flw_names,
-                    "open_tasks": open_tasks,
-                    "open_task_usernames": open_task_usernames,
-                    "performance_data": performance_data,
-                }
-                try:
-                    save_dashboard_snapshot(request, session_id, snapshot_payload)
-                    logger.info(f"[MBW Dashboard] Saved snapshot for run {session_id}")
-                except Exception as e:
-                    logger.warning(f"[MBW Dashboard] Snapshot save failed: {e}")
-                del slim_followup, snapshot_payload
+            #
+            # Snapshot is NOT saved inline — it would spike memory ~75 MB (slim_followup
+            # copy + json.dumps). Instead, the frontend saves via a separate POST to
+            # /api/save-snapshot/ (manual button or auto-save on Complete).
 
             # Section 1: GPS data (small — send first, free early)
             yield send_sse_event("Sending data...")
@@ -943,6 +921,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "selected_flw_usernames": monitoring_session.selected_flw_usernames,
                 }
 
+            _log_rss("before Complete (all sections sent)")
             yield send_sse_event("Complete!", complete_meta)
 
         except Exception as e:
@@ -952,7 +931,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
 
 class MBWGPSDetailView(LoginRequiredMixin, View):
-    """JSON API endpoint for GPS drill-down to get visits for a specific FLW."""
+    """JSON API endpoint for GPS drill-down to get visits for a specific FLW.
+
+    Optimized to query the computed visit cache directly by username,
+    avoiding loading ALL visits through the pipeline (O(FLW_visits) not O(total_visits)).
+    Falls back to full pipeline if the cache is cold.
+    """
 
     def get(self, request, username: str):
         labs_oauth = request.session.get("labs_oauth", {})
@@ -969,34 +953,24 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         start_date = parse_date_param(request.GET.get("start_date"), default_start)
         end_date = parse_date_param(request.GET.get("end_date"), default_end)
 
+        app_version_op = request.GET.get("app_version_op", "")
+        if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
+            app_version_op = ""
+        app_version_val = _parse_int_param(request.GET.get("app_version_val"))
+
         try:
-            pipeline = AnalysisPipeline(request)
-            result = pipeline.stream_analysis_ignore_events(MBW_GPS_PIPELINE_CONFIG, opportunity_id)
+            visits_for_analysis = self._load_visits_from_cache(
+                opportunity_id, username
+            )
 
-            visits_for_analysis = []
-            username_lower = username.lower()
-            for row in result.rows:
-                if (row.username or "").lower() != username_lower:
-                    continue
-
-                gps_location = None
-                if row.latitude is not None and row.longitude is not None:
-                    gps_location = f"{row.latitude} {row.longitude}"
-
-                visits_for_analysis.append({
-                    "id": row.id,
-                    "username": username_lower,
-                    "visit_date": row.visit_date.isoformat() if row.visit_date else None,
-                    "entity_name": row.entity_name,
-                    "computed": row.computed,
-                    "metadata": {"location": gps_location},
-                })
+            if visits_for_analysis is None:
+                # Cache cold — fall back to full pipeline (slow for large opportunities)
+                logger.info("[MBW Dashboard] GPS detail: cache miss for %s, running full pipeline", username)
+                visits_for_analysis = self._load_visits_from_pipeline(
+                    request, opportunity_id, username
+                )
 
             # Apply app version filter if configured
-            app_version_op = request.GET.get("app_version_op", "")
-            if app_version_op and app_version_op not in ("gt", "gte", "eq", "lte", "lt"):
-                app_version_op = ""
-            app_version_val = _parse_int_param(request.GET.get("app_version_val"))
             if app_version_op and app_version_val is not None:
                 visits_for_analysis = [
                     v for v in visits_for_analysis
@@ -1018,6 +992,76 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
             logger.error(f"[MBW Dashboard] GPS detail failed: {e}", exc_info=True)
             sentry_sdk.capture_exception(e)
             return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
+
+    @staticmethod
+    def _load_visits_from_cache(opportunity_id, username):
+        """Try to load visits from the computed cache directly (fast path).
+
+        Queries ComputedVisitCache by username, returning only this FLW's visits
+        instead of loading all 50k+ visits through the pipeline.
+        Returns None if cache is cold.
+        """
+        from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
+        from commcare_connect.labs.analysis.backends.sql.models import ComputedVisitCache
+
+        cache_mgr = SQLCacheManager(opportunity_id, MBW_GPS_PIPELINE_CONFIG)
+        username_lower = username.lower()
+
+        # Check if computed cache exists for this config
+        base_qs = cache_mgr.get_computed_visits_queryset()
+        if not base_qs.exists():
+            return None
+
+        # Query just this FLW's visits (fast: indexed by username)
+        rows = base_qs.filter(username=username_lower).values(
+            "visit_id", "username", "visit_date", "entity_name",
+            "computed_fields", "location",
+        )
+
+        visits_for_analysis = []
+        for row in rows:
+            computed = row["computed_fields"] or {}
+            gps_location = computed.get("gps_location")
+            visits_for_analysis.append({
+                "id": row["visit_id"],
+                "username": username_lower,
+                "visit_date": row["visit_date"].isoformat() if row["visit_date"] else None,
+                "entity_name": row["entity_name"],
+                "computed": computed,
+                "metadata": {"location": gps_location},
+            })
+
+        logger.info(
+            "[MBW Dashboard] GPS detail: loaded %d visits for %s from cache (fast path)",
+            len(visits_for_analysis), username,
+        )
+        return visits_for_analysis
+
+    @staticmethod
+    def _load_visits_from_pipeline(request, opportunity_id, username):
+        """Fall back to full pipeline load (slow path)."""
+        pipeline = AnalysisPipeline(request)
+        result = pipeline.stream_analysis_ignore_events(MBW_GPS_PIPELINE_CONFIG, opportunity_id)
+
+        visits_for_analysis = []
+        username_lower = username.lower()
+        for row in result.rows:
+            if (row.username or "").lower() != username_lower:
+                continue
+
+            gps_location = None
+            if row.latitude is not None and row.longitude is not None:
+                gps_location = f"{row.latitude} {row.longitude}"
+
+            visits_for_analysis.append({
+                "id": row.id,
+                "username": username_lower,
+                "visit_date": row.visit_date.isoformat() if row.visit_date else None,
+                "entity_name": row.entity_name,
+                "computed": row.computed,
+                "metadata": {"location": gps_location},
+            })
+        return visits_for_analysis
 
 
 class MBWSaveFlwResultView(LoginRequiredMixin, View):
@@ -1138,6 +1182,134 @@ class MBWSnapshotView(LoginRequiredMixin, View):
                 "selected_flw_usernames": monitoring_session.selected_flw_usernames,
             },
         })
+
+
+def _rebuild_gps_with_visits(request, gps_data):
+    """Re-read GPS visits from computed cache and embed in gps_data for snapshot fidelity.
+
+    Uses the SQL computed cache directly (fast local DB query) instead of running
+    the full pipeline (which would re-download 50k+ visits from production if the
+    cache count doesn't match the expected count).
+
+    If the computed cache is cold/expired, skips visit embedding — the frontend
+    falls back to lazy-loading via MBWGPSDetailView API when viewing the snapshot.
+    """
+    labs_context = getattr(request, "labs_context", {})
+    opportunity_id = labs_context.get("opportunity_id")
+    if not opportunity_id:
+        return gps_data
+
+    try:
+        from commcare_connect.labs.analysis.backends.sql.cache import SQLCacheManager
+
+        cache_mgr = SQLCacheManager(opportunity_id, MBW_GPS_PIPELINE_CONFIG)
+        base_qs = cache_mgr.get_computed_visits_queryset()
+
+        if not base_qs.exists():
+            logger.info("[MBW Dashboard] GPS rebuild: computed cache cold, skipping visit embedding")
+            return gps_data
+
+        # Get all FLW usernames from the snapshot's flw_summaries
+        flw_usernames = [
+            (s.get("username") or "").lower()
+            for s in gps_data.get("flw_summaries", [])
+        ]
+
+        # Query visits from computed cache (fast: local DB, indexed by username)
+        rows = base_qs.filter(username__in=flw_usernames).values(
+            "visit_id", "username", "visit_date", "entity_name",
+            "computed_fields", "location",
+        )
+
+        # Build visit dicts in the format expected by analyze_gps_metrics
+        visits_for_analysis = []
+        for row in rows:
+            computed = row["computed_fields"] or {}
+            gps_location = computed.get("gps_location")
+            visits_for_analysis.append({
+                "id": row["visit_id"],
+                "username": (row["username"] or "").lower(),
+                "visit_date": row["visit_date"].isoformat() if row["visit_date"] else None,
+                "entity_name": row["entity_name"],
+                "computed": computed,
+                "metadata": {"location": gps_location},
+            })
+
+        gps_result = analyze_gps_metrics(visits_for_analysis, {})
+        del visits_for_analysis
+
+        # Apply date range filter from the snapshot's GPS data
+        start_str = gps_data.get("date_range_start")
+        end_str = gps_data.get("date_range_end")
+        start_date = date.fromisoformat(start_str) if start_str else None
+        end_date = date.fromisoformat(end_str) if end_str else None
+
+        if start_date and end_date:
+            filtered = filter_visits_by_date(gps_result.visits, start_date, end_date)
+        else:
+            filtered = gps_result.visits
+        del gps_result
+
+        # Group serialized visits by FLW username
+        visits_by_flw = {}
+        for v in filtered:
+            visits_by_flw.setdefault(v.username, []).append(serialize_visit(v))
+        del filtered
+
+        # Embed visits into the existing flw_summaries
+        for summary in gps_data.get("flw_summaries", []):
+            summary["visits"] = visits_by_flw.get(summary["username"], [])
+
+        logger.info(
+            "[MBW Dashboard] GPS rebuild: embedded visits for %d FLWs from computed cache",
+            len(visits_by_flw),
+        )
+        return gps_data
+    except Exception as e:
+        logger.warning("[MBW Dashboard] Failed to rebuild GPS visits for snapshot: %s", e)
+        return gps_data
+
+
+class MBWSaveSnapshotView(LoginRequiredMixin, View):
+    """Save dashboard snapshot from frontend (manual button or auto-save on Complete).
+
+    Receives the full dashData from the frontend as JSON POST body.
+    Re-computes GPS visits from pipeline cache for full snapshot fidelity
+    (SSE stream omits visits to save memory).
+    """
+
+    def post(self, request):
+        labs_oauth = request.session.get("labs_oauth", {})
+        if not labs_oauth.get("access_token"):
+            return JsonResponse({"error": "Session expired"}, status=401)
+
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        run_id = body.get("run_id")
+        if not run_id:
+            return JsonResponse({"error": "run_id is required"}, status=400)
+
+        snapshot_data = body.get("snapshot_data", {})
+
+        # Re-read GPS visits from pipeline cache if not already embedded
+        gps_data = snapshot_data.get("gps_data")
+        if gps_data:
+            has_visits = any(
+                s.get("visits") for s in gps_data.get("flw_summaries", [])
+            )
+            if not has_visits:
+                snapshot_data["gps_data"] = _rebuild_gps_with_visits(request, gps_data)
+
+        try:
+            save_dashboard_snapshot(request, run_id, snapshot_data)
+            logger.info("[MBW Dashboard] Saved snapshot for run %s (via API)", run_id)
+            return JsonResponse({"success": True})
+        except Exception as e:
+            logger.error("[MBW Dashboard] Snapshot save failed: %s", e, exc_info=True)
+            return JsonResponse({"error": "Failed to save snapshot"}, status=500)
 
 
 class MBWOAuthStatusView(LoginRequiredMixin, View):

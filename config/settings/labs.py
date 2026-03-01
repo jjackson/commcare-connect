@@ -54,5 +54,8 @@ OCS_URL = env("OCS_URL", default="https://www.openchatstudio.com")  # noqa: F405
 OCS_OAUTH_CLIENT_ID = env("OCS_OAUTH_CLIENT_ID", default="")  # noqa: F405
 OCS_OAUTH_CLIENT_SECRET = env("OCS_OAUTH_CLIENT_SECRET", default="")  # noqa: F405
 
+# Allow large POST bodies for snapshot save (~20-30 MB JSON payloads)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50 MB
+
 # Labs apps configuration
 # No longer need hardcoded opportunity_id - API now supports organization_id/program_id
