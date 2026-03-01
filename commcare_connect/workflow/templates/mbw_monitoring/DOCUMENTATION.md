@@ -275,7 +275,7 @@ var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
 var es = new EventSource(url);
 ```
 
-**Note**: The `opportunity_id` parameter is required to avoid 302 redirects from `LabsContextMiddleware`.
+**Note**: Including the `opportunity_id` parameter avoids 302 redirects from `LabsContextMiddleware`. If omitted, EventSource handles the redirect transparently, but the extra round-trip adds latency.
 
 The stream view executes 7 steps, yielding progress messages at each stage:
 
@@ -890,7 +890,7 @@ Note: "Suspended" is a **label only** - it does NOT trigger any action on Connec
 | GS Forms | CCHQ Gold Standard forms | `mbw_gs_forms:{domain}` | 1hr | Per domain |
 | Metadata Cache | Opportunity metadata | `mbw_opp_metadata:{opp_id}` | 1hr | Per opportunity_id |
 | HQ Case Cache | Visit + mother cases | `mbw_visit_cases:{domain}` | 1hr prod / 24hr dev | Per domain |
-| Computed Visit Cache | Visit-level computed fields (GPS, case IDs, dates, etc.) | `opportunity_id` + `config_hash` | Configurable TTL | Per opportunity, indexed by username |
+| Computed Visit Cache | Visit-level computed fields (GPS, case IDs, dates, etc.) | `opportunity_id` + `config_hash` | Configurable TTL | Keyed by opportunity_id + config_hash; username as secondary index for filtered queries |
 | Dashboard Snapshot | Computed dashboard metrics | `run.data["snapshot"]` | Permanent (updated on refresh) | Per run |
 
 ### Tolerance-Based Cache Validation
@@ -1281,7 +1281,7 @@ Also apply `min-w-0` on React flex items in `workflow-runner.tsx` and `overflow-
 **Cause**: Without the streaming optimizations, loading 50K+ visits (~700 MB CSV) causes Python memory to spike above container limits (~1 GB).
 
 **Mitigations** (already implemented):
-1. **Stream-parse-and-store**: CSV goes to temp file, parsed in 1000-row chunks. See `backend.py:_parse_and_store_streaming()`.
+1. **Stream-parse-and-store**: CSV goes to temp file, parsed in 1000-row chunks. See `labs/analysis/backends/sql/backend.py:_parse_and_store_streaming()`.
 2. **Sectioned SSE**: Data sent in 3 separate sections, each freed after sending. See `views.py` SSE streaming logic.
 3. **Intermediate `del` statements**: Large dicts freed with `del` + `gc.collect()` between pipeline stages.
 4. **GPS visits excluded from SSE**: `serialize_flw_summary()` omits `visits` key; drill-down lazy-loads from API.
