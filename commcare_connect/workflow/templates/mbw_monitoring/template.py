@@ -61,7 +61,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseComplete, setSseComplete] = React.useState(false);
     var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
     var sseSectionsRef = React.useRef({});
-    var [fromSnapshot, setFromSnapshot] = React.useState(false);
+    var [dataSource, setDataSource] = React.useState('live');  // 'live' | 'saved' | 'snapshot'
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
     var [oauthStatus, setOauthStatus] = React.useState(null);
@@ -215,7 +215,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setSseError(null);
         setSseAuthorizeUrl(null);
         setSseMessages([]);
-        setFromSnapshot(false);
+        setDataSource('live');
         setSnapshotTimestamp(null);
 
         function startSSEStream(bustCache) {
@@ -280,7 +280,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         sseSectionsRef.current = {};
                         setDashData(fullData);
                         setSseComplete(true);
-                        setFromSnapshot(false);
+                        setDataSource('live');
                         setSnapshotTimestamp(new Date().toISOString());
                         if (fullData.monitoring_session?.flw_results) {
                             setWorkerResults(fullData.monitoring_session.flw_results);
@@ -344,7 +344,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 if (data.has_snapshot && data.success) {
                     setDashData(data);
                     setSseComplete(true);
-                    setFromSnapshot(true);
+                    setDataSource('snapshot');
                     setSnapshotTimestamp(data.snapshot_timestamp);
                     if (data.monitoring_session?.flw_results) {
                         setWorkerResults(data.monitoring_session.flw_results);
@@ -710,12 +710,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() },
-            body: JSON.stringify({ run_id: instance.id, snapshot_data: dashData })
+            body: JSON.stringify({ run_id: instance.id, opportunity_id: instance.opportunity_id, snapshot_data: dashData })
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             setSnapshotSaving(false);
-            if (data.success) { showToast('Snapshot saved'); setFromSnapshot(true); setSnapshotTimestamp(new Date().toISOString()); return true; }
+            if (data.success) { showToast('Snapshot saved'); setDataSource('saved'); setSnapshotTimestamp(new Date().toISOString()); return true; }
             else { showToast('Failed to save snapshot: ' + (data.error || 'Unknown error')); return false; }
         })
         .catch(function(err) {
@@ -810,7 +810,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 }
             });
         return function() { cancelled = true; };
-    }, [expandedGps]);
+    }, [expandedGps, gpsFlws, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -1927,7 +1927,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     {snapshotTimestamp && (
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                             <span>Data from: {new Date(snapshotTimestamp).toLocaleString()}</span>
-                            <span className={fromSnapshot ? 'text-amber-600 text-xs font-medium' : 'text-green-600 text-xs font-medium'}>{fromSnapshot ? '(snapshot)' : '(live)'}</span>
+                            <span className={dataSource === 'snapshot' ? 'text-amber-600 text-xs font-medium' : dataSource === 'saved' ? 'text-blue-600 text-xs font-medium' : 'text-green-600 text-xs font-medium'}>{dataSource === 'snapshot' ? '(snapshot)' : dataSource === 'saved' ? '(saved)' : '(live)'}</span>
                         </div>
                     )}
                     {!isCompleted && sseComplete && dashData && (
@@ -3205,7 +3205,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             </div>
                                                         ) : (
                                                             <div className="p-6 text-center text-gray-500">
-                                                                {fromSnapshot ? 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.' : 'No due visits found for this FLW.'}
+                                                                {dataSource === 'snapshot' ? 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.' : 'No due visits found for this FLW.'}
                                                             </div>
                                                         )}
                                                     </td>

@@ -1184,7 +1184,7 @@ class MBWSnapshotView(LoginRequiredMixin, View):
         })
 
 
-def _rebuild_gps_with_visits(request, gps_data):
+def _rebuild_gps_with_visits(request, gps_data, opportunity_id=None):
     """Re-read GPS visits from computed cache and embed in gps_data for snapshot fidelity.
 
     Uses the SQL computed cache directly (fast local DB query) instead of running
@@ -1194,8 +1194,9 @@ def _rebuild_gps_with_visits(request, gps_data):
     If the computed cache is cold/expired, skips visit embedding — the frontend
     falls back to lazy-loading via MBWGPSDetailView API when viewing the snapshot.
     """
-    labs_context = getattr(request, "labs_context", {})
-    opportunity_id = labs_context.get("opportunity_id")
+    if not opportunity_id:
+        labs_context = getattr(request, "labs_context", {})
+        opportunity_id = labs_context.get("opportunity_id")
     if not opportunity_id:
         return gps_data
 
@@ -1288,11 +1289,16 @@ class MBWSaveSnapshotView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
+        if not isinstance(body, dict):
+            return JsonResponse({"error": "Request body must be a JSON object"}, status=400)
+
         run_id = body.get("run_id")
         if not run_id:
             return JsonResponse({"error": "run_id is required"}, status=400)
 
         snapshot_data = body.get("snapshot_data", {})
+        if not isinstance(snapshot_data, dict):
+            return JsonResponse({"error": "snapshot_data must be a JSON object"}, status=400)
 
         # Re-read GPS visits from pipeline cache if not already embedded
         gps_data = snapshot_data.get("gps_data")
@@ -1301,7 +1307,12 @@ class MBWSaveSnapshotView(LoginRequiredMixin, View):
                 s.get("visits") for s in gps_data.get("flw_summaries", [])
             )
             if not has_visits:
-                snapshot_data["gps_data"] = _rebuild_gps_with_visits(request, gps_data)
+                # Prefer opportunity_id from POST body, fall back to middleware context
+                labs_context = getattr(request, "labs_context", {})
+                opp_id = body.get("opportunity_id") or labs_context.get("opportunity_id")
+                snapshot_data["gps_data"] = _rebuild_gps_with_visits(
+                    request, gps_data, opportunity_id=opp_id
+                )
 
         try:
             save_dashboard_snapshot(request, run_id, snapshot_data)
