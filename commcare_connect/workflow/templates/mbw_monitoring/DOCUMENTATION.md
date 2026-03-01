@@ -1050,7 +1050,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Column selector | Overview | Toggle 16 columns with Show All / Minimal presets |
 | Column sorting | All | Click column headers to sort asc/desc |
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
-| GPS drill-down | GPS | Click "Details" sets `expandedGps` state; `useEffect([expandedGps])` checks for embedded visits (snapshot) first, then lazy-loads from `/api/gps/<username>/` |
+| GPS drill-down | GPS | Click "Details" sets `expandedGps` state; `useEffect([expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal])` checks for embedded visits (snapshot) first, then lazy-loads from `/api/gps/<username>/` |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
 | Visit status distribution | Overview | Per-visit-type stacked bar chart (6 bars) with toggleable legend and "Not Due Yet" category |
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |

@@ -1317,7 +1317,8 @@ class MBWSaveSnapshotView(LoginRequiredMixin, View):
         try:
             save_dashboard_snapshot(request, run_id, snapshot_data)
             logger.info("[MBW Dashboard] Saved snapshot for run %s (via API)", run_id)
-            return JsonResponse({"success": True})
+            saved_at = datetime.now(dt_timezone.utc).isoformat()
+            return JsonResponse({"success": True, "timestamp": saved_at})
         except Exception as e:
             logger.error("[MBW Dashboard] Snapshot save failed: %s", e, exc_info=True)
             return JsonResponse({"error": "Failed to save snapshot"}, status=500)
