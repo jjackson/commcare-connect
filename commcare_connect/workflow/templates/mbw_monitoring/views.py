@@ -1292,7 +1292,7 @@ class MBWSaveSnapshotView(LoginRequiredMixin, View):
         if not isinstance(body, dict):
             return JsonResponse({"error": "Request body must be a JSON object"}, status=400)
 
-        run_id = body.get("run_id")
+        run_id = _parse_int_param(body.get("run_id"))
         if not run_id:
             return JsonResponse({"error": "run_id is required"}, status=400)
 

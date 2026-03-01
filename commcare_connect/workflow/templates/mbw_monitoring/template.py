@@ -1886,7 +1886,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             </span>
                         ) : (
                             <button onClick={function() { setShowCompleteModal(true); }}
-                                    className="inline-flex items-center px-3 py-1.5 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                                    disabled={snapshotSaving}
+                                    className={"inline-flex items-center px-3 py-1.5 text-sm text-white rounded-md " + (snapshotSaving ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700")}>
                                 <i className="fa-solid fa-check mr-1"></i> Complete Audit
                             </button>
                         )}
@@ -1946,9 +1947,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
-                    }} disabled={!sseComplete}
+                    }} disabled={!sseComplete || snapshotSaving}
                     className={'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ' +
-                        (sseComplete
+                        (sseComplete && !snapshotSaving
                             ? 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
                             : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed')}>
                         {'\u21BB'} Refresh Data
