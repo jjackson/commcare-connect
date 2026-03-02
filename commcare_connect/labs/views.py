@@ -78,6 +78,17 @@ def refresh_org_data(request):
     return HttpResponseRedirect(request.headers.get("referer", "/"))
 
 
+class ScoutEmbedView(LoginRequiredMixin, TemplateView):
+    """Embeds the Scout data agent widget via the widget SDK."""
+
+    template_name = "labs/scout.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["scout_url"] = "http://localhost:5173"
+        return ctx
+
+
 class LabsOverviewView(LoginRequiredMixin, TemplateView):
     """
     Main landing page for labs projects.
