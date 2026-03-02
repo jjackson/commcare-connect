@@ -101,13 +101,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var ALLOWED_STATUS_FILTERS = ['approved', 'pending', 'rejected', 'over_limit'];
     var _hydrateStatusFilter = function() {
         try {
             var raw = sessionStorage.getItem('mbw_pending_filters');
             if (raw) {
                 var parsed = JSON.parse(raw);
                 if (Array.isArray(parsed)) {
-                    var filtered = parsed.filter(function(v) { return typeof v === 'string' && v; });
+                    var filtered = parsed.filter(function(v) {
+                        return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+                    });
                     if (filtered.length > 0) return filtered;
                 }
             }
@@ -116,10 +119,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     };
     var _normalizeStatusFilter = function(val) {
         if (Array.isArray(val)) {
-            var filtered = val.filter(function(v) { return typeof v === 'string' && v; });
+            var filtered = val.filter(function(v) {
+                return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+            });
             return filtered.length > 0 ? filtered : null;
         }
-        if (val != null && typeof val === 'string' && val) return [val];
+        if (val != null && typeof val === 'string' && val && ALLOWED_STATUS_FILTERS.indexOf(val) !== -1) return [val];
         return null;
     };
     var [statusFilter, setStatusFilter] = React.useState(function() {
@@ -208,6 +213,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 ? prev.filter(function(c) { return c !== id; })
                 : prev.concat([id]);
         });
+    };
+
+    // Centralized color thresholds for Eligible 5+ / % Still Eligible
+    var ELIGIBLE_THRESHOLDS = { green: 85, yellow: 50 };
+    var getEligibleColor = function(pct) {
+        if (pct >= ELIGIBLE_THRESHOLDS.green) return 'green';
+        if (pct >= ELIGIBLE_THRESHOLDS.yellow) return 'yellow';
+        return 'red';
     };
 
     // CSRF helper
@@ -2454,7 +2467,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 {isColVisible('eligible_5') && (
                                                 <td className="px-4 py-3 text-sm">
                                                     {cse.total > 0 ? (
-                                                        <span className={cse.pct >= 70 ? 'text-green-600 font-medium' : cse.pct >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+                                                        <span className={getEligibleColor(cse.pct) === 'green' ? 'text-green-600 font-medium' : getEligibleColor(cse.pct) === 'yellow' ? 'text-yellow-600' : 'text-red-600'}>
                                                             {cse.eligible}/{cse.total} ({cse.pct}%)
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
@@ -3581,7 +3594,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_eligible_at_registration}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_still_eligible}</td>
-                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 85 ? '#22c55e' : row.pct_still_eligible >= 50 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
+                                                <td className="px-3 py-2 text-right font-medium" style={{color: getEligibleColor(row.pct_still_eligible) === 'green' ? '#22c55e' : getEligibleColor(row.pct_still_eligible) === 'yellow' ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_missed_1_or_less_visits}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_4_visits_on_track}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_5_visits_complete}%</td>
