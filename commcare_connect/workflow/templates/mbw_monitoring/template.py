@@ -74,6 +74,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [expandedGps, setExpandedGps] = React.useState(null);
     var [gpsDetail, setGpsDetail] = React.useState(null);
     var [gpsDetailLoading, setGpsDetailLoading] = React.useState(false);
+    var [gpsDetailSort, setGpsDetailSort] = React.useState({ col: 'visit_date', dir: 'asc' });
     var [expandedFu, setExpandedFu] = React.useState(null);
     var [showCompleteModal, setShowCompleteModal] = React.useState(false);
     var [completeNotes, setCompleteNotes] = React.useState('');
@@ -101,13 +102,18 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
-    // GPS Map state
+    // GPS Map state (per-FLW drill-down)
     var [leafletReady, setLeafletReady] = React.useState(false);
     var [showMapVisits, setShowMapVisits] = React.useState(true);
     var [showMapMothers, setShowMapMothers] = React.useState(true);
     var [selectedMother, setSelectedMother] = React.useState(null);
     var mapInstanceRef = React.useRef(null);
     var markersRef = React.useRef(null);
+
+    // Aggregate GPS Map state (all FLWs)
+    var [showAggregateMap, setShowAggregateMap] = React.useState(false);
+    var aggregateMapRef = React.useRef(null);
+    var aggregateMarkersRef = React.useRef(null);
 
     // OCS Task Modal state
     var [showOcsModal, setShowOcsModal] = React.useState(false);
@@ -147,6 +153,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         { id: 'ebf_pct', label: '% EBF' },
         { id: 'revisit_dist', label: 'Revisit Dist.' },
         { id: 'meter_visit', label: 'Meter/Visit' },
+        { id: 'dist_ratio', label: 'Dist. Ratio' },
         { id: 'minute_visit', label: 'Minute/Visit' },
         { id: 'phone_dup', label: 'Phone Dup %' },
         { id: 'anc_pnc', label: 'ANC = PNC' },
@@ -442,7 +449,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 d.thead.style.boxShadow = '';
             });
         };
-    }, [activeTab, sseComplete]);
+    }, [activeTab, sseComplete, showAggregateMap, expandedGps]);
 
     // Load Leaflet + MarkerCluster from CDN for GPS map
     React.useEffect(function() {
@@ -565,6 +572,80 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (markersRef.current && map) { map.removeLayer(markersRef.current); markersRef.current = null; }
         };
     }, [leafletReady, expandedGps, gpsDetail, showMapVisits, showMapMothers, selectedMother]);
+
+    // Aggregate GPS Map — all FLW visits with color-coded pins
+    React.useEffect(function() {
+        if (!leafletReady || !showAggregateMap) {
+            if (aggregateMapRef.current) { aggregateMapRef.current.remove(); aggregateMapRef.current = null; }
+            return;
+        }
+        var coords = (gpsData.all_coordinates || []);
+        if (coords.length === 0) return;
+
+        var mapDiv = document.getElementById('aggregate-gps-map');
+        if (!mapDiv) return;
+
+        // Create map if not exists
+        if (!aggregateMapRef.current) {
+            aggregateMapRef.current = L.map(mapDiv, { scrollWheelZoom: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '\u00a9 OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(aggregateMapRef.current);
+        }
+        var map = aggregateMapRef.current;
+
+        // Remove old markers
+        if (aggregateMarkersRef.current) { map.removeLayer(aggregateMarkersRef.current); }
+
+        // Build color palette: unique hue per FLW
+        var usernames = {};
+        coords.forEach(function(c) { usernames[c.u] = true; });
+        var sortedUsers = Object.keys(usernames).sort();
+        var flwColorMap = {};
+        sortedUsers.forEach(function(u, i) {
+            var hue = Math.round(i * 360 / sortedUsers.length);
+            flwColorMap[u] = 'hsl(' + hue + ', 70%, 45%)';
+        });
+
+        // Filter by active FLW filter if any
+        var activeCoords = filterFlws.length > 0
+            ? coords.filter(function(c) { return filterFlws.indexOf(c.u) >= 0; })
+            : coords;
+
+        var cluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 16 });
+
+        activeCoords.forEach(function(c) {
+            var color = c.f ? '#dc2626' : (flwColorMap[c.u] || '#3b82f6');
+            var borderColor = c.f ? '#991b1b' : '#374151';
+            var radius = c.f ? 7 : 5;
+            var flwName = '';
+            for (var gi = 0; gi < gpsFlws.length; gi++) {
+                if (gpsFlws[gi].username === c.u) { flwName = gpsFlws[gi].display_name || c.u; break; }
+            }
+            if (!flwName) flwName = c.u;
+            var marker = L.circleMarker([c.lat, c.lng], {
+                radius: radius, fillColor: color, color: borderColor, weight: 1, fillOpacity: 0.7
+            });
+            marker.bindPopup(
+                '<strong>' + flwName + '</strong>' +
+                (c.e ? '<br/>' + c.e : '') +
+                (c.d ? '<br/>Date: ' + c.d : '') +
+                (c.f ? '<br/><span style="color:#dc2626;font-weight:bold">Flagged</span>' : '')
+            );
+            cluster.addLayer(marker);
+        });
+
+        map.addLayer(cluster);
+        aggregateMarkersRef.current = cluster;
+        if (activeCoords.length > 0) {
+            map.fitBounds(cluster.getBounds(), { padding: [30, 30] });
+        }
+
+        return function() {
+            if (aggregateMarkersRef.current && map) { map.removeLayer(aggregateMarkersRef.current); aggregateMarkersRef.current = null; }
+        };
+    }, [leafletReady, showAggregateMap, gpsData, filterFlws]);
 
     // =========================================================================
     // Helpers
@@ -1575,6 +1656,18 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         return true;
     });
 
+    // Compute dist_ratio for GPS and Overview (revisit_distance_km * 1000 / median_meters_per_visit)
+    filteredGpsFlws.forEach(function(g) {
+        g.dist_ratio = (g.avg_case_distance_km != null && g.median_meters_per_visit != null && g.median_meters_per_visit > 0)
+            ? Math.round(g.avg_case_distance_km * 1000 / g.median_meters_per_visit * 10) / 10
+            : null;
+    });
+    filteredOverview.forEach(function(f) {
+        f.dist_ratio = (f.revisit_distance_km != null && f.median_meters_per_visit != null && f.median_meters_per_visit > 0)
+            ? Math.round(f.revisit_distance_km * 1000 / f.median_meters_per_visit * 10) / 10
+            : null;
+    });
+
     var filteredFuFlws = fuFlws.filter(function(f) {
         if (flwFilterSet && flwFilterSet.indexOf(f.username) < 0) return false;
         if (motherFilterSet) {
@@ -2154,6 +2247,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         {isColVisible('meter_visit') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'median_meters_per_visit'); }}
                                             sortIndicator={sortIcon(overviewSort, 'median_meters_per_visit')}
                                             tooltip="Median haversine distance (m) between consecutive visits">Meter/Visit</Th>}
+                                        {isColVisible('dist_ratio') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'dist_ratio'); }}
+                                            sortIndicator={sortIcon(overviewSort, 'dist_ratio')}
+                                            tooltip="Revisit distance / meter per visit. Higher values may indicate suspicious patterns.">Dist. Ratio</Th>}
                                         {isColVisible('minute_visit') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'median_minutes_per_visit'); }}
                                             sortIndicator={sortIcon(overviewSort, 'median_minutes_per_visit')}
                                             tooltip="Median time gap (min) between consecutive form submissions">Minute/Visit</Th>}
@@ -2277,7 +2373,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 {/* Revisit Dist */}
                                                 {isColVisible('revisit_dist') && (
                                                 <td className="px-4 py-3 text-sm text-gray-900">
-                                                    {f.revisit_distance_km != null ? f.revisit_distance_km + ' km' : <span className="text-gray-400">{'\u2014'}</span>}
+                                                    {f.revisit_distance_km != null ? (
+                                                        <span>{f.revisit_distance_km + ' km'} <span className="text-gray-500">({f.cases_with_revisits || 0})</span></span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 )}
                                                 {/* Meter/Visit */}
@@ -2288,6 +2386,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             {f.median_meters_per_visit + ' m'}
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                )}
+                                                {/* Dist. Ratio */}
+                                                {isColVisible('dist_ratio') && (
+                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                    {f.dist_ratio != null ? f.dist_ratio : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 )}
                                                 {/* Minute/Visit */}
@@ -2642,6 +2746,52 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     </div>
 
+                    {/* Aggregate GPS Map — all FLW visits */}
+                    {leafletReady && (gpsData.all_coordinates || []).length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
+                            <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                                <h2 className="text-sm font-semibold text-gray-700">
+                                    <i className="fa-solid fa-map text-blue-600 mr-2"></i>
+                                    All Visits Map
+                                    <span className="text-xs text-gray-500 font-normal ml-2">({(gpsData.all_coordinates || []).length} GPS points)</span>
+                                </h2>
+                                <button onClick={function() { setShowAggregateMap(function(p) { return !p; }); }}
+                                        className={'px-3 py-1.5 text-xs font-medium border rounded ' +
+                                            (showAggregateMap ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')}>
+                                    <i className={'fa-solid mr-1 ' + (showAggregateMap ? 'fa-chevron-up' : 'fa-chevron-down')}></i>
+                                    {showAggregateMap ? 'Hide Map' : 'Show Map'}
+                                </button>
+                            </div>
+                            {showAggregateMap && (
+                                <div className="p-4">
+                                    <div id="aggregate-gps-map" style={{height: '450px', width: '100%', borderRadius: '0.375rem', border: '1px solid #e5e7eb'}}></div>
+                                    {/* FLW Color Legend */}
+                                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 max-h-24 overflow-y-auto">
+                                        {(function() {
+                                            var usernames = {};
+                                            (gpsData.all_coordinates || []).forEach(function(c) { usernames[c.u] = true; });
+                                            var sortedUsers = Object.keys(usernames).sort();
+                                            return sortedUsers.map(function(u, i) {
+                                                var hue = Math.round(i * 360 / sortedUsers.length);
+                                                var color = 'hsl(' + hue + ', 70%, 45%)';
+                                                var name = u;
+                                                for (var gi = 0; gi < gpsFlws.length; gi++) {
+                                                    if (gpsFlws[gi].username === u) { name = gpsFlws[gi].display_name || u; break; }
+                                                }
+                                                return (
+                                                    <span key={u} className="inline-flex items-center">
+                                                        <span className="inline-block w-3 h-3 rounded-full mr-1" style={{backgroundColor: color}}></span>
+                                                        {name}
+                                                    </span>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* GPS FLW Table */}
                     <div className="bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
                         <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
@@ -2659,15 +2809,27 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'total_visits'); }}
                                             sortIndicator={sortIcon(gpsSort, 'total_visits')}
                                             tooltip="Total form submissions within the selected date range.">Total Visits</Th>
-                                        <ThStatic tooltip="Visits with parseable GPS coordinates (lat, lon).">With GPS</ThStatic>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'visits_with_gps'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'visits_with_gps')}
+                                            tooltip="Visits with parseable GPS coordinates (lat, lon).">With GPS</Th>
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'flagged_visits'); }}
                                             sortIndicator={sortIcon(gpsSort, 'flagged_visits')}
                                             tooltip="Visits flagged for anomalous GPS">Flagged</Th>
-                                        <ThStatic tooltip="Count of distinct mother case IDs visited by this FLW.">Unique Cases</ThStatic>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'unique_cases'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'unique_cases')}
+                                            tooltip="Count of distinct mother case IDs visited by this FLW.">Unique Cases</Th>
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'avg_case_distance_km'); }}
                                             sortIndicator={sortIcon(gpsSort, 'avg_case_distance_km')}
-                                            tooltip="Average haversine distance (km) between GPS coordinates">Avg Case Dist</Th>
-                                        <ThStatic tooltip="Largest haversine distance (km) observed">Max Case Dist</ThStatic>
+                                            tooltip="Avg haversine distance (km) between successive visits to same case. (N) = cases with 2+ visits.">Revisit Dist.</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'median_meters_per_visit'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'median_meters_per_visit')}
+                                            tooltip="Median haversine distance (m) between consecutive visits to different mothers in same day.">Meter/Visit</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'dist_ratio'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'dist_ratio')}
+                                            tooltip="Revisit distance / meter per visit. Higher values may indicate suspicious patterns.">Dist. Ratio</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'max_case_distance_km'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'max_case_distance_km')}
+                                            tooltip="Largest haversine distance (km) between visits to same case">Max Revisit Dist.</Th>
                                         <ThStatic tooltip="Daily visit count sparkline for the last 7 days">Trailing 7 Days</ThStatic>
                                         <ThStatic className="text-right">Actions</ThStatic>
                                     </tr>
@@ -2708,17 +2870,31 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 </td>
                                                 {/* Unique Cases */}
                                                 <td className="px-4 py-3 text-sm text-gray-900">{g.unique_cases || 0}</td>
-                                                {/* Avg Case Dist */}
+                                                {/* Revisit Dist. */}
                                                 <td className="px-4 py-3 text-sm text-gray-900">
-                                                    {g.avg_case_distance_km != null ? g.avg_case_distance_km + ' km' : <span className="text-gray-400">-</span>}
+                                                    {g.avg_case_distance_km != null ? (
+                                                        <span>{g.avg_case_distance_km + ' km'} <span className="text-gray-500">({g.cases_with_revisits || 0})</span></span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
-                                                {/* Max Case Dist */}
+                                                {/* Meter/Visit */}
+                                                <td className="px-4 py-3 text-sm">
+                                                    {g.median_meters_per_visit != null ? (
+                                                        <span className={g.median_meters_per_visit >= 1000 ? 'text-green-600 font-medium' : g.median_meters_per_visit >= 100 ? 'text-yellow-600' : 'text-red-600'}>
+                                                            {g.median_meters_per_visit + ' m'}
+                                                        </span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                {/* Dist. Ratio */}
+                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                    {g.dist_ratio != null ? g.dist_ratio : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                {/* Max Revisit Dist. */}
                                                 <td className="px-4 py-3 text-sm">
                                                     {g.max_case_distance_km != null ? (
                                                         <span className={g.max_case_distance_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'}>
                                                             {g.max_case_distance_km} km
                                                         </span>
-                                                    ) : <span className="text-gray-400">-</span>}
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 {/* Trailing 7 Days - BAR CHART */}
                                                 <td className="px-4 py-3 text-sm">
@@ -2757,7 +2933,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                             </tr>,
                                             isExpanded && gpsDetailLoading && (
                                                 <tr key={g.username + '_loading'}>
-                                                    <td colSpan={9} className="p-0 border-b-2 border-blue-200">
+                                                    <td colSpan={11} className="p-0 border-b-2 border-blue-200">
                                                         <div className="bg-blue-50 px-6 py-4 border-t border-blue-200 text-center">
                                                             <i className="fa-solid fa-spinner fa-spin text-blue-600 mr-2"></i>
                                                             <span className="text-sm text-gray-600">Loading visit details...</span>
@@ -2769,9 +2945,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 var displayVisits = selectedMother
                                                     ? (gpsDetail.visits || []).filter(function(v) { return v.mother_case_id === selectedMother || v.case_id === selectedMother; })
                                                     : (gpsDetail.visits || []);
+                                                displayVisits = sortRows(displayVisits, gpsDetailSort);
                                                 return (
                                                 <tr key={g.username + '_detail'}>
-                                                    <td colSpan={9} className="p-0 border-b-2 border-blue-200">
+                                                    <td colSpan={11} className="p-0 border-b-2 border-blue-200">
                                                         <div className="bg-blue-50 px-6 py-3 border-t border-blue-200">
                                                             <div className="flex justify-between items-center mb-2">
                                                                 <h4 className="text-sm font-semibold text-gray-900">
@@ -2826,12 +3003,22 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                                     <table className="min-w-full divide-y divide-gray-200">
                                                                         <thead className="bg-gray-50 sticky top-0">
                                                                             <tr>
-                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Form</th>
-                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'visit_date'); }}>
+                                                                                    Date{sortIcon(gpsDetailSort, 'visit_date')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'form_name'); }}>
+                                                                                    Form{sortIcon(gpsDetailSort, 'form_name')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'entity_name'); }}>
+                                                                                    Entity{sortIcon(gpsDetailSort, 'entity_name')}</th>
                                                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">GPS</th>
-                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Dist from Prev</th>
-                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'distance_from_prev_km'); }}>
+                                                                                    Revisit Dist.{sortIcon(gpsDetailSort, 'distance_from_prev_km')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'is_flagged'); }}>
+                                                                                    Status{sortIcon(gpsDetailSort, 'is_flagged')}</th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody className="bg-white divide-y divide-gray-200">
@@ -2877,7 +3064,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         );
                                     })}
                                     {sortedGps.length === 0 && (
-                                        <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">No GPS data available</td></tr>
+                                        <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-gray-500">No GPS data available</td></tr>
                                     )}
                                 </tbody>
                             </table>
@@ -3488,10 +3675,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </p>
                         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                             <div className="bg-blue-50 rounded px-3 py-2 text-blue-700 font-medium">
-                                <i className="fa-solid fa-chart-line mr-1"></i> Overview &mdash; 15 columns
+                                <i className="fa-solid fa-chart-line mr-1"></i> Overview &mdash; 16 columns
                             </div>
                             <div className="bg-green-50 rounded px-3 py-2 text-green-700 font-medium">
-                                <i className="fa-solid fa-location-dot mr-1"></i> GPS Analysis &mdash; 7 columns
+                                <i className="fa-solid fa-location-dot mr-1"></i> GPS Analysis &mdash; 9 columns + map
                             </div>
                             <div className="bg-amber-50 rounded px-3 py-2 text-amber-700 font-medium">
                                 <i className="fa-solid fa-clipboard-check mr-1"></i> Follow-Up Rate &mdash; 6+ columns
@@ -3619,7 +3806,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 {/* Revisit Dist. */}
                                 <div className="border-l-4 border-blue-200 pl-4 py-2">
                                     <h4 className="font-semibold text-gray-800">Revisit Dist.</h4>
-                                    <p className="mt-1"><strong>What it shows:</strong> Average distance (km) between successive GPS coordinates when the FLW revisits the <strong>same mother</strong>.</p>
+                                    <p className="mt-1"><strong>What it shows:</strong> Average distance (km) between successive GPS coordinates when the FLW revisits the <strong>same mother</strong>. Number in parentheses (N) = distinct mothers with 2+ GPS visits (the denominator for the average).</p>
                                     <p className="mt-1"><strong>How it&apos;s calculated:</strong> Group visits by mother case ID, sort by time, calculate Haversine distance between consecutive visits, then average across all pairs.</p>
                                     <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
                                         <div><strong>Data paths:</strong></div>
@@ -3642,6 +3829,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <div>Version filter: <code>form.meta.app_build_version</code></div>
                                     </div>
                                     <div className="mt-2 text-xs"><span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">Red flag: &lt;100 meters</span></div>
+                                </div>
+
+                                {/* Dist. Ratio */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Dist. Ratio</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Ratio of revisit distance (km) to meter per visit (km). A dimensionless number.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> <code>Revisit Dist. &times; 1000 / Meter/Visit</code>. For example, if revisit distance is 2 km and meter/visit is 500 m, the ratio is 4.0.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> A high ratio means revisit distance is disproportionately large compared to daily inter-visit travel &mdash; could indicate GPS spoofing or fabricated revisits. Values close to 1.0 are expected.</p>
                                 </div>
 
                                 {/* Minute/Visit */}
@@ -3780,8 +3975,23 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 </div>
 
                                 <div className="border-l-4 border-green-200 pl-4 py-2">
-                                    <h4 className="font-semibold text-gray-800">Avg Case Dist / Max Case Dist</h4>
-                                    <p className="mt-1">Average and maximum Haversine distance (km) between consecutive visits to the same mother. Max is red and bold when &gt; 5 km.</p>
+                                    <h4 className="font-semibold text-gray-800">Revisit Dist.</h4>
+                                    <p className="mt-1">Average Haversine distance (km) between successive visits to the <strong>same mother</strong>. Number in parentheses (N) = distinct mothers with 2+ GPS visits (the denominator for the average). Same metric as the Overview tab.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Meter/Visit</h4>
+                                    <p className="mt-1">Median Haversine distance (meters) between consecutive visits to <strong>different mothers</strong> within a single day. Same metric as the Overview tab. Color-coded: green &ge;1000 m, yellow &ge;100 m, red &lt;100 m.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Dist. Ratio</h4>
+                                    <p className="mt-1">Ratio of Revisit Dist. to Meter/Visit: <code className="bg-gray-100 px-1 rounded text-xs">(revisit_km &times; 1000) / meter_per_visit</code>. High values (e.g. &gt;5) indicate the revisit distance is disproportionately large vs. daily travel.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Max Revisit Dist.</h4>
+                                    <p className="mt-1">Largest Haversine distance (km) between consecutive visits to the same mother. Red and bold when &gt; 5 km.</p>
                                 </div>
 
                                 <div className="border-l-4 border-green-200 pl-4 py-2">
@@ -3789,8 +3999,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     <p className="mt-1">Sparkline bar chart showing daily travel over the last 7 days. Each bar = total path distance that day (sum of distances between consecutive visit locations).</p>
                                 </div>
 
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Aggregate Map</h4>
+                                <p>A collapsible map at the top of the GPS tab showing <strong>all FLW visits</strong> on a single map. Each FLW is assigned a unique color (HSL hue rotation). Markers are clustered at higher zoom levels for performance. Click markers for visit details (FLW name, entity, date, flagged status). Flagged visits appear as red markers regardless of FLW color.</p>
+
                                 <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">GPS Drill-Down</h4>
-                                <p>Clicking &quot;Details&quot; shows individual visit records with: Date, Form type, Entity (mother name), GPS coordinates, Distance from previous visit to same mother, and Flag status (&gt; 5 km).</p>
+                                <p>Clicking &quot;Details&quot; shows individual visit records with: Date, Form type, Entity (mother name), GPS coordinates, Revisit Dist. (distance from previous visit to same mother), and Flag status (&gt; 5 km). An interactive map shows visit and mother locations.</p>
                             </div>
                     </div>
 
@@ -4043,7 +4256,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     <h4 className="font-semibold text-gray-800 mb-2">GPS Flags</h4>
                                     <div className="grid grid-cols-3 gap-2 text-xs">
                                         <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Revisit to same mother &gt; 5 km</div>
-                                        <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Max Case Dist &gt; 5 km</div>
+                                        <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Max Revisit Dist. &gt; 5 km</div>
                                         <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Meter/Visit &lt; 100 m</div>
                                     </div>
                                 </div>
