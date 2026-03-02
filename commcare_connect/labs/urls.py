@@ -20,6 +20,8 @@ urlpatterns = [
     path("dashboard/", connect_oauth_views.labs_dashboard, name="dashboard"),
     # Labs Overview
     path("overview/", views.LabsOverviewView.as_view(), name="overview"),
+    # Scout data agent
+    path("scout/", views.ScoutEmbedView.as_view(), name="scout_embed"),
     # CommCare OAuth (for API access)
     path("commcare/initiate/", commcare_oauth_views.labs_commcare_initiate, name="commcare_initiate"),
     path("commcare/callback/", commcare_oauth_views.labs_commcare_callback, name="commcare_callback"),
