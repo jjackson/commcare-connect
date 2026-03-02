@@ -387,6 +387,13 @@ class SQLBackend:
                 if key == "entity_id":
                     computed_qs = computed_qs.filter(entity_id=value)
                     logger.info(f"[SQL] Applying entity_id filter: {value}")
+                # status is a column on ComputedVisitCache, not in computed_fields JSONB
+                elif key == "status":
+                    if isinstance(value, list):
+                        computed_qs = computed_qs.filter(status__in=value)
+                    else:
+                        computed_qs = computed_qs.filter(status=value)
+                    logger.info(f"[SQL] Applying status filter: {value}")
                 # All other filters are treated as computed field filters
                 # This enables linking by fields like beneficiary_case_id, rutf_case_id, etc.
                 else:
