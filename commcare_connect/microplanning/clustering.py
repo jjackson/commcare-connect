@@ -121,7 +121,7 @@ class WorkAreaGrouper:
         spatial_index = STRtree(geometries)
 
         for work_area_id, geom in transformed_geoms.items():
-            query_geom = geom.buffer(self.buffer_distance / 2)
+            query_geom = geom.buffer(self.buffer_distance)
             candidate_indices = spatial_index.query(query_geom, predicate="intersects")
 
             for idx in candidate_indices:
