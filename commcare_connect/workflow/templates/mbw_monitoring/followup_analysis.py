@@ -1120,9 +1120,9 @@ def compute_flw_performance_by_status(
             if completed >= 5 or missed <= 1:
                 still_eligible += 1
 
-        # --- pct missed ≤1 (all mothers, not just eligible) ---
+        # --- pct missed ≤1 (eligible mothers only) ---
         missed_1_or_less = 0
-        for m in all_mothers:
+        for m in eligible_mothers:
             missed = sum(1 for v in m["visits"] if v["status"] == "Missed")
             if missed <= 1:
                 missed_1_or_less += 1
@@ -1132,7 +1132,7 @@ def compute_flw_performance_by_status(
         for visit_display_type, min_completed, metric_key in _VISIT_MILESTONES:
             denominator = 0
             numerator = 0
-            for m in all_mothers:
+            for m in eligible_mothers:
                 # Find the specific visit type for this mother
                 milestone_visit = None
                 for v in m["visits"]:
@@ -1170,7 +1170,7 @@ def compute_flw_performance_by_status(
             "total_cases_eligible_at_registration": total_eligible,
             "total_cases_still_eligible": still_eligible,
             "pct_still_eligible": round(still_eligible / total_eligible * 100) if total_eligible > 0 else 0,
-            "pct_missed_1_or_less_visits": round(missed_1_or_less / total_cases * 100) if total_cases > 0 else 0,
+            "pct_missed_1_or_less_visits": round(missed_1_or_less / total_eligible * 100) if total_eligible > 0 else 0,
             **milestone_results,
         })
 

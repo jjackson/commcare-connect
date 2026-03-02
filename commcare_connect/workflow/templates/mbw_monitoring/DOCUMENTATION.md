@@ -539,10 +539,10 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 | Eligible at Reg | Mothers marked eligible for full intervention bonus at registration |
 | Still Eligible | Mothers with 5+ completed visits OR <=1 missed visits |
 | % Still Eligible | Still Eligible / Eligible at Reg (color: green >=70%, yellow 50-69%, red <50%) |
-| % <=1 Missed | Cases with 0 or 1 missed visits / all cases |
-| % 4 Visits On Track | Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
-| % 5 Visits Complete | Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
-| % 6 Visits Complete | Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
+| % <=1 Missed | Eligible cases with 0 or 1 missed visits / eligible cases |
+| % 4 Visits On Track | Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
+| % 5 Visits Complete | Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
+| % 6 Visits Complete | Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
 
 **Totals Row**: Aggregated totals across all status groups.
 
