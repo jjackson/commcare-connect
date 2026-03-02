@@ -105,12 +105,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     try {
         var _raw = sessionStorage.getItem('mbw_pending_filters');
         if (_raw) {
-            _savedStatusFilter = JSON.parse(_raw);
+            var _parsed = JSON.parse(_raw);
+            if (Array.isArray(_parsed)) _savedStatusFilter = _parsed;
             sessionStorage.removeItem('mbw_pending_filters');
         }
     } catch(e) {}
-    var [statusFilter, setStatusFilter] = React.useState(_savedStatusFilter || instance.state?.status_filter || ['approved']);
-    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(_savedStatusFilter || instance.state?.status_filter || ['approved']);
+    var _normalizeStatusFilter = function(val) {
+        if (Array.isArray(val)) return val;
+        if (val != null) return [val];
+        return null;
+    };
+    var _initFilter = _normalizeStatusFilter(_savedStatusFilter)
+        || _normalizeStatusFilter(instance.state?.status_filter)
+        || ['approved'];
+    var [statusFilter, setStatusFilter] = React.useState(_initFilter);
+    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(_initFilter);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
     // GPS Map state (per-FLW drill-down)
@@ -3556,7 +3565,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_eligible_at_registration}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_still_eligible}</td>
-                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 80 ? '#22c55e' : row.pct_still_eligible >= 60 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
+                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 85 ? '#22c55e' : row.pct_still_eligible >= 50 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_missed_1_or_less_visits}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_4_visits_on_track}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_5_visits_complete}%</td>
@@ -3587,7 +3596,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         var total5Num = 0; var total5Den = 0;
                                         var total6Num = 0; var total6Den = 0;
                                         perf.forEach(function(r) {
-                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases_eligible_at_registration / 100);
+                                            totalMissedNum += r.pct_missed_1_or_less_visits * r.total_cases_eligible_at_registration / 100;
                                         });
                                         var pctMissed = totals.total_cases_eligible_at_registration > 0 ? Math.round(totalMissedNum / totals.total_cases_eligible_at_registration * 100) : 0;
                                         return (
@@ -4255,8 +4264,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <h4 className="font-semibold text-gray-800">Still Eligible / % Still Eligible</h4>
                                         <p className="mt-1">Among eligible mothers: those with 5+ completed visits OR &le;1 missed visit. Percentage = (still eligible / eligible at reg) &times; 100.</p>
                                         <div className="mt-2 flex gap-2 text-xs">
-                                            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;70% Green</span>
-                                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;69% Yellow</span>
+                                            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
                                             <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
                                         </div>
                                     </div>

@@ -422,9 +422,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             VALID_STATUSES = {"approved", "pending", "rejected", "over_limit"}
             status_filter_raw = request.GET.get("status_filter", "")
             status_filter = [
-                s.strip() for s in status_filter_raw.split(",")
-                if s.strip() in VALID_STATUSES
+                s.strip().lower() for s in status_filter_raw.split(",")
+                if s.strip().lower() in VALID_STATUSES
             ] if status_filter_raw else []
+            if status_filter_raw and not status_filter:
+                yield send_sse_event("Error", error="Invalid status_filter values")
+                return
 
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
             bust_cache = request.GET.get("bust_cache") == "1"
@@ -1006,9 +1009,11 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         VALID_STATUSES = {"approved", "pending", "rejected", "over_limit"}
         status_filter_raw = request.GET.get("status_filter", "")
         status_filter = [
-            s.strip() for s in status_filter_raw.split(",")
-            if s.strip() in VALID_STATUSES
+            s.strip().lower() for s in status_filter_raw.split(",")
+            if s.strip().lower() in VALID_STATUSES
         ] if status_filter_raw else []
+        if status_filter_raw and not status_filter:
+            return JsonResponse({"error": "Invalid status_filter values"}, status=400)
 
         try:
             visits_for_analysis = self._load_visits_from_cache(
