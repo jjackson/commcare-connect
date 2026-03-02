@@ -294,7 +294,7 @@ The stream view executes 7 steps, yielding progress messages at each stage:
 
 Data is NOT sent as one large final payload. Instead, the backend sends 3 separate `data_section` SSE events to prevent OOM on large opportunities (50K+ visits):
 
-1. **GPS section** — `gps_data` (FLW summaries without visits, date range, flag threshold)
+1. **GPS section** — `gps_data` (FLW summaries without visits, date range, flag threshold, all_coordinates for aggregate map)
 2. **Follow-up section** — `followup_data` (per-FLW/per-mother metrics, visit status distribution)
 3. **Overview + Performance section** — `overview_data`, `performance`, monitoring session metadata
 
@@ -380,7 +380,8 @@ The final SSE payload (`data.data`) contains:
     "total_flagged": 12,
     "date_range_start": "2025-01-01",
     "date_range_end": "2025-01-31",
-    "flw_summaries": [...]
+    "flw_summaries": [...],  // Each summary includes cases_with_revisits and median_meters_per_visit
+    "all_coordinates": [...]  // Array of {lat, lng, username, entity, date, flagged} for aggregate map
   },
   "followup_data": {
     "total_cases": 300,
@@ -439,7 +440,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 - Interactive legend below the chart: click categories to toggle visibility on/off (dimmed + strike-through when hidden)
 - Bar heights proportional to count (tallest bar = full height, others scaled)
 
-**FLW Table Columns** (13 columns, toggleable via Column Selector):
+**FLW Table Columns** (14 columns, toggleable via Column Selector):
 
 | Column | Data Source | Description |
 |--------|-----------|-------------|
@@ -449,9 +450,10 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Post-Test | TBD | Post-test attempts (placeholder, shows "--") |
 | Follow-up Rate | Follow-up analysis | % of visits due 5+ days ago that are completed, among eligible mothers |
 | Eligible 5+ | Drill-down data | Eligible mothers still on track (5+ completed OR <=1 missed). Color: green >=70%, yellow 50-69%, red <50% |
-| Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother |
+| Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother, with "(N)" denominator showing cases with 2+ GPS visits |
 | Meter/Visit | GPS analysis | Median meters traveled per visit (configurable app version filter via Filter bar) |
 | Minute/Visit | GPS analysis | Median minutes per visit |
+| Dist. Ratio | GPS analysis | Revisit distance x 1000 / meter per visit. Higher values may indicate suspicious patterns |
 | Phone Dup % | Quality metrics | % of mothers sharing duplicate phone numbers |
 | ANC = PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
 | Parity | Quality metrics | Parity value concentration (% duplicate + mode) |
@@ -460,7 +462,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | % EBF | Pipeline (bf_status) | % of FLW's postnatal visits reporting exclusive breastfeeding. Color: green 50-85%, yellow 31-49% or 86-95%, red 0-30% or 96-100%. Red flag in OCS prompt when in red zone. |
 | Actions | Action handlers | Assessment buttons, notes, filter, task creation (locked, always visible) |
 
-**Column Selector**: Dropdown next to "FLW Overview" title showing N/16 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
+**Column Selector**: Dropdown next to "FLW Overview" title showing N/17 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
 
 **Actions per FLW** (Overview tab only - other tabs have Filter only):
 
@@ -477,7 +479,7 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 
 **Summary Cards**: Total Visits, Flagged Visits, Date Range, Flag Threshold (5 km)
 
-**FLW Table Columns**:
+**FLW Table Columns** (all columns are sortable):
 
 | Column | Description |
 |--------|-------------|
@@ -486,13 +488,17 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 | With GPS | Count + percentage |
 | Flagged | Visits exceeding 5km threshold (highlighted red) |
 | Unique Cases | Distinct mother_case_id count |
-| Avg Case Dist | Average distance between visits to same case (km) |
-| Max Case Dist | Maximum distance (red if >5km) |
+| Revisit Dist. | Median haversine distance (km) between revisits to the same mother, with "(N)" denominator showing cases with 2+ GPS visits |
+| Max Revisit Dist. | Maximum revisit distance (red if >5km) |
+| Meter/Visit | Median haversine distance (m) between consecutive visits to different mothers on the same day. Color-coded: green >=1000m, yellow >=100m, red <100m |
+| Dist. Ratio | Revisit distance x 1000 / meter per visit. Higher values may indicate suspicious patterns (close revisits but far daily travel, or vice versa) |
 | Trailing 7 Days | Sparkline bar chart of daily travel distance |
+
+**Aggregate Map**: A collapsible map at the top of the GPS tab showing all FLW visits with color-coded pins (HSL hue rotation per FLW). Uses MarkerCluster for performance with large datasets. Each popup shows FLW name, entity, date, and flagged status. Collapsed by default — click to expand. A legend below the map shows the FLW-to-color mapping.
 
 **Actions per FLW**: Filter button, Details drill-down button (no assessment or task buttons)
 
-**Drill-Down**: Clicking "Details" on a FLW row expands an inline panel showing individual visit records with date, form name, entity, GPS coordinates, distance from previous visit, and flagged status.
+**Drill-Down**: Clicking "Details" on a FLW row expands an inline panel showing individual visit records with date, form name, entity, GPS coordinates, revisit distance (haversine distance from previous visit to the same mother), and flagged status.
 
 ### Follow-Up Rate Tab
 
@@ -585,7 +591,7 @@ Used for: Dynamic xmlns discovery
 Pipeline Visit Forms (Connect API)
     |
     +-- username ----------> FLW Names (Connect API)
-    +-- GPS coordinates --> GPS Analysis (Haversine, meter/visit, min/visit)
+    +-- GPS coordinates --> GPS Analysis (Haversine, meter/visit, min/visit, dist. ratio, aggregate map)
     +-- form_name ---------> Visit type normalization (FORM_NAME_TO_VISIT_TYPE)
     +-- mother_case_id ----> Mother-to-FLW mapping
     +-- parity ------------> Quality metrics (from ANC Visit rows)
@@ -1047,8 +1053,8 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
 | Mother filter (multi-select) | Follow-Up | Filter by mother name |
-| Column selector | Overview | Toggle 16 columns with Show All / Minimal presets |
-| Column sorting | All | Click column headers to sort asc/desc |
+| Column selector | Overview | Toggle 17 columns with Show All / Minimal presets |
+| Column sorting | All | Click column headers to sort asc/desc (all GPS tab columns are now sortable) |
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
 | GPS drill-down | GPS | Click "Details" sets `expandedGps` state; `useEffect([expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal])` checks for embedded visits (snapshot) first, then lazy-loads from `/api/gps/<username>/` |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
@@ -1056,6 +1062,10 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |
 | Trailing 7-day sparkline | GPS | Daily travel distance bar chart |
 | GPS flag threshold (5km) | GPS | Red highlighting for suspicious distances |
+| Aggregate GPS map | GPS | Collapsible map at top of tab showing all FLW visits with color-coded pins (HSL hue rotation), MarkerCluster for performance, FLW legend below map |
+| Meter/Visit column | GPS, Overview | Median haversine distance (m) between consecutive visits to different mothers on same day. Color-coded: green >=1000m, yellow >=100m, red <100m |
+| Dist. Ratio column | GPS, Overview | Revisit distance x 1000 / meter per visit — higher values may indicate suspicious patterns |
+| Revisit denominator | GPS, Overview | Revisit Dist. now shows "(N)" where N = cases with 2+ GPS visits |
 | Follow-up rate (business def) | Follow-Up | Eligibility + grace period filtered rate |
 | GS Score from CCHQ | Overview | First Gold Standard score from supervisor app |
 | Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC=PNC, age=reg |

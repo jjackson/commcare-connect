@@ -742,13 +742,37 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
             # Build GPS median distances per FLW (revisit distance)
             gps_median_by_flw = {}
+            gps_revisit_cases_by_flw = {}
             for flw in gps_result.flw_summaries:
                 if flw.avg_case_distance_km is not None:
                     gps_median_by_flw[flw.username] = round(flw.avg_case_distance_km, 2)
+                gps_revisit_cases_by_flw[flw.username] = flw.cases_with_revisits
 
             # Compute median meters/visit and minutes/visit from GPS visits
             meters_per_visit_by_flw = compute_median_meters_per_visit(gps_result.visits)
             minutes_per_visit_by_flw = compute_median_minutes_per_visit(gps_result.visits)
+
+            # Merge meter/visit and cases_with_revisits into GPS FLW summaries for GPS tab
+            for flw_summary in gps_data["flw_summaries"]:
+                flw_summary["median_meters_per_visit"] = meters_per_visit_by_flw.get(
+                    flw_summary["username"]
+                )
+
+            # Extract lightweight coordinates for aggregate GPS map
+            all_coordinates = []
+            for v in gps_result.visits:
+                if v.gps:
+                    all_coordinates.append({
+                        "lat": round(v.gps.latitude, 5),
+                        "lng": round(v.gps.longitude, 5),
+                        "u": v.username,
+                        "f": v.is_flagged,
+                        "d": v.visit_date.isoformat() if v.visit_date else None,
+                        "e": v.entity_name,
+                        "m": v.mother_case_id or v.case_id,
+                    })
+            gps_data["all_coordinates"] = all_coordinates
+
             del gps_result  # Free GPSAnalysisResult with ~60k VisitWithGPS objects
 
             # Build completed visits and followup rate from follow-up data
@@ -818,6 +842,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                     "followup_rate": followup_rate_by_flw.get(username, 0),
                     "ebf_pct": ebf_pct_by_flw.get(username),
                     "revisit_distance_km": gps_median_by_flw.get(username),
+                    "cases_with_revisits": gps_revisit_cases_by_flw.get(username, 0),
                     "median_meters_per_visit": meters_per_visit_by_flw.get(username),
                     "median_minutes_per_visit": minutes_per_visit_by_flw.get(username),
                     **quality_metrics.get(username, {}),
@@ -1021,7 +1046,7 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         visits_for_analysis = []
         for row in rows:
             computed = row["computed_fields"] or {}
-            gps_location = computed.get("gps_location")
+            gps_location = computed.get("gps_location") or row.get("location")
             visits_for_analysis.append({
                 "id": row["visit_id"],
                 "username": username_lower,
@@ -1226,7 +1251,7 @@ def _rebuild_gps_with_visits(request, gps_data, opportunity_id=None):
         visits_for_analysis = []
         for row in rows:
             computed = row["computed_fields"] or {}
-            gps_location = computed.get("gps_location")
+            gps_location = computed.get("gps_location") or row.get("location")
             visits_for_analysis.append({
                 "id": row["visit_id"],
                 "username": (row["username"] or "").lower(),
