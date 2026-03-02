@@ -102,9 +102,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var ALLOWED_STATUS_FILTERS = ['approved', 'pending', 'rejected', 'over_limit'];
+    var _statusFilterKey = 'mbw_pending_filters:' + (instance.id || 'default');
     var _hydrateStatusFilter = function() {
         try {
-            var raw = sessionStorage.getItem('mbw_pending_filters');
+            var raw = sessionStorage.getItem(_statusFilterKey);
             if (raw) {
                 var parsed = JSON.parse(raw);
                 if (Array.isArray(parsed)) {
@@ -138,7 +139,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             || ['approved'];
     });
     React.useEffect(function() {
-        sessionStorage.removeItem('mbw_pending_filters');
+        sessionStorage.removeItem(_statusFilterKey);
     }, []);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
@@ -1002,7 +1003,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
-        try { sessionStorage.removeItem('mbw_pending_filters'); } catch(e) {}
+        try { sessionStorage.removeItem(_statusFilterKey); } catch(e) {}
         var needsRefresh = appliedAppVersionOp !== 'gt' || appliedAppVersionVal !== '14';
         var statusNeedsRefresh = JSON.stringify(appliedStatusFilter.slice().sort()) !== JSON.stringify(['approved']);
         setAppVersionOp('gt');
@@ -2255,7 +2256,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 var valChanged = appVersionVal !== appliedAppVersionVal;
                                 var statusChanged = JSON.stringify(statusFilter.slice().sort()) !== JSON.stringify(appliedStatusFilter.slice().sort());
                                 if (opChanged || valChanged || statusChanged) {
-                                    try { sessionStorage.setItem('mbw_pending_filters', JSON.stringify(statusFilter)); } catch(e) {}
+                                    try { sessionStorage.setItem(_statusFilterKey, JSON.stringify(statusFilter)); } catch(e) {}
                                     setAppliedAppVersionOp(appVersionOp);
                                     setAppliedAppVersionVal(appVersionVal);
                                     setAppliedStatusFilter(statusFilter);
