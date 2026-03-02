@@ -622,8 +622,8 @@ Mothers marked as eligible for the full intervention bonus at the time of regist
 **(Still Eligible / Eligible at Reg) × 100**
 
 **Color coding:**
-- Green: 70% or above
-- Yellow: 50-69%
+- Green: 85% or above
+- Yellow: 50-84%
 - Red: below 50%
 
 #### % ≤1 Missed
@@ -725,8 +725,8 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 
 | Color | Range |
 |-------|-------|
-| Green | ≥ 70% |
-| Yellow | 50-69% |
+| Green | ≥ 85% |
+| Yellow | 50-84% |
 | Red | < 50% |
 
 ### Last Active Colors
