@@ -575,15 +575,25 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // Aggregate GPS Map — all FLW visits with color-coded pins
     React.useEffect(function() {
+        function teardown() {
+            if (aggregateMarkersRef.current && aggregateMapRef.current) {
+                aggregateMapRef.current.removeLayer(aggregateMarkersRef.current);
+                aggregateMarkersRef.current = null;
+            }
+            if (aggregateMapRef.current) {
+                aggregateMapRef.current.remove();
+                aggregateMapRef.current = null;
+            }
+        }
         if (!leafletReady || !showAggregateMap) {
-            if (aggregateMapRef.current) { aggregateMapRef.current.remove(); aggregateMapRef.current = null; }
+            teardown();
             return;
         }
         var coords = (gpsData && gpsData.all_coordinates) || [];
-        if (coords.length === 0) return;
+        if (coords.length === 0) { teardown(); return; }
 
         var mapDiv = document.getElementById('aggregate-gps-map');
-        if (!mapDiv) return;
+        if (!mapDiv) { teardown(); return; }
 
         // Create map if not exists
         if (!aggregateMapRef.current) {
@@ -643,9 +653,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
 
         return function() {
-            if (aggregateMarkersRef.current && map) { map.removeLayer(aggregateMarkersRef.current); aggregateMarkersRef.current = null; }
+            if (aggregateMarkersRef.current && aggregateMapRef.current) {
+                aggregateMapRef.current.removeLayer(aggregateMarkersRef.current);
+                aggregateMarkersRef.current = null;
+            }
         };
-    }, [leafletReady, showAggregateMap, gpsData, filterFlws]);
+    }, [leafletReady, showAggregateMap, gpsData, filterFlws, activeTab]);
 
     // =========================================================================
     // Helpers
@@ -1661,15 +1674,19 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     });
 
     // Compute dist_ratio for GPS and Overview (revisit_distance_km * 1000 / median_meters_per_visit)
-    filteredGpsFlws.forEach(function(g) {
-        g.dist_ratio = (g.avg_case_distance_km != null && g.median_meters_per_visit != null && g.median_meters_per_visit > 0)
-            ? Math.round(g.avg_case_distance_km * 1000 / g.median_meters_per_visit * 10) / 10
-            : null;
+    filteredGpsFlws = filteredGpsFlws.map(function(g) {
+        return Object.assign({}, g, {
+            dist_ratio: (g.avg_case_distance_km != null && g.median_meters_per_visit != null && g.median_meters_per_visit > 0)
+                ? Math.round(g.avg_case_distance_km * 1000 / g.median_meters_per_visit * 10) / 10
+                : null
+        });
     });
-    filteredOverview.forEach(function(f) {
-        f.dist_ratio = (f.revisit_distance_km != null && f.median_meters_per_visit != null && f.median_meters_per_visit > 0)
-            ? Math.round(f.revisit_distance_km * 1000 / f.median_meters_per_visit * 10) / 10
-            : null;
+    filteredOverview = filteredOverview.map(function(f) {
+        return Object.assign({}, f, {
+            dist_ratio: (f.revisit_distance_km != null && f.median_meters_per_visit != null && f.median_meters_per_visit > 0)
+                ? Math.round(f.revisit_distance_km * 1000 / f.median_meters_per_visit * 10) / 10
+                : null
+        });
     });
 
     var filteredFuFlws = fuFlws.filter(function(f) {
