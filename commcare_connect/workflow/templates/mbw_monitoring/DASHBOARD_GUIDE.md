@@ -44,7 +44,7 @@ The filter bar sits above all tabs and provides controls that affect the data sh
 - **Apply**: Click to apply any changes to Visit Status or App Version. These filters require a server reload.
 - **Reset**: Restores all filters to defaults (Approved only, App Version > 14, no FLW/mother selection).
 
-> **Note**: Changing Visit Status typically does **not** re-download data from Connect. The dashboard reuses its cached pipeline data and applies the filter server-side, so switching statuses is usually fast (seconds, not minutes). Exceptions include a cold or expired cache, or when a forced refresh (`?bust_cache=1`) triggers a full re-download.
+> **Note**: Changing Visit Status typically does not re-download data from Connect. The dashboard reuses its cached pipeline data and applies the filter server-side, so switching statuses is usually fast (seconds, not minutes). Exceptions include a cold or expired cache, or when a forced refresh (`?bust_cache=1`) triggers a full re-download.
 
 ---
 
@@ -635,9 +635,9 @@ Mothers marked as eligible for the full intervention bonus at the time of regist
 **What it shows:** Among **eligible** mothers whose Month 1 visit is due (5-day grace), what percentage have 3 or more completed visits?
 
 **How it's calculated:**
-1. Filter to eligible mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., they should have completed their first 4 visits by now)
-2. Count those with 3+ total completed visits
-3. **(with 3+ completed / total eligible with Month 1 due) × 100**
+1. Filter to eligible mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., all 4 visits up to Month 1 should be completable by now)
+2. Count those with 3+ total completed visits (the "3-of-4" threshold — on track if at most 1 visit is incomplete)
+3. **(eligible with ≥3 completed / total eligible with Month 1 due) × 100**
 
 **Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "1 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
