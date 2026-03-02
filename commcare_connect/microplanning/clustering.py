@@ -10,6 +10,41 @@ from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 
 
 class WorkAreaGrouper:
+    """
+    This class uses a spatial clustering algorithm to combine neighboring work areas into
+    groups. The grouping process:
+
+    1. Separates work areas by ward (wards are never mixed in groups)
+    2. Identifies adjacent work areas using shared boundaries or proximity
+    3. Uses breadth-first search (BFS) to form spatially contiguous clusters
+    4. Respects a maximum building count per cluster
+    5. Creates WorkAreaGroup objects and assigns work areas to them
+
+
+    Adjacency Detection:
+    - Two work areas are considered adjacent if they share a boundary
+    - OR if they are within buffer_distance meters of each other
+    - Adjacency is computed in EPSG:3857 (Web Mercator) for accurate distance calculations
+
+    Clustering Strategy:
+    - Work areas are processed in a deterministic order (sorted by centroid coordinates)
+    - Starting from each unvisited area, a BFS expands to adjacent areas
+    - Areas are added to the cluster if they don't exceed max_buildings
+    - Each cluster becomes a WorkAreaGroup
+
+    Args:
+        opportunity_id:  The ID of the opportunity whose work areas should be grouped
+        max_buildings:   Maximum total building count allowed per work area group.
+                         Default is 300.
+        buffer_distance: Distance in meters to consider work areas as adjacent even if
+                         they don't share a boundary. Default is 100 meters. This helps
+                         connect work areas that are close but separated by small gaps.
+
+    Note:
+        - Only work areas without an existing work_area_group are processed
+        - Work areas from different wards are never grouped together
+    """
+
     def __init__(
         self,
         opportunity_id: int,
