@@ -40,7 +40,7 @@ The dashboard runs within the **Workflow module** of Connect Labs. The UI is a R
 
 - **Render code pattern**: The entire dashboard UI (~1,860 lines of JSX) lives in a Python string (`RENDER_CODE`), transpiled by Babel in the browser. Only `React` is available as a global - no imports. All declarations use `var` (not `const`/`let`) for Babel compatibility.
 - **Single SSE connection**: All three tabs load data from one streaming endpoint, avoiding redundant API calls
-- **Client-side filtering**: Raw data is sent once; FLW and mother filtering happens entirely in the browser via React state
+- **Hybrid filtering**: Some filters (Visit Status, App Version) are server-side and trigger an SSE reload with updated pipeline data; others (FLW, Mother, Date) are client-side and operate on already-fetched data via React state. Server-side filters require clicking "Apply" and state is persisted in `sessionStorage` to survive OAuth redirects.
 - **Two-layer caching**: Pipeline-level cache (Redis) for visit form data + Django cache for CCHQ form/case data
 - **Tolerance-based cache validation**: Caches are accepted if they meet count, percentage, or time-based tolerance thresholds
 - **No database writes**: All data is fetched from external APIs (Connect Production + CommCare HQ) and cached transiently. Workflow state is persisted via the LabsRecord API.
@@ -281,7 +281,7 @@ The stream view executes 7 steps, yielding progress messages at each stage:
 
 | Step | Data Source | What It Fetches | Cache |
 |------|-----------|-----------------|-------|
-| 1 | Connect API via AnalysisPipeline | Visit form data (13 FieldComputations: GPS, case IDs, form names, dates, parity, etc.) | Pipeline cache (Redis, config-hash based) |
+| 1 | Connect API via AnalysisPipeline | Visit form data (13 FieldComputations: GPS, case IDs, form names, dates, parity, etc.). Filtered by `status_filter` param (default: approved only) via SQL `WHERE status IN (...)` | Pipeline cache (Redis, config-hash based; filter changes reuse cache) |
 | 2 | Connect API | Active FLW usernames + display names | In-memory |
 | 3 | In-memory | GPS metrics (Haversine distances, daily travel) | None (computed) |
 | 4a | CCHQ Form API v1 | Registration forms -> mother metadata (name, age, phone, eligibility, EDD, etc.) | Django cache (1hr) |
@@ -538,11 +538,11 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 | Total Cases | Total registered mothers across all FLWs in the group |
 | Eligible at Reg | Mothers marked eligible for full intervention bonus at registration |
 | Still Eligible | Mothers with 5+ completed visits OR <=1 missed visits |
-| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=70%, yellow 50-69%, red <50%) |
-| % <=1 Missed | Cases with 0 or 1 missed visits / all cases |
-| % 4 Visits On Track | Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
-| % 5 Visits Complete | Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
-| % 6 Visits Complete | Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
+| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=85%, yellow 50-84%, red <50%) |
+| % <=1 Missed | Eligible cases with 0 or 1 missed visits / eligible cases |
+| % 4 Visits On Track | Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
+| % 5 Visits Complete | Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
+| % 6 Visits Complete | Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
 
 **Totals Row**: Aggregated totals across all status groups.
 
@@ -899,6 +899,10 @@ Note: "Suspended" is a **label only** - it does NOT trigger any action on Connec
 | Computed Visit Cache | Visit-level computed fields (GPS, case IDs, dates, etc.) | `opportunity_id` + `config_hash` | Configurable TTL | Keyed by opportunity_id + config_hash; username as secondary index for filtered queries |
 | Dashboard Snapshot | Computed dashboard metrics | `run.data["snapshot"]` | Permanent (updated on refresh) | Per run |
 
+### Filter-Aware Caching
+
+The pipeline config hash **excludes filters** (via `get_config_hash()` in `utils.py`), so one cached dataset serves multiple filtered queries. When a config has filters (e.g., `status_filter`), the cache tolerance check uses `expected_count=0`, accepting any non-expired cache. This means filter changes reuse existing cached data instantly — only the SQL `WHERE` clause changes. The `expires_at` TTL still guards against stale data. Force refresh (`?refresh=1`) bypasses the cache entirely regardless of filters.
+
 ### Tolerance-Based Cache Validation
 
 HQ case caches use a 3-tier validation system (implemented in `_validate_hq_cache()`):
@@ -968,9 +972,22 @@ Since the render code is a string transpiled by Babel in the browser:
 6. **Inline styles for dynamic values** - Tailwind classes work but dynamic CSS needs `style={{}}`
 7. **No TypeScript** - plain JavaScript only
 
-### Client-Side Filtering
+### Filtering
 
-All filtering happens in the browser without additional API calls:
+The dashboard uses two types of filters:
+
+#### Server-Side Filters (trigger SSE reload)
+
+These filters modify the SSE stream URL and cause a new server-side query:
+
+- **Visit Status filter**: Filters by Connect visit approval status (Approved, Pending, Rejected, Over Limit). Default: Approved only. Applied server-side via pipeline SQL `WHERE status IN (...)`. Changing this filter triggers a new SSE stream but reuses the cached pipeline data (no re-download from Connect). State persisted in `sessionStorage` to survive OAuth redirects.
+- **App Version filter** (GPS only): Operator (>, >=, =, <=, <) + version number. Default: > 14. Applied server-side to GPS visit data.
+
+Both require clicking "Apply" to take effect. "Reset" restores defaults (Approved only, > 14).
+
+#### Client-Side Filters (no API calls)
+
+These filters happen entirely in the browser:
 
 - **FLW filter**: Multi-select listbox. Filters all three tabs by `username` set membership
 - **Mother filter**: Multi-select listbox (populated from drilldown data). Filters follow-up tab
@@ -1072,6 +1089,7 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | 3-option FLW assessment | Overview | Eligible for Renewal / Probation / Suspended with progress |
 | Task creation | Overview | Create task for FLW with OCS integration |
 | Inline task management | Overview | Expand FLW row to view AI conversation, update status, close task with outcome |
+| Visit Status filter | Filter Bar | Server-side filter by Connect approval status (Approved, Pending, Rejected, Over Limit); default Approved only; reuses cached pipeline data on filter change; state persisted in `sessionStorage` to survive OAuth redirects |
 | App version filter (GPS) | Filter Bar | User-configurable operator (>, >=, =, <=, <) + version number for GPS data filtering; default > 14; persisted in run state |
 | Template sync | - | Sync render code from template.py to DB via `?sync=true` |
 | Template registry | - | Auto-discovery of workflow templates |
