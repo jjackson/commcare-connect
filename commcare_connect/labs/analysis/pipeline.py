@@ -375,8 +375,10 @@ class AnalysisPipeline:
             tolerance = self.cache_tolerance_pct
             # For CCHQ form sources, don't validate against opportunity visit count
             # (CCHQ forms have far fewer rows than Connect visits)
+            # For filtered configs, skip strict tolerance — filter changes should reuse
+            # existing cache, not re-download. The expires_at TTL handles staleness.
             is_cchq = config.data_source.type == "cchq_forms"
-            expected_count = 0 if is_cchq else self.visit_count
+            expected_count = 0 if (is_cchq or has_filters) else self.visit_count
             if not force_refresh:
                 cached_result = None
                 if terminal_stage == CacheStage.AGGREGATED:
@@ -462,13 +464,14 @@ class AnalysisPipeline:
                         logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
                         yield (EVENT_STATUS, {"message": "Applying filters..."})
 
+                        # expected_count=0: we just wrote this cache, skip count validation
                         if terminal_stage == CacheStage.AGGREGATED:
                             filtered_result = self.backend.get_cached_flw_result(
-                                opp_id, config, expected_count, tolerance_pct=tolerance,
+                                opp_id, config, 0, tolerance_pct=tolerance,
                             )
                         else:
                             filtered_result = self.backend.get_cached_visit_result(
-                                opp_id, config, expected_count, tolerance_pct=tolerance,
+                                opp_id, config, 0, tolerance_pct=tolerance,
                             )
 
                         if filtered_result:
@@ -543,13 +546,14 @@ class AnalysisPipeline:
                     logger.info(f"[Pipeline/{self.backend_name}] Reading cached data with filters applied")
                     yield (EVENT_STATUS, {"message": "Applying filters..."})
 
+                    # expected_count=0: we just wrote this cache, skip count validation
                     if terminal_stage == CacheStage.AGGREGATED:
                         filtered_result = self.backend.get_cached_flw_result(
-                            opp_id, config, expected_count, tolerance_pct=tolerance,
+                            opp_id, config, 0, tolerance_pct=tolerance,
                         )
                     else:
                         filtered_result = self.backend.get_cached_visit_result(
-                            opp_id, config, expected_count, tolerance_pct=tolerance,
+                            opp_id, config, 0, tolerance_pct=tolerance,
                         )
 
                     if filtered_result:

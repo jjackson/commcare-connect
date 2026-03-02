@@ -30,6 +30,22 @@ The MBW Monitoring Dashboard has **4 tabs**, each providing a different lens on 
 
 All data is loaded via a single streaming connection when you open the dashboard. After the first load, a snapshot is saved so subsequent visits load instantly (use "Refresh Data" to fetch fresh data).
 
+### Filter Bar
+
+The filter bar sits above all tabs and provides controls that affect the data shown across the dashboard:
+
+| Filter | Scope | Default | Description |
+|--------|-------|---------|-------------|
+| **Visit Status** | All tabs | Approved only | Filters by Connect visit approval status. Options: Approved, Pending, Rejected, Over Limit. Select one or more statuses to include. |
+| **App Version** (GPS only) | GPS tab | > 14 | Filters GPS visits by app build version. Configurable operator (>, >=, =, <=, <) and version number. |
+| **FLW filter** | All tabs | All | Multi-select list to filter by specific FLWs. |
+| **Mother filter** | Follow-Up tab | All | Multi-select list to filter by specific mothers. |
+
+- **Apply**: Click to apply any changes to Visit Status or App Version. These filters require a server reload.
+- **Reset**: Restores all filters to defaults (Approved only, App Version > 14, no FLW/mother selection).
+
+> **Note**: Changing Visit Status typically does not re-download data from Connect. The dashboard reuses its cached pipeline data and applies the filter server-side, so switching statuses is usually fast (seconds, not minutes). Exceptions include a cold or expired cache, or when a forced refresh (`?bust_cache=1`) triggers a full re-download.
+
 ---
 
 ## Tab 1: Overview
@@ -138,8 +154,8 @@ The column shows: *(still on track) / (total eligible) = percentage*
 - Missed visits: count of visits with status "Missed" (visit not completed and past `form.var_visit_N.visit_expiry_date`)
 
 **Color coding:**
-- Green: 70% or above
-- Yellow: 50-69%
+- Green: 85% or above
+- Yellow: 50-84%
 - Red: below 50%
 
 ---
@@ -606,42 +622,42 @@ Mothers marked as eligible for the full intervention bonus at the time of regist
 **(Still Eligible / Eligible at Reg) × 100**
 
 **Color coding:**
-- Green: 70% or above
-- Yellow: 50-69%
+- Green: 85% or above
+- Yellow: 50-84%
 - Red: below 50%
 
 #### % ≤1 Missed
-**What it shows:** Percentage of **all** mothers (not just eligible) with 0 or 1 missed visits.
+**What it shows:** Percentage of **eligible** mothers (`eligible_full_intervention_bonus = "1"`) with 0 or 1 missed visits.
 
-**How it's calculated:** Count mothers where total missed visits ≤ 1, divide by total mothers in this status group.
+**How it's calculated:** Count eligible mothers where total missed visits ≤ 1, divide by total eligible mothers in this status group.
 
 #### % 4 Visits On Track
-**What it shows:** Among mothers whose Month 1 visit is due (5-day grace), what percentage have 3 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 1 visit is due (5-day grace), what percentage have 3 or more completed visits?
 
 **How it's calculated:**
-1. Filter to mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., they should have completed their first 4 visits by now)
-2. Count those with 3+ total completed visits
-3. **(with 3+ completed / total with Month 1 due) × 100**
+1. Filter to eligible mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., all 4 visits up to Month 1 should be completable by now)
+2. Count those with 3+ total completed visits (the "3-of-4" threshold — on track if at most 1 visit is incomplete)
+3. **(eligible with ≥3 completed / total eligible with Month 1 due) × 100**
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "1 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "1 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 #### % 5 Visits Complete
-**What it shows:** Among mothers whose Month 3 visit is due (5-day grace), what percentage have 4 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 3 visit is due (5-day grace), what percentage have 4 or more completed visits?
 
 **How it's calculated:** Same logic as above, but:
-- Denominator: mothers whose Month 3 scheduled date is 5+ days ago
+- Denominator: eligible mothers whose Month 3 scheduled date is 5+ days ago
 - Numerator: those with 4+ completed visits
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "3 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "3 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 #### % 6 Visits Complete
-**What it shows:** Among mothers whose Month 6 visit is due (5-day grace), what percentage have 5 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 6 visit is due (5-day grace), what percentage have 5 or more completed visits?
 
 **How it's calculated:** Same logic:
-- Denominator: mothers whose Month 6 scheduled date is 5+ days ago
+- Denominator: eligible mothers whose Month 6 scheduled date is 5+ days ago
 - Numerator: those with 5+ completed visits
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "6 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "6 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 ### Totals Row
 The bottom row aggregates all status groups together — total FLWs, total cases, and weighted percentages across all categories.
@@ -709,8 +725,8 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 
 | Color | Range |
 |-------|-------|
-| Green | ≥ 70% |
-| Yellow | 50-69% |
+| Green | ≥ 85% |
+| Yellow | 50-84% |
 | Red | < 50% |
 
 ### Last Active Colors

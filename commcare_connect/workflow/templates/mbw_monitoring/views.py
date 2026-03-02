@@ -5,6 +5,7 @@ Three-tab dashboard (Overview, GPS Analysis, Follow-Up Rate) with SSE data loadi
 client-side filtering, and interactive features.
 """
 
+import copy
 import gc
 import json
 import logging
@@ -72,6 +73,27 @@ from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
 from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixin, BaseSSEStreamView, send_sse_event
 
 logger = logging.getLogger(__name__)
+
+VALID_STATUS_FILTER_VALUES = frozenset({"approved", "pending", "rejected", "over_limit"})
+
+
+def _parse_status_filter(raw: str | None) -> tuple[list[str], str | None]:
+    """Parse and validate a comma-separated status filter string.
+
+    Returns (valid_statuses, error_message).
+    error_message is None on success, non-None when raw was provided but
+    contained any invalid tokens.  Rejects the entire input if any single
+    token is unrecognised (after strip + lowercase).
+    """
+    if not raw:
+        return [], None
+    tokens = [s.strip().lower() for s in raw.split(",") if s.strip()]
+    invalid = [t for t in tokens if t not in VALID_STATUS_FILTER_VALUES]
+    if invalid:
+        return [], f"Invalid status_filter values: {', '.join(invalid)}"
+    if not tokens:
+        return [], "Invalid status_filter values"
+    return tokens, None
 
 
 def _log_rss(label: str) -> None:
@@ -417,6 +439,12 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 app_version_op = ""
             app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
+            # Visit approval status filter (pipeline-level, affects all tabs)
+            status_filter, status_err = _parse_status_filter(request.GET.get("status_filter"))
+            if status_err:
+                yield send_sse_event("Error", error=status_err)
+                return
+
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
             bust_cache = request.GET.get("bust_cache") == "1"
             if bust_cache:
@@ -442,6 +470,15 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             else:
                 opportunity_ids = [opportunity_id]
 
+            # Build pipeline config, injecting status filter if provided.
+            # deepcopy to avoid mutating the module-level singleton.
+            if status_filter:
+                pipeline_config = copy.deepcopy(MBW_GPS_PIPELINE_CONFIG)
+                pipeline_config.filters["status"] = status_filter
+                logger.info(f"[MBW Dashboard] Pipeline status filter: {status_filter}")
+            else:
+                pipeline_config = MBW_GPS_PIPELINE_CONFIG
+
             # Step 1: Fetch GPS visit forms via pipeline (per opportunity, merge rows)
             all_pipeline_rows = []
             from_cache = False
@@ -455,7 +492,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
 
                 pipeline = AnalysisPipeline(request)
                 pipeline_stream = pipeline.stream_analysis(
-                    MBW_GPS_PIPELINE_CONFIG, opportunity_id=opp_id
+                    pipeline_config, opportunity_id=opp_id
                 )
                 yield from self.stream_pipeline_events(pipeline_stream)
 
@@ -935,6 +972,7 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
                 "opportunity_name": labs_context.get("opportunity_name", ""),
                 "from_cache": from_cache,
                 "dev_fixture": getattr(settings, "MBW_DEV_FIXTURE", False),
+                "status_filter": status_filter,
             }
             if monitoring_session:
                 complete_meta["monitoring_session"] = {
@@ -983,16 +1021,21 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
             app_version_op = ""
         app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
+        # Visit approval status filter (must match SSE stream filter)
+        status_filter, status_err = _parse_status_filter(request.GET.get("status_filter"))
+        if status_err:
+            return JsonResponse({"error": status_err}, status=400)
+
         try:
             visits_for_analysis = self._load_visits_from_cache(
-                opportunity_id, username
+                opportunity_id, username, status_filter=status_filter
             )
 
             if visits_for_analysis is None:
                 # Cache cold — fall back to full pipeline (slow for large opportunities)
                 logger.info("[MBW Dashboard] GPS detail: cache miss for %s, running full pipeline", username)
                 visits_for_analysis = self._load_visits_from_pipeline(
-                    request, opportunity_id, username
+                    request, opportunity_id, username, status_filter=status_filter
                 )
 
             # Apply app version filter if configured
@@ -1019,7 +1062,7 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
             return JsonResponse({"error": "An error occurred. Please try again."}, status=500)
 
     @staticmethod
-    def _load_visits_from_cache(opportunity_id, username):
+    def _load_visits_from_cache(opportunity_id, username, status_filter=None):
         """Try to load visits from the computed cache directly (fast path).
 
         Queries ComputedVisitCache by username, returning only this FLW's visits
@@ -1038,7 +1081,10 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
             return None
 
         # Query just this FLW's visits (fast: indexed by username)
-        rows = base_qs.filter(username=username_lower).values(
+        qs = base_qs.filter(username=username_lower)
+        if status_filter:
+            qs = qs.filter(status__in=status_filter)
+        rows = qs.values(
             "visit_id", "username", "visit_date", "entity_name",
             "computed_fields", "location",
         )
@@ -1063,10 +1109,15 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         return visits_for_analysis
 
     @staticmethod
-    def _load_visits_from_pipeline(request, opportunity_id, username):
+    def _load_visits_from_pipeline(request, opportunity_id, username, status_filter=None):
         """Fall back to full pipeline load (slow path)."""
+        if status_filter:
+            config = copy.deepcopy(MBW_GPS_PIPELINE_CONFIG)
+            config.filters["status"] = status_filter
+        else:
+            config = MBW_GPS_PIPELINE_CONFIG
         pipeline = AnalysisPipeline(request)
-        result = pipeline.stream_analysis_ignore_events(MBW_GPS_PIPELINE_CONFIG, opportunity_id)
+        result = pipeline.stream_analysis_ignore_events(config, opportunity_id)
 
         visits_for_analysis = []
         username_lower = username.lower()

@@ -64,6 +64,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [dataSource, setDataSource] = React.useState('live');  // 'live' | 'saved' | 'snapshot'
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
+    var bustCacheRef = React.useRef(false);
     var [oauthStatus, setOauthStatus] = React.useState(null);
     var [activeTab, setActiveTab] = React.useState('overview');
     var [guideSection, setGuideSection] = React.useState({});
@@ -100,6 +101,46 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var ALLOWED_STATUS_FILTERS = ['approved', 'pending', 'rejected', 'over_limit'];
+    var _statusFilterKey = 'mbw_pending_filters:' + (instance.id || 'default');
+    var _hydrateStatusFilter = function() {
+        try {
+            var raw = sessionStorage.getItem(_statusFilterKey);
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    var filtered = parsed.filter(function(v) {
+                        return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+                    });
+                    if (filtered.length > 0) return filtered;
+                }
+            }
+        } catch(e) {}
+        return null;
+    };
+    var _normalizeStatusFilter = function(val) {
+        if (Array.isArray(val)) {
+            var filtered = val.filter(function(v) {
+                return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+            });
+            return filtered.length > 0 ? filtered : null;
+        }
+        if (val != null && typeof val === 'string' && val && ALLOWED_STATUS_FILTERS.indexOf(val) !== -1) return [val];
+        return null;
+    };
+    var [statusFilter, setStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    React.useEffect(function() {
+        sessionStorage.removeItem(_statusFilterKey);
+    }, []);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
     // GPS Map state (per-FLW drill-down)
@@ -175,6 +216,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         });
     };
 
+    // Centralized color thresholds for Eligible 5+ / % Still Eligible
+    var ELIGIBLE_THRESHOLDS = { green: 85, yellow: 50 };
+    var getEligibleColor = function(pct) {
+        if (pct >= ELIGIBLE_THRESHOLDS.green) return 'green';
+        if (pct >= ELIGIBLE_THRESHOLDS.yellow) return 'yellow';
+        return 'red';
+    };
+
     // CSRF helper
     var getCSRF = React.useCallback(function() {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value
@@ -248,6 +297,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (appliedAppVersionOp && appliedAppVersionVal) {
                 params.set('app_version_op', appliedAppVersionOp);
                 params.set('app_version_val', appliedAppVersionVal);
+            }
+            if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+                params.set('status_filter', appliedStatusFilter.join(','));
             }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
             sseSectionsRef.current = {};
@@ -343,7 +395,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
 
         // refreshTrigger=0 means initial load → try snapshot first
-        // refreshTrigger>0 means user clicked Refresh Data → SSE with bust_cache
+        // refreshTrigger>0 means user clicked Refresh Data or Apply
+        // bustCacheRef distinguishes Refresh Data (bust=true) from Apply (bust=false)
+        var shouldBustCache = bustCacheRef.current;
+        bustCacheRef.current = false;
         if (refreshTrigger === 0 && instance.id) {
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
@@ -363,7 +418,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             })
             .catch(function() { checkOAuthAndStream(false); });
         } else {
-            checkOAuthAndStream(refreshTrigger > 0);
+            checkOAuthAndStream(shouldBustCache);
         }
 
         return function() {
@@ -694,6 +749,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             gs_app_id: gsAppId,
             app_version_op: appVersionOp,
             app_version_val: appVersionVal,
+            status_filter: statusFilter,
             worker_results: {},
             flw_results: {},
         }).then(function() {
@@ -909,6 +965,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             params.set('app_version_op', appliedAppVersionOp);
             params.set('app_version_val', appliedAppVersionVal);
         }
+        if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+            params.set('status_filter', appliedStatusFilter.join(','));
+        }
         var url = '/custom_analysis/mbw_monitoring/api/gps/'
             + encodeURIComponent(expandedGps) + '/?' + params.toString();
         fetch(url, { credentials: 'same-origin' })
@@ -923,7 +982,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 }
             });
         return function() { cancelled = true; };
-    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
+    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal, appliedStatusFilter]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -944,12 +1003,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
+        try { sessionStorage.removeItem(_statusFilterKey); } catch(e) {}
         var needsRefresh = appliedAppVersionOp !== 'gt' || appliedAppVersionVal !== '14';
+        var statusNeedsRefresh = JSON.stringify(appliedStatusFilter.slice().sort()) !== JSON.stringify(['approved']);
         setAppVersionOp('gt');
         setAppVersionVal('14');
         setAppliedAppVersionOp('gt');
         setAppliedAppVersionVal('14');
-        if (needsRefresh) {
+        setStatusFilter(['approved']);
+        setAppliedStatusFilter(['approved']);
+        if (needsRefresh || statusNeedsRefresh) {
             setRefreshTrigger(function(n) { return n + 1; });
             setDashData(null);
             setSseComplete(false);
@@ -2072,6 +2135,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     )}
                     {!isCompleted && (
                     <button onClick={function() {
+                        bustCacheRef.current = true;
                         setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
@@ -2121,6 +2185,36 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-16" />
                         </div>
                     </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Visit Status</label>
+                        <div className="flex gap-1 flex-wrap">
+                            {[
+                                {value: 'approved', label: 'Approved'},
+                                {value: 'pending', label: 'Pending'},
+                                {value: 'rejected', label: 'Rejected'},
+                                {value: 'over_limit', label: 'Over Limit'}
+                            ].map(function(opt) {
+                                var isActive = statusFilter.indexOf(opt.value) !== -1;
+                                return <button key={opt.value}
+                                    type="button"
+                                    aria-pressed={isActive}
+                                    onClick={function() {
+                                        setStatusFilter(function(prev) {
+                                            if (prev.indexOf(opt.value) !== -1) {
+                                                var next = prev.filter(function(v) { return v !== opt.value; });
+                                                return next.length > 0 ? next : prev;
+                                            }
+                                            return prev.concat([opt.value]);
+                                        });
+                                    }}
+                                    className={'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors cursor-pointer ' +
+                                        (isActive
+                                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                            : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50')
+                                    }>{opt.label}</button>;
+                            })}
+                        </div>
+                    </div>
                     <div className="flex-1 min-w-[180px]">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Filter by FLW</label>
                         <select multiple value={filterFlws}
@@ -2160,9 +2254,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     <button onClick={function() {
                                 var opChanged = appVersionOp !== appliedAppVersionOp;
                                 var valChanged = appVersionVal !== appliedAppVersionVal;
-                                if (opChanged || valChanged) {
+                                var statusChanged = JSON.stringify(statusFilter.slice().sort()) !== JSON.stringify(appliedStatusFilter.slice().sort());
+                                if (opChanged || valChanged || statusChanged) {
+                                    try { sessionStorage.setItem(_statusFilterKey, JSON.stringify(statusFilter)); } catch(e) {}
                                     setAppliedAppVersionOp(appVersionOp);
                                     setAppliedAppVersionVal(appVersionVal);
+                                    setAppliedStatusFilter(statusFilter);
                                     setRefreshTrigger(function(n) { return n + 1; });
                                     setDashData(null);
                                     setSseComplete(false);
@@ -2371,7 +2468,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 {isColVisible('eligible_5') && (
                                                 <td className="px-4 py-3 text-sm">
                                                     {cse.total > 0 ? (
-                                                        <span className={cse.pct >= 70 ? 'text-green-600 font-medium' : cse.pct >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+                                                        <span className={getEligibleColor(cse.pct) === 'green' ? 'text-green-600 font-medium' : getEligibleColor(cse.pct) === 'yellow' ? 'text-yellow-600' : 'text-red-600'}>
                                                             {cse.eligible}/{cse.total} ({cse.pct}%)
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
@@ -3471,10 +3568,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Eligible at Reg</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Still Eligible</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Still Eligible</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 0 or 1 missed visits / all cases">% &le;1 Missed</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 0 or 1 missed visits / eligible cases">% &le;1 Missed</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -3498,7 +3595,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_eligible_at_registration}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_still_eligible}</td>
-                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 80 ? '#22c55e' : row.pct_still_eligible >= 60 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
+                                                <td className="px-3 py-2 text-right font-medium" style={{color: getEligibleColor(row.pct_still_eligible) === 'green' ? '#22c55e' : getEligibleColor(row.pct_still_eligible) === 'yellow' ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_missed_1_or_less_visits}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_4_visits_on_track}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_5_visits_complete}%</td>
@@ -3529,9 +3626,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         var total5Num = 0; var total5Den = 0;
                                         var total6Num = 0; var total6Den = 0;
                                         perf.forEach(function(r) {
-                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases / 100);
+                                            totalMissedNum += r.pct_missed_1_or_less_visits * r.total_cases_eligible_at_registration / 100;
                                         });
-                                        var pctMissed = totals.total_cases > 0 ? Math.round(totalMissedNum / totals.total_cases * 100) : 0;
+                                        var pctMissed = totals.total_cases_eligible_at_registration > 0 ? Math.round(totalMissedNum / totals.total_cases_eligible_at_registration * 100) : 0;
                                         return (
                                             <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                                                 <td className="px-3 py-2 text-gray-900">Total</td>
@@ -3710,6 +3807,34 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     </div>
 
+                    {/* ---- SECTION: Filter Bar ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-filter mr-2 text-blue-500"></i> Filter Bar
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The filter bar above the tabs controls which data is displayed across all tabs.</p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Filter</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Default</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Description</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Visit Status</td><td className="px-3 py-1.5">Approved only</td><td className="px-3 py-1.5">Filters all tabs by Connect visit approval status: <strong>Approved</strong>, <strong>Pending</strong>, <strong>Rejected</strong>, <strong>Over Limit</strong>. Select one or more. Applied server-side &mdash; reuses cached data, no re-download.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">App Version <span className="text-gray-400">(GPS only)</span></td><td className="px-3 py-1.5">&gt; 14</td><td className="px-3 py-1.5">Filters GPS visits by app build version. Configurable operator (&gt;, &ge;, =, &le;, &lt;) and version number.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">FLW filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list to show only specific FLWs across all tabs. Client-side &mdash; no reload needed.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Mother filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list for Follow-Up tab mother drill-down. Client-side.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p><strong>Apply</strong> sends Visit Status and App Version changes to the server. <strong>Reset</strong> restores defaults (Approved only, &gt; 14). Changing Visit Status does <em>not</em> re-download from Connect &mdash; it reuses cached data and applies the filter via SQL, so it completes in seconds.</p>
+                        </div>
+                    </div>
+
                     {/* ---- SECTION: Tab 1 Overview ---- */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
@@ -3798,8 +3923,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <div>Missed: visits past <code>form.var_visit_N.visit_expiry_date</code></div>
                                     </div>
                                     <div className="mt-2 flex gap-2 text-xs">
-                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;70% Green</span>
-                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;69% Yellow</span>
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
                                         <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
                                     </div>
                                 </div>
@@ -4169,28 +4294,28 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <h4 className="font-semibold text-gray-800">Still Eligible / % Still Eligible</h4>
                                         <p className="mt-1">Among eligible mothers: those with 5+ completed visits OR &le;1 missed visit. Percentage = (still eligible / eligible at reg) &times; 100.</p>
                                         <div className="mt-2 flex gap-2 text-xs">
-                                            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;70% Green</span>
-                                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;69% Yellow</span>
+                                            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
                                             <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
                                         </div>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% &le;1 Missed</h4>
-                                        <p className="mt-1">Percentage of <strong>all</strong> mothers (not just eligible) with 0 or 1 missed visits.</p>
+                                        <p className="mt-1">Percentage of <strong>eligible</strong> mothers (<code>eligible_full_intervention_bonus = "1"</code>) with 0 or 1 missed visits.</p>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 4 Visits On Track</h4>
-                                        <p className="mt-1">Among mothers whose Month 1 visit is due (5-day grace): % with 3+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 1 visit is due (5-day grace): % with 3+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;1 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 5 Visits Complete</h4>
-                                        <p className="mt-1">Among mothers whose Month 3 visit is due: % with 4+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 3 visit is due: % with 4+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;3 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 6 Visits Complete</h4>
-                                        <p className="mt-1">Among mothers whose Month 6 visit is due: % with 5+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 6 visit is due: % with 5+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;6 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                 </div>
@@ -4268,8 +4393,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 <div>
                                     <h4 className="font-semibold text-gray-800 mb-2">Eligible 5+ / % Still Eligible</h4>
                                     <div className="grid grid-cols-3 gap-2 text-xs">
-                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>&ge;70%</div>
-                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>50&ndash;69%</div>
+                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>&ge;85%</div>
+                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>50&ndash;84%</div>
                                         <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-center"><div className="font-semibold">Red</div>&lt;50%</div>
                                     </div>
                                 </div>
