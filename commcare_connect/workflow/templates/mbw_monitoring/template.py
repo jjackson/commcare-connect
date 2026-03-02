@@ -64,6 +64,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [dataSource, setDataSource] = React.useState('live');  // 'live' | 'saved' | 'snapshot'
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
+    var bustCacheRef = React.useRef(false);
     var [oauthStatus, setOauthStatus] = React.useState(null);
     var [activeTab, setActiveTab] = React.useState('overview');
     var [guideSection, setGuideSection] = React.useState({});
@@ -100,6 +101,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var _savedStatusFilter = null;
+    try {
+        var _raw = sessionStorage.getItem('mbw_pending_filters');
+        if (_raw) {
+            _savedStatusFilter = JSON.parse(_raw);
+            sessionStorage.removeItem('mbw_pending_filters');
+        }
+    } catch(e) {}
+    var [statusFilter, setStatusFilter] = React.useState(_savedStatusFilter || instance.state?.status_filter || ['approved']);
+    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(_savedStatusFilter || instance.state?.status_filter || ['approved']);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
     // GPS Map state (per-FLW drill-down)
@@ -249,6 +260,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 params.set('app_version_op', appliedAppVersionOp);
                 params.set('app_version_val', appliedAppVersionVal);
             }
+            if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+                params.set('status_filter', appliedStatusFilter.join(','));
+            }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
             sseSectionsRef.current = {};
             var es = new EventSource(url);
@@ -343,7 +357,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
 
         // refreshTrigger=0 means initial load → try snapshot first
-        // refreshTrigger>0 means user clicked Refresh Data → SSE with bust_cache
+        // refreshTrigger>0 means user clicked Refresh Data or Apply
+        // bustCacheRef distinguishes Refresh Data (bust=true) from Apply (bust=false)
+        var shouldBustCache = bustCacheRef.current;
+        bustCacheRef.current = false;
         if (refreshTrigger === 0 && instance.id) {
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
@@ -363,7 +380,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             })
             .catch(function() { checkOAuthAndStream(false); });
         } else {
-            checkOAuthAndStream(refreshTrigger > 0);
+            checkOAuthAndStream(shouldBustCache);
         }
 
         return function() {
@@ -694,6 +711,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             gs_app_id: gsAppId,
             app_version_op: appVersionOp,
             app_version_val: appVersionVal,
+            status_filter: statusFilter,
             worker_results: {},
             flw_results: {},
         }).then(function() {
@@ -909,6 +927,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             params.set('app_version_op', appliedAppVersionOp);
             params.set('app_version_val', appliedAppVersionVal);
         }
+        if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+            params.set('status_filter', appliedStatusFilter.join(','));
+        }
         var url = '/custom_analysis/mbw_monitoring/api/gps/'
             + encodeURIComponent(expandedGps) + '/?' + params.toString();
         fetch(url, { credentials: 'same-origin' })
@@ -923,7 +944,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 }
             });
         return function() { cancelled = true; };
-    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal]);
+    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal, appliedStatusFilter]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -944,12 +965,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
+        try { sessionStorage.removeItem('mbw_pending_filters'); } catch(e) {}
         var needsRefresh = appliedAppVersionOp !== 'gt' || appliedAppVersionVal !== '14';
+        var statusNeedsRefresh = JSON.stringify(appliedStatusFilter.slice().sort()) !== JSON.stringify(['approved']);
         setAppVersionOp('gt');
         setAppVersionVal('14');
         setAppliedAppVersionOp('gt');
         setAppliedAppVersionVal('14');
-        if (needsRefresh) {
+        setStatusFilter(['approved']);
+        setAppliedStatusFilter(['approved']);
+        if (needsRefresh || statusNeedsRefresh) {
             setRefreshTrigger(function(n) { return n + 1; });
             setDashData(null);
             setSseComplete(false);
@@ -2072,6 +2097,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     )}
                     {!isCompleted && (
                     <button onClick={function() {
+                        bustCacheRef.current = true;
                         setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
@@ -2121,6 +2147,35 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-16" />
                         </div>
                     </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Visit Status</label>
+                        <div className="flex gap-1 flex-wrap">
+                            {[
+                                {value: 'approved', label: 'Approved'},
+                                {value: 'pending', label: 'Pending'},
+                                {value: 'rejected', label: 'Rejected'},
+                                {value: 'over_limit', label: 'Over Limit'}
+                            ].map(function(opt) {
+                                var isActive = statusFilter.indexOf(opt.value) !== -1;
+                                return <button key={opt.value}
+                                    type="button"
+                                    onClick={function() {
+                                        setStatusFilter(function(prev) {
+                                            if (prev.indexOf(opt.value) !== -1) {
+                                                var next = prev.filter(function(v) { return v !== opt.value; });
+                                                return next.length > 0 ? next : prev;
+                                            }
+                                            return prev.concat([opt.value]);
+                                        });
+                                    }}
+                                    className={'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors cursor-pointer ' +
+                                        (isActive
+                                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                            : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50')
+                                    }>{opt.label}</button>;
+                            })}
+                        </div>
+                    </div>
                     <div className="flex-1 min-w-[180px]">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Filter by FLW</label>
                         <select multiple value={filterFlws}
@@ -2160,9 +2215,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     <button onClick={function() {
                                 var opChanged = appVersionOp !== appliedAppVersionOp;
                                 var valChanged = appVersionVal !== appliedAppVersionVal;
-                                if (opChanged || valChanged) {
+                                var statusChanged = JSON.stringify(statusFilter.slice().sort()) !== JSON.stringify(appliedStatusFilter.slice().sort());
+                                if (opChanged || valChanged || statusChanged) {
+                                    try { sessionStorage.setItem('mbw_pending_filters', JSON.stringify(statusFilter)); } catch(e) {}
                                     setAppliedAppVersionOp(appVersionOp);
                                     setAppliedAppVersionVal(appVersionVal);
+                                    setAppliedStatusFilter(statusFilter);
                                     setRefreshTrigger(function(n) { return n + 1; });
                                     setDashData(null);
                                     setSseComplete(false);
@@ -3707,6 +3765,34 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             <div className="bg-purple-50 rounded px-3 py-2 text-purple-700 font-medium">
                                 <i className="fa-solid fa-ranking-star mr-1"></i> FLW Performance &mdash; 10 columns
                             </div>
+                        </div>
+                    </div>
+
+                    {/* ---- SECTION: Filter Bar ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-filter mr-2 text-blue-500"></i> Filter Bar
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The filter bar above the tabs controls which data is displayed across all tabs.</p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Filter</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Default</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Description</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Visit Status</td><td className="px-3 py-1.5">Approved only</td><td className="px-3 py-1.5">Filters all tabs by Connect visit approval status: <strong>Approved</strong>, <strong>Pending</strong>, <strong>Rejected</strong>, <strong>Over Limit</strong>. Select one or more. Applied server-side &mdash; reuses cached data, no re-download.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">App Version <span className="text-gray-400">(GPS only)</span></td><td className="px-3 py-1.5">&gt; 14</td><td className="px-3 py-1.5">Filters GPS visits by app build version. Configurable operator (&gt;, &ge;, =, &le;, &lt;) and version number.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">FLW filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list to show only specific FLWs across all tabs. Client-side &mdash; no reload needed.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Mother filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list for Follow-Up tab mother drill-down. Client-side.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p><strong>Apply</strong> sends Visit Status and App Version changes to the server. <strong>Reset</strong> restores defaults (Approved only, &gt; 14). Changing Visit Status does <em>not</em> re-download from Connect &mdash; it reuses cached data and applies the filter via SQL, so it completes in seconds.</p>
                         </div>
                     </div>
 

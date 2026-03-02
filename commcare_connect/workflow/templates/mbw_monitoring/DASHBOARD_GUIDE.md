@@ -30,6 +30,22 @@ The MBW Monitoring Dashboard has **4 tabs**, each providing a different lens on 
 
 All data is loaded via a single streaming connection when you open the dashboard. After the first load, a snapshot is saved so subsequent visits load instantly (use "Refresh Data" to fetch fresh data).
 
+### Filter Bar
+
+The filter bar sits above all tabs and provides controls that affect the data shown across the dashboard:
+
+| Filter | Scope | Default | Description |
+|--------|-------|---------|-------------|
+| **Visit Status** | All tabs | Approved only | Filters by Connect visit approval status. Options: Approved, Pending, Rejected, Over Limit. Select one or more statuses to include. |
+| **App Version** (GPS only) | GPS tab | > 14 | Filters GPS visits by app build version. Configurable operator (>, >=, =, <=, <) and version number. |
+| **FLW filter** | All tabs | All | Multi-select list to filter by specific FLWs. |
+| **Mother filter** | Follow-Up tab | All | Multi-select list to filter by specific mothers. |
+
+- **Apply**: Click to apply any changes to Visit Status or App Version. These filters require a server reload.
+- **Reset**: Restores all filters to defaults (Approved only, App Version > 14, no FLW/mother selection).
+
+> **Note**: Changing Visit Status does **not** re-download data from Connect. The dashboard reuses its cached data and applies the filter server-side, so switching statuses is fast (seconds, not minutes).
+
 ---
 
 ## Tab 1: Overview
