@@ -44,7 +44,7 @@ The filter bar sits above all tabs and provides controls that affect the data sh
 - **Apply**: Click to apply any changes to Visit Status or App Version. These filters require a server reload.
 - **Reset**: Restores all filters to defaults (Approved only, App Version > 14, no FLW/mother selection).
 
-> **Note**: Changing Visit Status does **not** re-download data from Connect. The dashboard reuses its cached data and applies the filter server-side, so switching statuses is fast (seconds, not minutes).
+> **Note**: Changing Visit Status typically does **not** re-download data from Connect. The dashboard reuses its cached pipeline data and applies the filter server-side, so switching statuses is usually fast (seconds, not minutes). Exceptions include a cold or expired cache, or when a forced refresh (`?bust_cache=1`) triggers a full re-download.
 
 ---
 

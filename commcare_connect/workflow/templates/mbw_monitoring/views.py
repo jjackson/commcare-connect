@@ -82,17 +82,18 @@ def _parse_status_filter(raw: str | None) -> tuple[list[str], str | None]:
 
     Returns (valid_statuses, error_message).
     error_message is None on success, non-None when raw was provided but
-    contained no valid tokens.
+    contained any invalid tokens.  Rejects the entire input if any single
+    token is unrecognised (after strip + lowercase).
     """
     if not raw:
         return [], None
-    statuses = [
-        s.strip().lower() for s in raw.split(",")
-        if s.strip().lower() in VALID_STATUS_FILTER_VALUES
-    ]
-    if not statuses:
+    tokens = [s.strip().lower() for s in raw.split(",") if s.strip()]
+    invalid = [t for t in tokens if t not in VALID_STATUS_FILTER_VALUES]
+    if invalid:
+        return [], f"Invalid status_filter values: {', '.join(invalid)}"
+    if not tokens:
         return [], "Invalid status_filter values"
-    return statuses, None
+    return tokens, None
 
 
 def _log_rss(label: str) -> None:
