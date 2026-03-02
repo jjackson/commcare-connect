@@ -3529,10 +3529,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Eligible at Reg</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Still Eligible</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Still Eligible</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 0 or 1 missed visits / all cases">% &le;1 Missed</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 0 or 1 missed visits / eligible cases">% &le;1 Missed</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -3587,9 +3587,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         var total5Num = 0; var total5Den = 0;
                                         var total6Num = 0; var total6Den = 0;
                                         perf.forEach(function(r) {
-                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases / 100);
+                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases_eligible_at_registration / 100);
                                         });
-                                        var pctMissed = totals.total_cases > 0 ? Math.round(totalMissedNum / totals.total_cases * 100) : 0;
+                                        var pctMissed = totals.total_cases_eligible_at_registration > 0 ? Math.round(totalMissedNum / totals.total_cases_eligible_at_registration * 100) : 0;
                                         return (
                                             <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                                                 <td className="px-3 py-2 text-gray-900">Total</td>
@@ -4262,21 +4262,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% &le;1 Missed</h4>
-                                        <p className="mt-1">Percentage of <strong>all</strong> mothers (not just eligible) with 0 or 1 missed visits.</p>
+                                        <p className="mt-1">Percentage of <strong>eligible</strong> mothers (<code>eligible_full_intervention_bonus = "1"</code>) with 0 or 1 missed visits.</p>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 4 Visits On Track</h4>
-                                        <p className="mt-1">Among mothers whose Month 1 visit is due (5-day grace): % with 3+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 1 visit is due (5-day grace): % with 3+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;1 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 5 Visits Complete</h4>
-                                        <p className="mt-1">Among mothers whose Month 3 visit is due: % with 4+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 3 visit is due: % with 4+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;3 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                     <div className="border-l-4 border-purple-200 pl-4 py-2">
                                         <h4 className="font-semibold text-gray-800">% 6 Visits Complete</h4>
-                                        <p className="mt-1">Among mothers whose Month 6 visit is due: % with 5+ completed visits.</p>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 6 visit is due: % with 5+ completed visits.</p>
                                         <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;6 Month Visit&quot; &le; today &minus; 5 days</div>
                                     </div>
                                 </div>

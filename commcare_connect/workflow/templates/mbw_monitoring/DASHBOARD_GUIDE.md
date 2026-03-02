@@ -627,37 +627,37 @@ Mothers marked as eligible for the full intervention bonus at the time of regist
 - Red: below 50%
 
 #### % ≤1 Missed
-**What it shows:** Percentage of **all** mothers (not just eligible) with 0 or 1 missed visits.
+**What it shows:** Percentage of **eligible** mothers (`eligible_full_intervention_bonus = "1"`) with 0 or 1 missed visits.
 
-**How it's calculated:** Count mothers where total missed visits ≤ 1, divide by total mothers in this status group.
+**How it's calculated:** Count eligible mothers where total missed visits ≤ 1, divide by total eligible mothers in this status group.
 
 #### % 4 Visits On Track
-**What it shows:** Among mothers whose Month 1 visit is due (5-day grace), what percentage have 3 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 1 visit is due (5-day grace), what percentage have 3 or more completed visits?
 
 **How it's calculated:**
-1. Filter to mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., they should have completed their first 4 visits by now)
+1. Filter to eligible mothers whose Month 1 visit scheduled date is 5+ days ago (i.e., they should have completed their first 4 visits by now)
 2. Count those with 3+ total completed visits
-3. **(with 3+ completed / total with Month 1 due) × 100**
+3. **(with 3+ completed / total eligible with Month 1 due) × 100**
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "1 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "1 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 #### % 5 Visits Complete
-**What it shows:** Among mothers whose Month 3 visit is due (5-day grace), what percentage have 4 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 3 visit is due (5-day grace), what percentage have 4 or more completed visits?
 
 **How it's calculated:** Same logic as above, but:
-- Denominator: mothers whose Month 3 scheduled date is 5+ days ago
+- Denominator: eligible mothers whose Month 3 scheduled date is 5+ days ago
 - Numerator: those with 4+ completed visits
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "3 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "3 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 #### % 6 Visits Complete
-**What it shows:** Among mothers whose Month 6 visit is due (5-day grace), what percentage have 5 or more completed visits?
+**What it shows:** Among **eligible** mothers whose Month 6 visit is due (5-day grace), what percentage have 5 or more completed visits?
 
 **How it's calculated:** Same logic:
-- Denominator: mothers whose Month 6 scheduled date is 5+ days ago
+- Denominator: eligible mothers whose Month 6 scheduled date is 5+ days ago
 - Numerator: those with 5+ completed visits
 
-**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "6 Month Visit", filtered to dates ≤ (today - 5 days)
+**Data path (denominator):** `form.var_visit_N.visit_date_scheduled` where `visit_type` = "6 Month Visit", filtered to eligible mothers with dates ≤ (today - 5 days)
 
 ### Totals Row
 The bottom row aggregates all status groups together — total FLWs, total cases, and weighted percentages across all categories.
