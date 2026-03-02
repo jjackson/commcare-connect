@@ -530,9 +530,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     radius: 9, fillColor: '#f97316', color: '#ea580c', weight: 1.5, fillOpacity: 0.7
                 });
                 marker.bindPopup(
-                    '<strong>' + m.name + '</strong><br/>' +
+                    '<strong>' + escapeHtml(m.name) + '</strong><br/>' +
                     'Visits: ' + m.visits.length + '<br/>' +
-                    'Last: ' + (m.latest || '-')
+                    'Last: ' + escapeHtml(m.latest || '-')
                 );
                 marker.on('click', function() { setSelectedMother(mid); });
                 cluster.addLayer(marker);
@@ -550,9 +550,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     radius: radius, fillColor: color, color: borderColor, weight: 1.5, fillOpacity: 0.7
                 });
                 marker.bindPopup(
-                    '<strong>' + (v.entity_name || '-') + '</strong><br/>' +
-                    'Date: ' + (v.visit_date || '-') + '<br/>' +
-                    'Form: ' + (v.form_name || '-') +
+                    '<strong>' + escapeHtml(v.entity_name || '-') + '</strong><br/>' +
+                    'Date: ' + escapeHtml(v.visit_date || '-') + '<br/>' +
+                    'Form: ' + escapeHtml(v.form_name || '-') +
                     (v.distance_from_prev_km != null ? '<br/>Dist: ' + v.distance_from_prev_km + ' km' : '') +
                     (v.is_flagged ? '<br/><span style="color:#dc2626;font-weight:bold">Flagged</span>' : '')
                 );
@@ -579,7 +579,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (aggregateMapRef.current) { aggregateMapRef.current.remove(); aggregateMapRef.current = null; }
             return;
         }
-        var coords = (gpsData.all_coordinates || []);
+        var coords = (gpsData && gpsData.all_coordinates) || [];
         if (coords.length === 0) return;
 
         var mapDiv = document.getElementById('aggregate-gps-map');
@@ -628,9 +628,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 radius: radius, fillColor: color, color: borderColor, weight: 1, fillOpacity: 0.7
             });
             marker.bindPopup(
-                '<strong>' + flwName + '</strong>' +
-                (c.e ? '<br/>' + c.e : '') +
-                (c.d ? '<br/>Date: ' + c.d : '') +
+                '<strong>' + escapeHtml(flwName) + '</strong>' +
+                (c.e ? '<br/>' + escapeHtml(c.e) : '') +
+                (c.d ? '<br/>Date: ' + escapeHtml(c.d) : '') +
                 (c.f ? '<br/><span style="color:#dc2626;font-weight:bold">Flagged</span>' : '')
             );
             cluster.addLayer(marker);
@@ -650,6 +650,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // =========================================================================
     // Helpers
     // =========================================================================
+    var escapeHtml = function(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    };
     var toggleFlw = function(username) {
         setSelectedFlws(function(prev) {
             var next = Object.assign({}, prev);
