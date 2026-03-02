@@ -101,25 +101,40 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
-    var _savedStatusFilter = null;
-    try {
-        var _raw = sessionStorage.getItem('mbw_pending_filters');
-        if (_raw) {
-            var _parsed = JSON.parse(_raw);
-            if (Array.isArray(_parsed)) _savedStatusFilter = _parsed;
-            sessionStorage.removeItem('mbw_pending_filters');
-        }
-    } catch(e) {}
-    var _normalizeStatusFilter = function(val) {
-        if (Array.isArray(val)) return val;
-        if (val != null) return [val];
+    var _hydrateStatusFilter = function() {
+        try {
+            var raw = sessionStorage.getItem('mbw_pending_filters');
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    var filtered = parsed.filter(function(v) { return typeof v === 'string' && v; });
+                    if (filtered.length > 0) return filtered;
+                }
+            }
+        } catch(e) {}
         return null;
     };
-    var _initFilter = _normalizeStatusFilter(_savedStatusFilter)
-        || _normalizeStatusFilter(instance.state?.status_filter)
-        || ['approved'];
-    var [statusFilter, setStatusFilter] = React.useState(_initFilter);
-    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(_initFilter);
+    var _normalizeStatusFilter = function(val) {
+        if (Array.isArray(val)) {
+            var filtered = val.filter(function(v) { return typeof v === 'string' && v; });
+            return filtered.length > 0 ? filtered : null;
+        }
+        if (val != null && typeof val === 'string' && val) return [val];
+        return null;
+    };
+    var [statusFilter, setStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    React.useEffect(function() {
+        sessionStorage.removeItem('mbw_pending_filters');
+    }, []);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
 
     // GPS Map state (per-FLW drill-down)
@@ -2168,6 +2183,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 var isActive = statusFilter.indexOf(opt.value) !== -1;
                                 return <button key={opt.value}
                                     type="button"
+                                    aria-pressed={isActive}
                                     onClick={function() {
                                         setStatusFilter(function(prev) {
                                             if (prev.indexOf(opt.value) !== -1) {
@@ -3893,8 +3909,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <div>Missed: visits past <code>form.var_visit_N.visit_expiry_date</code></div>
                                     </div>
                                     <div className="mt-2 flex gap-2 text-xs">
-                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;70% Green</span>
-                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;69% Yellow</span>
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
                                         <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
                                     </div>
                                 </div>
@@ -4363,8 +4379,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 <div>
                                     <h4 className="font-semibold text-gray-800 mb-2">Eligible 5+ / % Still Eligible</h4>
                                     <div className="grid grid-cols-3 gap-2 text-xs">
-                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>&ge;70%</div>
-                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>50&ndash;69%</div>
+                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>&ge;85%</div>
+                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>50&ndash;84%</div>
                                         <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-center"><div className="font-semibold">Red</div>&lt;50%</div>
                                     </div>
                                 </div>

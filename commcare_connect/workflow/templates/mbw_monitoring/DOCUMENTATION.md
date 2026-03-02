@@ -40,7 +40,7 @@ The dashboard runs within the **Workflow module** of Connect Labs. The UI is a R
 
 - **Render code pattern**: The entire dashboard UI (~1,860 lines of JSX) lives in a Python string (`RENDER_CODE`), transpiled by Babel in the browser. Only `React` is available as a global - no imports. All declarations use `var` (not `const`/`let`) for Babel compatibility.
 - **Single SSE connection**: All three tabs load data from one streaming endpoint, avoiding redundant API calls
-- **Client-side filtering**: Raw data is sent once; FLW and mother filtering happens entirely in the browser via React state
+- **Hybrid filtering**: Some filters (Visit Status, App Version) are server-side and trigger an SSE reload with updated pipeline data; others (FLW, Mother, Date) are client-side and operate on already-fetched data via React state. Server-side filters require clicking "Apply" and state is persisted in `sessionStorage` to survive OAuth redirects.
 - **Two-layer caching**: Pipeline-level cache (Redis) for visit form data + Django cache for CCHQ form/case data
 - **Tolerance-based cache validation**: Caches are accepted if they meet count, percentage, or time-based tolerance thresholds
 - **No database writes**: All data is fetched from external APIs (Connect Production + CommCare HQ) and cached transiently. Workflow state is persisted via the LabsRecord API.
