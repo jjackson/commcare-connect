@@ -74,6 +74,7 @@ def serialize_flw_summary(flw: FLWSummary) -> dict:
         "unique_cases": flw.unique_cases,
         "avg_case_distance_km": round(flw.avg_case_distance_km, 2) if flw.avg_case_distance_km else None,
         "max_case_distance_km": round(flw.max_case_distance_km, 2) if flw.max_case_distance_km else None,
+        "cases_with_revisits": flw.cases_with_revisits,
         "trailing_7_days": [serialize_daily_travel(dt) for dt in flw.trailing_7_days],
         "avg_daily_travel_km": round(flw.avg_daily_travel_km, 2) if flw.avg_daily_travel_km else None,
     }

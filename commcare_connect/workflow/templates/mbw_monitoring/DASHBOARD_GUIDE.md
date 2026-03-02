@@ -171,13 +171,16 @@ The column shows: *(still on track) / (total eligible) = percentage*
 ---
 
 #### Revisit Dist.
-**What it shows:** The average distance (in kilometers) between successive GPS coordinates when the FLW revisits the **same mother**.
+**What it shows:** The average distance (in kilometers) between successive GPS coordinates when the FLW revisits the **same mother**, with a denominator showing how many cases contributed.
 
 **How it's calculated:**
 1. Group all visits by mother (using the mother case ID)
 2. Sort each mother's visits by date/time
 3. For each pair of consecutive visits to the same mother, calculate the straight-line distance between GPS coordinates using the Haversine formula (accounts for Earth's curvature)
 4. Report the **average** of all these distances for the FLW
+5. Display a denominator "(N)" where N is the number of mother cases that had 2 or more GPS-tagged visits — i.e., the cases that could actually be compared
+
+**Example:** "0.3 km (12)" means 12 mothers had repeat visits and the average revisit distance was 0.3 km.
 
 **Why this matters:** When an FLW visits the same mother multiple times, the GPS coordinates should be close together (same household). Large distances between revisits to the same mother suggest the FLW may not be visiting the actual location.
 
@@ -230,6 +233,15 @@ The column shows: *(still on track) / (total eligible) = percentage*
 **Data paths:**
 - Submission time: `form.meta.timeEnd` (ISO datetime)
 - Mother case ID (for deduplication): `form.parents.parent.case.@case_id`
+
+---
+
+#### Dist. Ratio
+**What it shows:** A ratio comparing revisit distance to inter-visit travel distance.
+
+**How it's calculated:** (Revisit Dist. in meters) / (Meter/Visit in meters). Equivalently: Revisit Dist. (km) x 1000 / Meter/Visit (m). A high ratio means the FLW's revisits to the same mother are spread far apart relative to how far they travel between different mothers — which may indicate GPS anomalies.
+
+**Why this matters:** Revisit Dist. and Meter/Visit each tell part of the story. The ratio combines them into a single signal: an FLW who travels short distances between different mothers (low Meter/Visit) but has large revisit distances (high Revisit Dist.) will have a high Dist. Ratio, flagging a potential concern.
 
 ---
 
@@ -363,7 +375,13 @@ All GPS Analysis columns derive from these form fields:
 - **App build version:** `form.meta.app_build_version` (integer, used for optional version filtering)
 - **Form name:** `form.@name` (identifies visit type)
 
+### Aggregate Map
+
+At the top of the GPS tab, a collapsible map displays all FLW visits on a single view. Each FLW's visits are shown as color-coded pins (a unique color per FLW), so you can visually compare coverage areas and spot overlapping or isolated clusters. The map uses marker clustering — when zoomed out, nearby pins are grouped into numbered clusters that expand as you zoom in. This keeps the map responsive even with thousands of visits. The map is **collapsed by default**; click the toggle to expand it.
+
 ### FLW Table Columns
+
+All columns in the GPS table are **sortable** — click any column header to sort ascending or descending. This makes it easy to find outliers (e.g., sort by Dist. Ratio descending to surface the most suspicious FLWs first).
 
 #### Total Visits
 The number of form submissions by this FLW within the date range.
@@ -391,17 +409,31 @@ The number of distinct mother cases visited by this FLW within the date range.
 
 ---
 
-#### Avg Case Dist
-**What it shows:** Average distance (km) between consecutive visits to the same mother.
+#### Revisit Dist.
+**What it shows:** Average distance (km) between consecutive visits to the same mother, with a denominator showing how many cases contributed to the calculation.
 
-**How it's calculated:** Same as Revisit Dist. in the Overview tab — average Haversine distance between consecutive GPS coordinates for visits to the same mother case, across all mothers for this FLW.
+**How it's calculated:** Same as Revisit Dist. in the Overview tab — average Haversine distance between consecutive GPS coordinates for visits to the same mother case, across all mothers for this FLW. Displayed as a value followed by "(N)" where N is the number of mother cases that had 2 or more GPS-tagged visits (i.e., the number of cases that could be compared). For example, "0.3 km (12)" means 12 mothers had repeat visits and the average revisit distance was 0.3 km.
 
 ---
 
-#### Max Case Dist
+#### Max Revisit Dist.
 **What it shows:** The single largest distance (km) observed between consecutive visits to the same mother.
 
 **Color coding:** Red and bold when exceeding 5 km.
+
+---
+
+#### Meter/Visit
+**What it shows:** The median distance (in meters) the FLW travels between consecutive visits to **different mothers within a single day**. Same calculation as the Meter/Visit column in the Overview tab.
+
+**Red flag:** Values below 100 meters are highlighted in red.
+
+---
+
+#### Dist. Ratio
+**What it shows:** A ratio comparing revisit distance to inter-visit travel distance.
+
+**How it's calculated:** (Revisit Dist. in meters) / (Meter/Visit in meters). In other words: Revisit Dist. (km) x 1000 / Meter/Visit (m). A high ratio means the FLW's revisits to the same mother are spread far apart relative to how far they travel between different mothers — which may indicate GPS anomalies.
 
 ---
 
@@ -423,7 +455,7 @@ Clicking "Details" on an FLW row expands to show individual visit records with:
 - **Form:** Type of visit (from `form.@name`)
 - **Entity:** Mother case name (from `form.mbw_visit.deliver.entity_name`)
 - **GPS:** Latitude and longitude coordinates (from `form.meta.location`)
-- **Dist from Prev:** Distance from the previous visit to the same mother (computed via Haversine)
+- **Revisit Dist.:** Distance from the previous visit to the same mother (computed via Haversine)
 - **Status:** Whether the visit is flagged (distance > 5 km)
 
 ---
@@ -694,7 +726,7 @@ When creating a task for an FLW (via the OCS AI integration), the system automat
 | Indicator | Threshold |
 |-----------|-----------|
 | Visit flagged | Distance from previous visit to same mother > 5 km |
-| Max Case Dist highlighted | > 5 km |
+| Max Revisit Dist. highlighted | > 5 km |
 | Meter/Visit red flag | < 100 meters |
 
 ---
