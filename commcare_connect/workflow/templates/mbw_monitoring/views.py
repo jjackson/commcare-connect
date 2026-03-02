@@ -74,6 +74,26 @@ from commcare_connect.labs.analysis.sse_streaming import AnalysisPipelineSSEMixi
 
 logger = logging.getLogger(__name__)
 
+VALID_STATUS_FILTER_VALUES = frozenset({"approved", "pending", "rejected", "over_limit"})
+
+
+def _parse_status_filter(raw: str | None) -> tuple[list[str], str | None]:
+    """Parse and validate a comma-separated status filter string.
+
+    Returns (valid_statuses, error_message).
+    error_message is None on success, non-None when raw was provided but
+    contained no valid tokens.
+    """
+    if not raw:
+        return [], None
+    statuses = [
+        s.strip().lower() for s in raw.split(",")
+        if s.strip().lower() in VALID_STATUS_FILTER_VALUES
+    ]
+    if not statuses:
+        return [], "Invalid status_filter values"
+    return statuses, None
+
 
 def _log_rss(label: str) -> None:
     """Log current RSS (max resident set size) for memory diagnostics."""
@@ -419,14 +439,9 @@ class MBWMonitoringStreamView(AnalysisPipelineSSEMixin, BaseSSEStreamView):
             app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
             # Visit approval status filter (pipeline-level, affects all tabs)
-            VALID_STATUSES = {"approved", "pending", "rejected", "over_limit"}
-            status_filter_raw = request.GET.get("status_filter", "")
-            status_filter = [
-                s.strip().lower() for s in status_filter_raw.split(",")
-                if s.strip().lower() in VALID_STATUSES
-            ] if status_filter_raw else []
-            if status_filter_raw and not status_filter:
-                yield send_sse_event("Error", error="Invalid status_filter values")
+            status_filter, status_err = _parse_status_filter(request.GET.get("status_filter"))
+            if status_err:
+                yield send_sse_event("Error", error=status_err)
                 return
 
             # Bust cache: when MBW_DEV_FIXTURE is on and ?bust_cache=1 is passed
@@ -1006,14 +1021,9 @@ class MBWGPSDetailView(LoginRequiredMixin, View):
         app_version_val = _parse_int_param(request.GET.get("app_version_val"))
 
         # Visit approval status filter (must match SSE stream filter)
-        VALID_STATUSES = {"approved", "pending", "rejected", "over_limit"}
-        status_filter_raw = request.GET.get("status_filter", "")
-        status_filter = [
-            s.strip().lower() for s in status_filter_raw.split(",")
-            if s.strip().lower() in VALID_STATUSES
-        ] if status_filter_raw else []
-        if status_filter_raw and not status_filter:
-            return JsonResponse({"error": "Invalid status_filter values"}, status=400)
+        status_filter, status_err = _parse_status_filter(request.GET.get("status_filter"))
+        if status_err:
+            return JsonResponse({"error": status_err}, status=400)
 
         try:
             visits_for_analysis = self._load_visits_from_cache(

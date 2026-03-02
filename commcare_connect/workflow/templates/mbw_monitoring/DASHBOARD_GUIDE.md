@@ -154,8 +154,8 @@ The column shows: *(still on track) / (total eligible) = percentage*
 - Missed visits: count of visits with status "Missed" (visit not completed and past `form.var_visit_N.visit_expiry_date`)
 
 **Color coding:**
-- Green: 70% or above
-- Yellow: 50-69%
+- Green: 85% or above
+- Yellow: 50-84%
 - Red: below 50%
 
 ---
