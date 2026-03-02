@@ -63,11 +63,15 @@ def process_learn_form(user, xform: XForm, app: CommCareApp, opportunity: Opport
     ]
     for jsonpath, processor in processors:
         try:
-            matches = [match.value for match in jsonpath.find(xform.form) if match.value["@xmlns"] == CCC_LEARN_XMLNS]
+            matches = _get_matching_blocks(jsonpath, xform)
             if matches:
                 processor(user, xform, app, opportunity, matches)
         except JSONPathError as e:
             raise ProcessingError from e
+
+
+def _get_matching_blocks(jsonpath, xform):
+    return [match.value for match in jsonpath.find(xform.form) if match.value["@xmlns"] == CCC_LEARN_XMLNS]
 
 
 def get_or_create_learn_module(app, module_data):
