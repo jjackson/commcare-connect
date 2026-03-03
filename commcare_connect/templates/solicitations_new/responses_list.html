@@ -129,13 +129,11 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
                                 <div class="flex items-center justify-end gap-3">
-                                    {# response_detail URL will be implemented in Task 7 #}
                                     <a href="{% url 'solicitations_new:response_detail' pk=response.pk %}"
                                        class="text-indigo-600 hover:text-indigo-900 font-medium">
                                         <i class="fa-solid fa-eye mr-1"></i> View
                                     </a>
-                                    {# review URL will be implemented in Task 8 #}
-                                    <a href="{% url 'solicitations_new:review' response_pk=response.pk %}"
+                                    <a href="{% url 'solicitations_new:review' pk=response.pk %}"
                                        class="text-green-600 hover:text-green-900 font-medium">
                                         <i class="fa-solid fa-clipboard-check mr-1"></i> Review
                                     </a>

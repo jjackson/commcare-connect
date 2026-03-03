@@ -13,17 +13,9 @@ urlpatterns = [
     path("create/", views.SolicitationCreateView.as_view(), name="create"),
     path("<int:pk>/edit/", views.SolicitationEditView.as_view(), name="edit"),
     path("<int:pk>/responses/", views.ResponsesListView.as_view(), name="responses_list"),
-    # Placeholder for respond view (replaced in Task 7)
-    path("<int:pk>/respond/", views.RespondPlaceholderView.as_view(), name="respond"),
-    # Placeholder URL names for forward references (replaced in Tasks 7-8)
-    path(
-        "<int:pk>/response-detail/",
-        views.RespondPlaceholderView.as_view(),
-        name="response_detail",
-    ),
-    path(
-        "<int:response_pk>/review/",
-        views.RespondPlaceholderView.as_view(),
-        name="review",
-    ),
+    # Response (login required)
+    path("<int:pk>/respond/", views.RespondView.as_view(), name="respond"),
+    path("response/<int:pk>/", views.ResponseDetailView.as_view(), name="response_detail"),
+    # Review (manager required)
+    path("response/<int:pk>/review/", views.ReviewView.as_view(), name="review"),
 ]
