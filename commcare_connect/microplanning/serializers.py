@@ -8,6 +8,7 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
     case_name = serializers.CharField(source="slug")
     case_type = serializers.SerializerMethodField()
     external_id = serializers.CharField(source="id")
+    owner_id = serializers.CharField(default=None, allow_null=True)
     properties = serializers.SerializerMethodField()
 
     class Meta:
@@ -16,6 +17,7 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "case_name",
             "case_type",
             "external_id",
+            "owner_id",  # Required when creating new case in HQ, optional when doing update
             "properties",
         ]
 
@@ -29,6 +31,6 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "centroid": str(obj.centroid) if obj.centroid else "",
             "expected_visit_count": str(obj.expected_visit_count),
             "wa_status": obj.status,
-            "ward": str(obj.ward),
-            "work_area_group": obj.work_area_group.name if obj.work_area_group else "",
+            "ward": obj.ward,
+            "work_area_group": getattr(obj.work_area_group, "name", ""),
         }
