@@ -54,9 +54,12 @@ class TestCreateOrUpdateCaseByWorkArea:
         user_case = make_commcare_case(case_id=owner_id, owner_id=owner_id)
         work_area_case = make_commcare_case(case_id=str(existing_case_id or uuid.uuid4()))
 
-        with patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case), patch(
-            "commcare_connect.commcarehq.api.create_or_update_case", return_value=work_area_case
-        ) as mock_create_or_update:
+        with (
+            patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case),
+            patch(
+                "commcare_connect.commcarehq.api.create_or_update_case", return_value=work_area_case
+            ) as mock_create_or_update,
+        ):
             create_or_update_case_by_work_area(work_area)
 
         mock_create_or_update.assert_called_once()
