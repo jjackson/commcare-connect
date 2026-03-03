@@ -87,18 +87,16 @@ def create_or_update_case(
     case_data: dict[str, Any],
     case_id: str | None = None,
 ) -> CommCareCase:
-    url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
-    if case_id:
-        url += f"{case_id}/"
-        method, error_msg = httpx.put, f"Failed to update case data for {domain} with {case_id}."
-    else:
-        method, error_msg = httpx.post, f"Failed to create case for {domain}."
+    base_url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
+    headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
 
-    response = method(
-        url,
-        headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
-        json=case_data,
-    )
+    with httpx.Client() as client:
+        if case_id:
+            response = client.put(f"{base_url}{case_id}/", headers=headers, json=case_data)
+            error_msg = f"Failed to update case data for {domain} with {case_id}."
+        else:
+            response = client.post(base_url, headers=headers, json=case_data)
+            error_msg = f"Failed to create case for {domain}."
 
     try:
         response.raise_for_status()
