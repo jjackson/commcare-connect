@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import api_views, views
 
 app_name = "solicitations_new"
 
@@ -18,4 +18,11 @@ urlpatterns = [
     path("response/<int:pk>/", views.ResponseDetailView.as_view(), name="response_detail"),
     # Review (manager required)
     path("response/<int:pk>/review/", views.ReviewView.as_view(), name="review"),
+    # JSON API
+    path("api/solicitations/", api_views.api_solicitations_list, name="api_solicitations_list"),
+    path("api/solicitations/<int:pk>/", api_views.api_solicitation_detail, name="api_solicitation_detail"),
+    path("api/responses/", api_views.api_responses_list, name="api_responses_list"),
+    path("api/responses/<int:pk>/", api_views.api_response_detail, name="api_response_detail"),
+    path("api/reviews/", api_views.api_reviews_create, name="api_reviews_create"),
+    path("api/reviews/<int:pk>/", api_views.api_review_detail, name="api_review_detail"),
 ]
