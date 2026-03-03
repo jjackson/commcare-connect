@@ -50,7 +50,7 @@ def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as e:
-                raise CommCareHQAPIException(f"Failed to fetch case data for {domain}. HQ Error: {e}")
+                raise CommCareHQAPIException(f"Failed to fetch case data for {domain}. HQ Error: {e}") from e
 
             data = response.json()
             cases.extend(CommCareCase(**case_data) for case_data in data.get("cases", []))
@@ -103,7 +103,7 @@ def create_or_update_case(
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as e:
-        raise CommCareHQAPIException(f"{error_msg} HQ Error: {e}")
+        raise CommCareHQAPIException(f"{error_msg} HQ Error: {e}") from e
 
     data = response.json()
     return CommCareCase(**data.get("case", {}))
