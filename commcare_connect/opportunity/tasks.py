@@ -263,7 +263,9 @@ def send_notification_inactive_users():
 def auto_deactivate_ended_opportunities():
     cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_DEACTIVATION_DAYS)
     opportunities = Opportunity.objects.filter(active=True, end_date__lte=cutoff)
-    with pghistory.context(user=None, username=SYSTEM, user_email=""):
+
+    action = f"{__name__}.auto_deactivate_ended_opportunities"
+    with pghistory.context(username=SYSTEM, action=action):
         opportunities.update(active=False)
 
 

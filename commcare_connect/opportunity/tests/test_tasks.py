@@ -359,3 +359,7 @@ class TestAutoDeactivateEndedOpportunities:
         assert deactivation_event.active is False
         assert deactivation_event.pgh_context is not None
         assert deactivation_event.pgh_context.metadata["username"] == "system"
+        assert (
+            deactivation_event.pgh_context.metadata["action"]
+            == "commcare_connect.opportunity.tasks.auto_deactivate_ended_opportunities"
+        )
