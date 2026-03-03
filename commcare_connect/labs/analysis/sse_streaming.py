@@ -69,7 +69,7 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
                 yield send_sse_event("Complete!", data={"result": 123})
     """
 
-    def get(self, request):
+    def get(self, request, **kwargs):
         """
         Handle GET request and return streaming response.
 

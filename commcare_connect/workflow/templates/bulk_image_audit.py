@@ -28,12 +28,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // ── Image type map ──────────────────────────────────────────────────────
     const IMAGE_TYPES = [
         {
-            id: 'scale_photo',
-            label: 'Scale Photo',
-            path: 'anthropometric/upload_weight_image',
-            icon: 'fa-weight-scale',
-        },
-        {
             id: 'ors_photo',
             label: 'ORS Photo',
             path: 'service_delivery/ors_group/ors_photo',
@@ -45,16 +39,23 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             path: 'service_delivery/muac_group/muac_display_1/muac_photo',
             icon: 'fa-ruler',
         },
+        {
+            id: 'scale_photo',
+            label: 'Scale Photo',
+            path: 'anthropometric/upload_weight_image',
+            icon: 'fa-weight-scale',
+        },
     ];
 
     // ── Phase (drives which section renders) ────────────────────────────────
     const [phase, setPhase] = React.useState(instance.state?.phase || 'config');
 
     // ── CSRF helper ─────────────────────────────────────────────────────────
+    // CSRF_USE_SESSIONS=True means no csrftoken cookie — read from DOM instead.
     function getCsrfToken() {
-        return document.cookie.split('; ')
-            .find(row => row.startsWith('csrftoken='))
-            ?.split('=')[1] || '';
+        return document.getElementById('workflow-root')?.dataset?.csrfToken
+            || document.querySelector('[name=csrfmiddlewaretoken]')?.value
+            || '';
     }
 
     // ── Config state ────────────────────────────────────────────────────────
@@ -127,11 +128,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         let start, end;
         switch (preset) {
             case 'last_week': {
-                const dow = today.getDay();
-                const daysToMon = dow === 0 ? 6 : dow - 1;
-                const thisMon = new Date(today); thisMon.setDate(today.getDate() - daysToMon);
-                start = new Date(thisMon); start.setDate(thisMon.getDate() - 7);
-                end = new Date(start); end.setDate(start.getDate() + 6);
+                // US week: Sunday through Saturday
+                const dow = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+                const thisSun = new Date(today); thisSun.setDate(today.getDate() - dow);
+                end = new Date(thisSun); end.setDate(thisSun.getDate() - 1); // prev Saturday
+                start = new Date(thisSun); start.setDate(thisSun.getDate() - 7); // prev Sunday
                 break;
             }
             case 'last_7_days':
@@ -165,6 +166,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // Set default date range on mount
     React.useEffect(() => {
         if (!startDate && !endDate) applyPreset('last_week');
+    }, []);
+
+    // Auto-populate opportunity from context on mount (if not already set from saved state)
+    React.useEffect(() => {
+        if (selectedOpps.length === 0 && instance.opportunity_id && instance.opportunity_name) {
+            setSelectedOpps([{ id: instance.opportunity_id, name: instance.opportunity_name }]);
+        }
     }, []);
 
     // ── Execution state ──────────────────────────────────────────────────────
@@ -1276,10 +1284,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 <h1 className="text-2xl font-bold text-gray-900">{definition.name}</h1>
                 <p className="text-gray-600 mt-1">{definition.description}</p>
             </div>
-            {phase === 'config' && <ConfigPhase />}
-            {phase === 'creating' && <CreatingPhase />}
-            {phase === 'reviewing' && <ReviewPhase />}
-            {phase === 'completed' && <CompletedPhase />}
+            {phase === 'config' && ConfigPhase()}
+            {phase === 'creating' && CreatingPhase()}
+            {phase === 'reviewing' && ReviewPhase()}
+            {phase === 'completed' && CompletedPhase()}
         </div>
     );
 }"""
