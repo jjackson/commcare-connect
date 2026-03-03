@@ -23,6 +23,7 @@ urlpatterns = [
     # Your stuff: custom urls includes go here
     path("register/organization/", organization_create, name="organization_create"),
     path("solicitations/", include("commcare_connect.solicitations.urls", namespace="solicitations")),
+    path("solicitations_new/", include("commcare_connect.solicitations_new.urls", namespace="solicitations_new")),
     path(
         "a/<slug:org_slug>/solicitations/",
         include("commcare_connect.solicitations.urls", namespace="org_solicitations"),
