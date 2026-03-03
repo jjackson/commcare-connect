@@ -3,6 +3,7 @@ from typing import TypedDict
 from urllib.parse import urlencode
 
 import httpx
+from django.db import transaction
 
 from commcare_connect.microplanning.models import WorkArea
 from commcare_connect.microplanning.serializers import WorkAreaCaseSerializer
@@ -69,10 +70,14 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     case_data = WorkAreaCaseSerializer(work_area).data
     case_data["owner_id"] = user_case.case_id
 
-    case = create_or_update_case(api_key, domain, case_data, case_id=work_area.case_id)
-    if work_area.case_id is None:
-        work_area.case_id = case.case_id
-        work_area.save()
+    with transaction.atomic():
+        # Re-fetch with a row-level lock to prevent a race condition where two
+        # concurrent calls both see case_id as None
+        locked_work_area = WorkArea.objects.select_for_update().get(pk=work_area.pk)
+        case = create_or_update_case(api_key, domain, case_data, case_id=locked_work_area.case_id)
+        if locked_work_area.case_id is None:
+            locked_work_area.case_id = case.case_id
+            locked_work_area.save(update_fields=["case_id"])
     return case
 
 
