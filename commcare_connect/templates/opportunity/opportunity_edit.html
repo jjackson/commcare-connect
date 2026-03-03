@@ -54,11 +54,15 @@
                                     </td>
                                     <td class="px-4 py-2">
                                         {% with ctx=event.pgh_context %}
-                                        {% if not ctx or ctx.metadata.username == "system" %}
-                                        {% trans 'System' %}
-                                        {% else %}
-                                        {{ ctx.metadata.username }}
-                                        {% endif %}
+                                            {% if ctx and ctx.metadata and ctx.metadata.username %}
+                                                {% if ctx.metadata.username == "system" %}
+                                                    {% trans 'System' %}
+                                                {% else %}
+                                                    {{ ctx.metadata.username }}
+                                                {% endif %}
+                                            {% else %}
+                                                {% trans 'Unavailable' %}
+                                            {% endif %}
                                         {% endwith %}
                                     </td>
                                 </tr>
