@@ -24,6 +24,7 @@ from vectortiles.views import MVTView
 
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
+from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.organization.decorators import opportunity_required, org_admin_required
 from commcare_connect.utils.file import get_file_extension
@@ -54,6 +55,15 @@ def microplanning_home(request, *args, **kwargs):
             "opp_id": opportunity.opportunity_id,
         },
     )
+
+    status_meta = {
+        status.value: {
+            "label": status.label,
+            "class": WORK_AREA_STATUS_COLORS.get(status, "bg-gray-200 text-gray-700"),
+        }
+        for status in WorkAreaStatus
+    }
+
     return render(
         request,
         template_name="microplanning/home.html",
@@ -66,7 +76,7 @@ def microplanning_home(request, *args, **kwargs):
             "metrics": get_metrics_for_microplanning(opportunity),
             "tiles_url": tiles_url,
             "groups_url": groups_url,
-            "status_labels": {s.value: s.label for s in WorkAreaStatus},
+            "status_meta": status_meta,
         },
     )
 
