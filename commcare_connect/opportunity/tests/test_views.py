@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     InvoiceStatus,
     Opportunity,
     OpportunityAccess,
+    OpportunityActiveEvent,
     OpportunityClaimLimit,
     Payment,
     PaymentUnit,
@@ -1993,4 +1994,36 @@ class TestOpportunityEditActiveHistory:
         assert "active_latest_event" in response.context
         assert "active_events" in response.context
         assert response.context["active_latest_event"].active is False
-        assert response.context["active_events"].count() == 2
+        assert len(response.context["active_events"]) == 2
+
+    def test_edit_active_toggle_records_user_in_context(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+
+        url = reverse(
+            "opportunity:edit",
+            kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.opportunity_id},
+        )
+        post_data = {
+            "name": opportunity.name,
+            "description": opportunity.description,
+            "short_description": opportunity.short_description,
+            "active": False,
+            "currency": opportunity.currency_id,
+            "country": opportunity.country_id,
+            "delivery_type": opportunity.delivery_type_id,
+            "is_test": opportunity.is_test,
+            "users": "",
+        }
+        assert opportunity.active
+        client.post(url, post_data)
+
+        opportunity.refresh_from_db()
+        assert not opportunity.active
+
+        latest_event = (
+            OpportunityActiveEvent.objects.filter(pgh_obj=opportunity).order_by("-pgh_created_at", "-pgh_id").first()
+        )
+        assert latest_event is not None
+        assert latest_event.active is False
+        assert latest_event.pgh_context is not None
+        assert latest_event.pgh_context.metadata["username"] == org_user_admin.username

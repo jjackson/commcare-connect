@@ -344,7 +344,7 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
         active_events = list(
             OpportunityActiveEvent.objects.filter(pgh_obj=self.object)
             .select_related("pgh_context")
-            .order_by("-pgh_created_at")
+            .order_by("-pgh_created_at", "-pgh_id")
         )
         context["active_events"] = active_events
         context["active_latest_event"] = active_events[0] if active_events else None
