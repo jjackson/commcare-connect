@@ -82,15 +82,15 @@
                 <!-- Sidebar content goes here -->
             </aside>
 
-            <aside id="right-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
-                {{ status_labels|json_script:"status-labels-data" }}
-                <h2 class="text-lg font-semibold mb-2">{% translate "Select Work Area" %}</h2>
-                <template x-if="!selectedFeature">
-                    <div class="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 py-8">
-                        <i class="fa-regular fa-map text-3xl"></i>
-                        <p class="text-sm">{% translate "Click a work area on the map to view details." %}</p>
-                    </div>
-                </template>
+        <aside id="right-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
+            {{ status_meta|json_script:"status-meta-data" }}
+            <h2 class="text-lg font-semibold mb-2">{% translate "Select Work Area" %}</h2>
+            <template x-if="!selectedFeature">
+                <div class="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 py-8">
+                    <i class="fa-regular fa-map text-3xl"></i>
+                    <p class="text-sm">{% translate "Click a work area on the map to view details." %}</p>
+                </div>
+            </template>
 
                 <!-- Selected work area detail panel -->
                 <template x-if="selectedFeature">
@@ -109,42 +109,32 @@
                                 <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
                                     x-text="selectedFeature.expected_visit_count ?? '—'"></dd>
 
-                                <dt class="text-sm text-gray-500">{% translate "Number of Buildings" %}</dt>
-                                <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                                    x-text="selectedFeature.building_count ?? '—'"></dd>
-                            </div>
-                            <div class="flex items-center gap-4" x-data="{
-                                                    statusLabels: JSON.parse(document.getElementById('status-labels-data').textContent),
-                                                    statusColors: {
-                                                        'NOT_STARTED':              'bg-gray-200 text-gray-700',
-                                                        'UNASSIGNED':               'bg-gray-200 text-gray-700',
-                                                        'NOT_VISITED':              'bg-gray-200 text-gray-700',
-                                                        'VISITED':                  'bg-yellow-200 text-yellow-900',
-                                                        'REQUEST_FOR_INACCESSIBLE': 'bg-yellow-200 text-yellow-900',
-                                                        'EXPECTED_VISIT_REACHED':   'bg-green-200 text-green-900',
-                                                        'INACCESSIBLE':             'bg-gray-500 text-white',
-                                                        'EXCLUDED':                 'bg-gray-500 text-white',
-                                                    }
-                                                }">
-                                <dt class="text-sm text-gray-500 shrink-0">{% translate "Status" %}</dt>
-                                <dd class="flex-1 min-w-0">
-                                    <span class="block w-full text-center text-sm font-semibold rounded-lg px-3 py-2"
-                                        :class="statusColors[selectedFeature.status]" x-text="statusLabels[selectedFeature.status]">
-                                    </span>
-                                </dd>
-                            </div>
-                        </dl>
-                        <div class="mt-4 flex justify-end">
-                            <button class="button button-md button-outline-rounded">
-                                <i class="fa-regular fa-pen-to-square"></i>
-                                {% translate "Modify Work Area" %}
-                            </button>
+                            <dt class="text-sm text-gray-500">{% translate "Number of Buildings" %}</dt>
+                            <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
+                            x-text="selectedFeature.building_count ?? '—'"></dd>
                         </div>
+                        <div class="flex items-center gap-4"
+                        x-data="{statusMeta: JSON.parse(document.getElementById('status-meta-data').textContent)}">
+                        <dt class="text-sm text-gray-500 shrink-0">{% translate "Status" %}</dt>
+                        <dd class="flex-1 min-w-0">
+                            <span class="block w-full text-center text-sm font-semibold rounded-lg px-3 py-2"
+                                :class="statusMeta[selectedFeature.status]?.class" x-text="statusMeta[selectedFeature.status]?.label">
+                            </span>
+                        </span>
+                    </dd>
+                        </div>
+                    </dl>
+                    <div class="mt-4 flex justify-end">
+                        <button class="button button-md button-outline-rounded">
+                            <i class="fa-regular fa-pen-to-square"></i>
+                            {% translate "Modify Work Area" %}
+                        </button>
                     </div>
-                </template>
-            </aside>
-        </div>
-    </div>
+                </div>
+            </template>
+</aside>
+</div>
+</div>
 </div>
 {% include "microplanning/map_handler.html" %}
 {% endblock %}
