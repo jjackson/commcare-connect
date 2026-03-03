@@ -87,7 +87,8 @@ class ScoutEmbedView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["scout_url"] = os.environ.get("SCOUT_URL", "http://localhost:5173")
+        # Strip trailing slash — template adds slashes where needed
+        ctx["scout_url"] = os.environ.get("SCOUT_URL", "http://localhost:5173").rstrip("/")
         return ctx
 
 
