@@ -1,5 +1,5 @@
 import dataclasses
-from typing import TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlencode
 
 import httpx
@@ -32,7 +32,7 @@ class CommCareCase:
     closed: bool
     date_closed: str | None
     properties: dict[str, str]
-    indices: dict[str, any]
+    indices: dict[str, Any]
 
 
 def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters) -> list[CommCareCase]:
@@ -84,7 +84,7 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
 def create_or_update_case(
     api_key: HQApiKey,
     domain: str,
-    case_data: dict[str, any],
+    case_data: dict[str, Any],
     case_id: str | None = None,
 ) -> CommCareCase:
     url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
@@ -109,7 +109,7 @@ def create_or_update_case(
     return CommCareCase(**data.get("case", {}))
 
 
-def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, any]) -> CommCareCase:
+def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, Any]) -> CommCareCase:
     domain = opportunity_access.opportunity.deliver_app.cc_domain
     api_key = opportunity_access.opportunity.api_key
     hq_server = api_key.hq_server
