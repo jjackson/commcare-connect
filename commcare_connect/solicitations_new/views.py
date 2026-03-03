@@ -3,12 +3,17 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import Http404
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
 
 from commcare_connect.solicitations_new.data_access import SolicitationsNewDataAccess
-from commcare_connect.solicitations_new.forms import SolicitationForm
+from commcare_connect.solicitations_new.forms import (
+    ReviewForm,
+    SolicitationForm,
+    SolicitationResponseForm,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -231,13 +236,254 @@ class ResponsesListView(ManagerRequiredMixin, TemplateView):
         return ctx
 
 
-# -- Placeholder (replaced in Task 7) --------------------------------------
+# -- Response Views (login required) ---------------------------------------
 
 
-class RespondPlaceholderView(LabsLoginRequiredMixin, View):
-    """Placeholder for respond/response_detail/review views. Redirects to public list."""
+class RespondView(LabsLoginRequiredMixin, TemplateView):
+    """Submit or save a draft response to a solicitation."""
 
-    def get(self, request, pk=None, response_pk=None):
-        if pk:
+    template_name = "solicitations_new/respond.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        pk = kwargs["pk"]
+        try:
+            da = _get_data_access(self.request)
+            solicitation = da.get_solicitation_by_id(pk)
+            if not solicitation:
+                raise Http404("Solicitation not found")
+            if not solicitation.can_accept_responses():
+                ctx["not_accepting"] = True
+            ctx["solicitation"] = solicitation
+            ctx["form"] = SolicitationResponseForm(questions=solicitation.questions)
+            ctx["organizations"] = getattr(self.request.user, "organizations", [])
+        except Http404:
+            raise
+        except Exception:
+            logger.exception("Failed to load solicitation %s for response", pk)
+            raise Http404("Solicitation not found")
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        try:
+            da = _get_data_access(request)
+            solicitation = da.get_solicitation_by_id(pk)
+            if not solicitation:
+                raise Http404("Solicitation not found")
+        except Http404:
+            raise
+        except Exception:
+            logger.exception("Failed to load solicitation %s for response POST", pk)
+            raise Http404("Solicitation not found")
+
+        if not solicitation.can_accept_responses():
             return redirect("solicitations_new:public_detail", pk=pk)
-        return redirect("solicitations_new:public_list")
+
+        form = SolicitationResponseForm(questions=solicitation.questions, data=request.POST)
+        if form.is_valid():
+            # Determine LLO entity info
+            create_new = request.POST.get("create_new_entity") == "on"
+            if create_new:
+                llo_entity_id = ""
+                llo_entity_name = request.POST.get("new_entity_name", "").strip()
+            else:
+                llo_entity_id = request.POST.get("llo_entity_id", "")
+                llo_entity_name = request.POST.get("llo_entity_name", "")
+
+            # Determine status based on which button was pressed
+            if "save_draft" in request.POST:
+                status = "draft"
+            else:
+                status = "submitted"
+
+            data = {
+                "solicitation_id": pk,
+                "llo_entity_id": llo_entity_id,
+                "llo_entity_name": llo_entity_name,
+                "responses": form.get_responses_dict(),
+                "status": status,
+                "submitted_by_name": request.user.get_full_name() or request.user.username,
+                "submitted_by_email": request.user.email,
+                "submission_date": timezone.now().isoformat(),
+            }
+
+            try:
+                da.create_response(
+                    solicitation_id=pk,
+                    llo_entity_id=llo_entity_id or "new",
+                    data=data,
+                )
+                return redirect("solicitations_new:public_detail", pk=pk)
+            except Exception:
+                logger.exception("Failed to create response for solicitation %s", pk)
+                ctx = self.get_context_data(**kwargs)
+                ctx["form"] = form
+                ctx["error"] = "Failed to submit response. Please try again."
+                return self.render_to_response(ctx)
+        else:
+            ctx = self.get_context_data(**kwargs)
+            ctx["form"] = form
+            return self.render_to_response(ctx)
+
+
+class ResponseDetailView(LabsLoginRequiredMixin, TemplateView):
+    """View details of a single response with Q&A pairs and reviews."""
+
+    template_name = "solicitations_new/response_detail.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        pk = kwargs["pk"]
+        try:
+            da = _get_data_access(self.request)
+            response = da.get_response_by_id(pk)
+            if not response:
+                raise Http404("Response not found")
+            ctx["response"] = response
+
+            # Load parent solicitation
+            solicitation = da.get_solicitation_by_id(response.solicitation_id)
+            ctx["solicitation"] = solicitation
+
+            # Load reviews
+            reviews = da.get_reviews_for_response(pk)
+            ctx["reviews"] = reviews
+
+            # Build Q&A pairs
+            qa_pairs = []
+            if solicitation and solicitation.questions:
+                for question in solicitation.questions:
+                    q_id = question.get("id", "")
+                    qa_pairs.append(
+                        {
+                            "question": question.get("text", ""),
+                            "answer": response.responses.get(q_id, ""),
+                        }
+                    )
+            ctx["qa_pairs"] = qa_pairs
+        except Http404:
+            raise
+        except Exception:
+            logger.exception("Failed to load response %s", pk)
+            raise Http404("Response not found")
+        return ctx
+
+
+# -- Review Views (manager required) ---------------------------------------
+
+
+class ReviewView(ManagerRequiredMixin, TemplateView):
+    """Create or update a review for a response."""
+
+    template_name = "solicitations_new/review_form.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        pk = kwargs["pk"]
+        try:
+            da = _get_data_access(self.request)
+            response = da.get_response_by_id(pk)
+            if not response:
+                raise Http404("Response not found")
+            ctx["response"] = response
+
+            # Load parent solicitation
+            solicitation = da.get_solicitation_by_id(response.solicitation_id)
+            ctx["solicitation"] = solicitation
+
+            # Build Q&A pairs for context
+            qa_pairs = []
+            if solicitation and solicitation.questions:
+                for question in solicitation.questions:
+                    q_id = question.get("id", "")
+                    qa_pairs.append(
+                        {
+                            "question": question.get("text", ""),
+                            "answer": response.responses.get(q_id, ""),
+                        }
+                    )
+            ctx["qa_pairs"] = qa_pairs
+
+            # Check for existing review by current user
+            reviews = da.get_reviews_for_response(pk)
+            reviewer_username = self.request.user.username
+            existing_review = None
+            for review in reviews:
+                if review.reviewer_username == reviewer_username:
+                    existing_review = review
+                    break
+
+            if existing_review:
+                ctx["existing_review"] = existing_review
+                ctx["is_update"] = True
+                ctx["form"] = ReviewForm(
+                    initial={
+                        "score": existing_review.score,
+                        "recommendation": existing_review.recommendation,
+                        "notes": existing_review.notes,
+                        "tags": existing_review.tags,
+                    }
+                )
+            else:
+                ctx["is_update"] = False
+                ctx["form"] = ReviewForm()
+        except Http404:
+            raise
+        except Exception:
+            logger.exception("Failed to load response %s for review", pk)
+            raise Http404("Response not found")
+        return ctx
+
+    def post(self, request, *args, **kwargs):
+        pk = kwargs["pk"]
+        try:
+            da = _get_data_access(request)
+            response = da.get_response_by_id(pk)
+            if not response:
+                raise Http404("Response not found")
+        except Http404:
+            raise
+        except Exception:
+            logger.exception("Failed to load response %s for review POST", pk)
+            raise Http404("Response not found")
+
+        form = ReviewForm(request.POST)
+        if form.is_valid():
+            reviewer_username = request.user.username
+            data = {
+                "response_id": pk,
+                "llo_entity_id": response.llo_entity_id,
+                "score": form.cleaned_data["score"],
+                "recommendation": form.cleaned_data["recommendation"],
+                "notes": form.cleaned_data["notes"],
+                "tags": form.cleaned_data["tags"],
+                "reviewer_username": reviewer_username,
+                "review_date": timezone.now().isoformat(),
+            }
+
+            try:
+                # Check for existing review by this user
+                reviews = da.get_reviews_for_response(pk)
+                existing_review = None
+                for review in reviews:
+                    if review.reviewer_username == reviewer_username:
+                        existing_review = review
+                        break
+
+                if existing_review:
+                    da.update_review(existing_review.pk, data)
+                else:
+                    da.create_review(response_id=pk, data=data)
+
+                return redirect("solicitations_new:response_detail", pk=pk)
+            except Exception:
+                logger.exception("Failed to save review for response %s", pk)
+                ctx = self.get_context_data(**kwargs)
+                ctx["form"] = form
+                ctx["error"] = "Failed to save review. Please try again."
+                return self.render_to_response(ctx)
+        else:
+            ctx = self.get_context_data(**kwargs)
+            ctx["form"] = form
+            return self.render_to_response(ctx)
