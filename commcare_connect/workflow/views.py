@@ -261,6 +261,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "id": 0,  # Temporary ID
                     "definition_id": definition_id,
                     "opportunity_id": opportunity_id,
+                    "opportunity_name": labs_context.get("opportunity_name"),
                     "status": "preview",
                     "state": {"worker_states": {}},
                     "period_start": week_start.isoformat(),
@@ -277,6 +278,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "id": run.id,
                     "definition_id": definition_id,
                     "opportunity_id": opportunity_id,
+                    "opportunity_name": labs_context.get("opportunity_name"),
                     "status": run.data.get("status", "in_progress"),
                     "state": run.data.get("state", {}),
                     "period_start": run.data.get("period_start"),
@@ -302,6 +304,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "id": run.id,
                     "definition_id": definition_id,
                     "opportunity_id": opportunity_id,
+                    "opportunity_name": labs_context.get("opportunity_name"),
                     "status": run.data.get("status", "in_progress"),
                     "state": run.data.get("state", {}),
                     "period_start": run.data.get("period_start"),

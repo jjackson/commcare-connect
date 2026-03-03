@@ -86,9 +86,12 @@ class SQLBackend:
         """
         cache_manager = SQLCacheManager(opportunity_id, config=None)
 
-        # Check if we have valid cached data in SQL
-        if not force_refresh and expected_visit_count:
-            if cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct):
+        # Check if we have valid cached data in SQL.
+        # When expected_visit_count is unknown (0/None from Celery MockRequest), accept any
+        # non-expired cache rather than always re-downloading from the API.
+        if not force_refresh:
+            effective_count = expected_visit_count or 0
+            if cache_manager.has_valid_raw_cache(effective_count, tolerance_pct=tolerance_pct):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id} (tolerance={tolerance_pct}%)")
                 return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
 
@@ -130,9 +133,10 @@ class SQLBackend:
         """
         cache_manager = SQLCacheManager(opportunity_id, config=None)
 
-        # Check SQL cache first
-        if not force_refresh and expected_visit_count:
-            if cache_manager.has_valid_raw_cache(expected_visit_count, tolerance_pct=tolerance_pct):
+        # Check SQL cache first. Accept any non-expired cache when expected_visit_count is unknown.
+        if not force_refresh:
+            effective_count = expected_visit_count or 0
+            if cache_manager.has_valid_raw_cache(effective_count, tolerance_pct=tolerance_pct):
                 logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id}")
                 visit_dicts = self._load_from_cache(cache_manager, skip_form_json=False, filter_visit_ids=None)
                 yield ("cached", visit_dicts)

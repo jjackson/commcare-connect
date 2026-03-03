@@ -46,7 +46,7 @@ class CurrentVersionMiddleware:
 class CustomPGHistoryMiddleware(HistoryMiddleware):
     def get_context(self, request):
         context = super().get_context(request)
-        if request.user.is_authenticated:
+        if request.user.is_authenticated and hasattr(request.user, "_meta"):
             self._add_user_details_to_context(request, context)
         return context
 
