@@ -20,6 +20,7 @@ def test_work_area_case_serializer():
         "case_name": "my-area",
         "case_type": WORK_AREA_CASE_TYPE,
         "external_id": str(work_area.id),
+        "owner_id": None,
         "properties": {
             "bounding_box": str(work_area.boundary),
             "building_count": "5",
