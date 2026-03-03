@@ -82,6 +82,25 @@ class Flag(AbstractUserFlag):
 
         return False
 
+    def obj_has_access(self, obj: Organization | Opportunity | Program):
+        """
+        Checks whether the given object has access to this flag through
+        inherited permissions, i.e. if any object "above" it has access even
+        though the object itself does not necessarily have.
+        """
+        if self.is_active_for(obj):
+            return True
+
+        if isinstance(obj, Organization):
+            # Organization is highest level, so terminate here
+            return False
+
+        has_inherited_access = self.is_active_for(obj.organization)
+        if not has_inherited_access and isinstance(obj, Opportunity):
+            if obj.managed:
+                has_inherited_access = self.obj_has_access(obj.managedopportunity.program)
+        return has_inherited_access
+
     def _get_ids_for_relation(self, relation_name):
         """Get cached IDs for a relation using its configured cache keys."""
         key_name, default_value = self.RELATION_CACHE_KEYS[relation_name]

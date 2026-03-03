@@ -4,7 +4,7 @@ from django.core.cache import cache
 from commcare_connect.flags.models import Flag
 from commcare_connect.flags.tests.factories import FlagFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory
-from commcare_connect.program.tests.factories import ProgramFactory
+from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
 from commcare_connect.users.tests.factories import MembershipFactory, OrganizationFactory, UserFactory
 
 
@@ -88,3 +88,69 @@ class TestFlagModel:
         active_flags = Flag.active_flags_for_user(user, include_role_flags=True)
         assert active_flags.count() == 2
         assert set(active_flags) == {staff_flag, everyone_flag}
+
+    def test_obj_have_access_with_organization_obj(self):
+        flag = FlagFactory()
+        org = OrganizationFactory()
+        flag.organizations.add(org)
+        assert flag.obj_has_access(org)
+
+    def test_obj_have_access_without_organization_obj_access(self):
+        flag = FlagFactory()
+        org = OrganizationFactory()
+        assert not flag.obj_has_access(org)
+
+    def test_obj_have_access_with_program_obj(self):
+        flag = FlagFactory()
+        program = ProgramFactory()
+        flag.programs.add(program)
+        assert flag.obj_has_access(program)
+
+    def test_obj_have_access_with_program_obj_org_access(self):
+        flag = FlagFactory()
+        org = OrganizationFactory()
+        flag.organizations.add(org)
+
+        program = ProgramFactory(organization=org)
+        assert not flag.is_active_for(program)
+        assert flag.obj_has_access(program)
+
+    def test_obj_have_access_with_non_managed_opportunity_obj(self):
+        flag = FlagFactory()
+        opp = OpportunityFactory()
+        flag.opportunities.add(opp)
+
+        assert flag.obj_has_access(opp)
+
+    def test_obj_have_access_with_non_managed_opportunity_obj_org_access(self):
+        flag = FlagFactory()
+        org = OrganizationFactory()
+        flag.organizations.add(org)
+
+        opp = OpportunityFactory(organization=org)
+        assert not flag.is_active_for(opp)
+        assert flag.obj_has_access(opp)
+
+    def test_obj_have_access_with_managed_opportunity_obj(self):
+        flag = FlagFactory()
+        opp = ManagedOpportunityFactory()
+        flag.opportunities.add(opp)
+
+        assert flag.obj_has_access(opp)
+
+    def test_obj_have_access_with_managed_opportunity_obj_program_access(self):
+        flag = FlagFactory()
+        opp = ManagedOpportunityFactory()
+        flag.programs.add(opp.program)
+
+        assert not flag.is_active_for(opp)
+        assert flag.obj_has_access(opp)
+
+    def test_obj_have_access_with_managed_opportunity_obj_org_access(self):
+        flag = FlagFactory()
+        opp = ManagedOpportunityFactory()
+        flag.organizations.add(opp.organization)
+
+        assert not flag.is_active_for(opp)
+        assert not flag.is_active_for(opp.managedopportunity.program)
+        assert flag.obj_has_access(opp)
