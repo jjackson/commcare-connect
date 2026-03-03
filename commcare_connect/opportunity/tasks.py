@@ -71,6 +71,7 @@ from config import celery_app
 logger = logging.getLogger(__name__)
 
 OPPORTUNITY_AUTO_DEACTIVATION_DAYS = 30
+SYSTEM = "system"
 
 
 @celery_app.task()
@@ -262,7 +263,7 @@ def send_notification_inactive_users():
 def auto_deactivate_ended_opportunities():
     cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_DEACTIVATION_DAYS)
     opportunities = Opportunity.objects.filter(active=True, end_date__lte=cutoff)
-    with pghistory.context(user=None, username="system", user_email=""):
+    with pghistory.context(user=None, username=SYSTEM, user_email=""):
         opportunities.update(active=False)
 
 
