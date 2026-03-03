@@ -1,8 +1,7 @@
 from rest_framework import serializers
 
+from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.models import WorkArea
-
-WORK_AREA_CASE_TYPE = "work-area"
 
 
 class WorkAreaCaseSerializer(serializers.ModelSerializer):
