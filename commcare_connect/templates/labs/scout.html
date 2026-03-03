@@ -35,7 +35,8 @@
   var authPrompt = document.getElementById("scout-auth-prompt");
   var container = document.getElementById("scout-container");
 
-  ScoutWidget.init({
+  // Store instance on window so the context selector can call setTenant()
+  window._scoutWidget = ScoutWidget.init({
     container: "#scout-container",
     mode: "full",
     theme: "light",
