@@ -54,7 +54,9 @@
   });
 
   document.getElementById("scout-login-btn").addEventListener("click", function() {
-    var popup = window.open(SCOUT_URL, "scout-login", "width=600,height=700");
+    // Trailing slash is required so ALB routes to Scout's nginx, not connect-labs gunicorn
+    var loginUrl = SCOUT_URL.replace(/\/$/, "") + "/";
+    var popup = window.open(loginUrl, "scout-login", "width=600,height=700");
 
     var check = setInterval(function() {
       if (popup && popup.closed) {
