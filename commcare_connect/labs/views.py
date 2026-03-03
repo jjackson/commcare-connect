@@ -1,3 +1,5 @@
+import os
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseRedirect
@@ -85,7 +87,7 @@ class ScoutEmbedView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["scout_url"] = "http://localhost:5173"
+        ctx["scout_url"] = os.environ.get("SCOUT_URL", "http://localhost:5173")
         return ctx
 
 
