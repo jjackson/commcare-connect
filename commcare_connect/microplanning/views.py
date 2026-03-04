@@ -166,7 +166,17 @@ def cluster_work_areas(request, org_slug, opp_id):
 
     task = cluster_work_areas_task.delay(request.opportunity.id)
     redirect_url += f"?clustering_task_id={task.id}"
-    return redirect(redirect_url)
+
+    status_url = reverse("microplanning:clustering_status", args=(org_slug, opp_id))
+    status_url += f"?clustering_task_id={task.id}"
+    html = f"""
+        <div id='clustering-status' class='mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center'
+            hx-get="{status_url}" hx-trigger="every 2s" hx-swap="outerHTML">
+            <div class="animate-spin rounded-full h-4 w-4 border-4 border-brand-mango border-t-transparent"></div>
+            <span>Work Area Clustering in progress.</span>
+        </div>
+    """
+    return HttpResponse(mark_safe(html), headers={"HX-Push-Url": redirect_url})
 
 
 @org_admin_required
@@ -192,25 +202,21 @@ def clustering_status(request, org_slug, opp_id):
         if status == CELERY_TASK_SUCCESS:
             message = "Work Area Clustering was successful. You may close this window."
             icon = "fa-solid fa-circle-check text-green-600"
-            reload = False
         elif status == CELERY_TASK_FAILURE:
             message = "There was an error. Please try again."
             icon = "fa-solid fa-circle-exclamation text-red-600"
-            reload = False
         else:
-            message = "Work Area Clustering in progress."
-            icon = "fa-solid fa-stopwatch text-brand-marigold"
-            reload = True
+            # htmx does not swap content when status 204 is returned.
+            # This keeps the progress bar intact, once any of the above
+            # status are triggered, the progress bar is replaced with a
+            # non-refreshing div to show final status.
+            return HttpResponse(status=HTTPStatus.NO_CONTENT)
 
-        url = "{}?clustering_task_id={}".format(
-            reverse("microplanning:clustering_status", args=(org_slug, opp_id)), task_id
+        html = (
+            '<div id="clustering-status" class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center">'
+            f"<i class='fa-solid {icon} text-xl'></i><span>{message}</span>"
+            "</div>"
         )
-        reload_html = f'hx-get="{url}" hx-trigger="load delay:2s" hx-swap="outerHTML"' if reload else ""
-        html = f"""
-            <div id="clustering-status" class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center" {reload_html}>
-                <i class='fa-solid {icon} text-xl'></i><span>{message}</span>
-            </div>
-        """
         return HttpResponse(mark_safe(html), status=HTTPStatus.OK)
 
     return redirect("microplanning:microplanning_home", args=(org_slug, opp_id))
