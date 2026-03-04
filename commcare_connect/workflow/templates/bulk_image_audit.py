@@ -66,7 +66,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [searchResults, setSearchResults] = React.useState([]);
     const [isSearching, setIsSearching] = React.useState(false);
     const [imageType, setImageType] = React.useState(
-        instance.state?.config?.image_type || 'scale_photo'
+        instance.state?.config?.image_type || 'ors_photo'
     );
     const [auditMode, setAuditMode] = React.useState(
         instance.state?.config?.audit_mode || 'date_range'
@@ -408,12 +408,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [completionNotes, setCompletionNotes] = React.useState('');
     const [isCompleting, setIsCompleting] = React.useState(false);
     const [completeError, setCompleteError] = React.useState(null);
+    const [manualOverallResult, setManualOverallResult] = React.useState(null);
 
     const handleComplete = async () => {
         const config = instance.state?.config || {};
         const flwRows = buildFlwRows(assessments, config);
         const allPassing = flwRows.length > 0 && flwRows.every(r => r.pct >= threshold);
-        const overallResult = allPassing ? 'pass' : 'fail';
+        const autoResult = allPassing ? 'pass' : 'fail';
+        const overallResult = manualOverallResult || autoResult;
         const visitResults = buildVisitResults(assessments);
 
         const fd = new FormData();
@@ -433,11 +435,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             const data = await res.json();
             if (data.success) {
                 const completedAt = new Date().toISOString();
-                setPhase('completed');
                 await onUpdateState({
                     phase: 'completed',
                     completion: { notes: completionNotes, completed_at: completedAt, overall_result: overallResult },
                 });
+                const oppId = instance.opportunity_id || '';
+                window.location.href = '/labs/workflow/' + (oppId ? '?opportunity_id=' + oppId : '');
             } else {
                 setCompleteError(data.error || 'Failed to complete review');
             }
@@ -1063,6 +1066,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const CompleteSection = ({ assessments: sectionAssessments }) => {
         const pendingCount = (sectionAssessments || []).filter(a => a.status === 'pending').length;
         const hasPending = pendingCount > 0;
+        const config = instance.state?.config || {};
+        const flwRows = buildFlwRows(sectionAssessments || [], config);
+        const allPassing = flwRows.length > 0 && flwRows.every(r => r.pct >= threshold);
+        const autoResult = allPassing ? 'pass' : 'fail';
+        const displayResult = manualOverallResult || autoResult;
 
         return (
             <div className="bg-white rounded-lg shadow-sm p-6">
@@ -1094,6 +1102,29 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
                 {showCompleteForm && !hasPending && (
                     <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Overall Result</label>
+                            <div className="flex gap-4">
+                                {['pass', 'fail'].map(val => (
+                                    <label key={val} className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="radio"
+                                            name="overall_result"
+                                            value={val}
+                                            checked={displayResult === val}
+                                            onChange={() => setManualOverallResult(val)}
+                                            className="text-blue-600"
+                                        />
+                                        <span className={'text-sm font-medium ' + (val === 'pass' ? 'text-green-700' : 'text-red-700')}>
+                                            {val === 'pass' ? 'Pass' : 'Fail'}
+                                        </span>
+                                        {val === autoResult && !manualOverallResult && (
+                                            <span className="text-xs text-gray-400">(auto)</span>
+                                        )}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                             <textarea
@@ -1192,11 +1223,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 </div>
 
                 {/* FLW Summary Table */}
-                <FlwSummaryTable assessments={assessments} threshold={threshold}
-                    config={config} readOnly={false} />
+                {FlwSummaryTable({ assessments, threshold, config, readOnly: false })}
 
                 {/* Complete Image Review */}
-                <CompleteSection assessments={assessments} />
+                {CompleteSection({ assessments })}
             </div>
         );
     };
