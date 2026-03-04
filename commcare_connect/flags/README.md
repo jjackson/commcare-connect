@@ -1,6 +1,6 @@
 # Release Toggles in CommCare Connect
 
-Commcare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) to manage feature release.
+CommCare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) to manage feature release.
 
 Waffle provides different tools to control access to a feature on the environment.
 
@@ -15,7 +15,7 @@ Connect uses both [switches](https://waffle.readthedocs.io/en/stable/types/switc
 
 ## Expectations
 
-- Switches and toggles should be as **short-lived** as possible, existing through the release, but removed once the feature is out.
+- Switches and flags should be as **short-lived** as possible, existing through the release, but removed once the feature is out.
 - All switches and flags should have a **detailed description** in the note field of the model, describing the feature they control.
 
 ## Configuration Details
@@ -29,7 +29,7 @@ They can be managed by users with required access
 
 ### Switches
 
-- switches names are added in the file `switch_names.py`
+- switch names are added in the file `switch_names.py`
 - use `switch_is_active` to check if switch is enabled
 - for new switches, `WAFFLE_CREATE_MISSING_SWITCHES` is set to automatically add new switches to database when they are encountered in the codebase
 
