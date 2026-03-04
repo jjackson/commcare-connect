@@ -179,7 +179,7 @@ class OrganizationSelectOrCreateForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.is_new_org = False
+        self._is_new_org = False
 
     def get_entity_wise_orgs(self):
         data = {}
@@ -206,7 +206,7 @@ class OrganizationSelectOrCreateForm(forms.Form):
             org = Organization.objects.filter(pk=value).first()
             if org:
                 return org
-        self.is_new_org = True
+        self._is_new_org = True
         return Organization(name=value)
 
     def clean(self):
@@ -233,4 +233,4 @@ class OrganizationSelectOrCreateForm(forms.Form):
                 llo_entity.save()
             if not org.pk:
                 org.save()
-        return org
+        return org, self._is_new_org

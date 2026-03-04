@@ -147,7 +147,7 @@ class TestOrganizationSelectOrCreateForm:
         )
 
         assert form.is_valid(), form.errors
-        org = form.save()
+        org, is_new_org = form.save()
 
         assert LLOEntity.objects.count() == initial_llo_count
         assert Organization.objects.count() == initial_org_count
@@ -155,6 +155,7 @@ class TestOrganizationSelectOrCreateForm:
         assert org.pk == existing_org.pk
         assert org.name == "Existing Org"
         assert org.llo_entity == existing_llo
+        assert not is_new_org
 
     def test_llo_entity_exists_new_org_created(self):
         existing_llo = LLOEntity.objects.create(name="Existing LLO")
@@ -170,7 +171,7 @@ class TestOrganizationSelectOrCreateForm:
         )
 
         assert form.is_valid(), form.errors
-        org = form.save()
+        org, is_new_org = form.save()
 
         assert LLOEntity.objects.count() == initial_llo_count
         assert Organization.objects.count() == initial_org_count + 1
@@ -178,6 +179,7 @@ class TestOrganizationSelectOrCreateForm:
         assert org.pk is not None
         assert org.name == "New Organization"
         assert org.llo_entity == existing_llo
+        assert is_new_org
 
     def test_both_new_llo_entity_and_new_org_created(self):
         initial_llo_count = LLOEntity.objects.count()
@@ -191,7 +193,7 @@ class TestOrganizationSelectOrCreateForm:
         )
 
         assert form.is_valid(), form.errors
-        org = form.save()
+        org, is_new_org = form.save()
 
         assert LLOEntity.objects.count() == initial_llo_count + 1
         assert Organization.objects.count() == initial_org_count + 1
@@ -201,6 +203,7 @@ class TestOrganizationSelectOrCreateForm:
         assert org.llo_entity is not None
         assert org.llo_entity.pk is not None
         assert org.llo_entity.name == "Brand New LLO"
+        assert is_new_org
 
     def test_validation_error_mismatched_llo_entity(self):
         llo1 = LLOEntity.objects.create(name="LLO One")

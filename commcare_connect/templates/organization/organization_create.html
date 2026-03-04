@@ -35,7 +35,7 @@
             });
 
             this.orgSelect.on('change', (value) => {
-              this.selectedWorkspaceSlug = this.getSelectedWorkspaceSlug(value);
+              this.selectedWorkspaceSlug = this.getExistingWorkspaceSlug(value);
             });
 
           });
@@ -56,11 +56,11 @@
           });
         },
 
-        getSelectedWorkspaceSlug(value) {
-          if (!this.selectedEntity || !value)
+        getExistingWorkspaceSlug(org_id) {
+          if (!this.selectedEntity || !org_id)
             return null;
           const orgs = this.entityWiseOrgs[this.selectedEntity]?.organizations || [];
-          const org =  orgs.find(o => o.id == value);
+          const org =  orgs.find(o => o.id == org_id);
           return org ? org.slug : null;
         }
 
