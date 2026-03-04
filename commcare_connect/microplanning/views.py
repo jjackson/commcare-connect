@@ -14,7 +14,7 @@ from django.utils.decorators import method_decorator
 from django.utils.timezone import localdate
 from django.utils.translation import gettext as _
 from django.views import View
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
@@ -22,7 +22,13 @@ from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.organization.decorators import opportunity_required, org_admin_required
 from commcare_connect.utils.file import get_file_extension
 
-from .tasks import WorkAreaCSVImporter, get_import_area_cache_key, import_work_areas_task
+from .tasks import (
+    WorkAreaCSVImporter,
+    cluster_work_areas_task,
+    get_cluster_area_cache_lock_key,
+    get_import_area_cache_key,
+    import_work_areas_task,
+)
 
 
 @require_GET
@@ -135,3 +141,26 @@ def import_status(request, org_slug, opp_id):
     context = {"result_ready": result_ready, "result_data": result_data, "task_id": task_id}
 
     return render(request, "microplanning/import_work_area_modal.html", context)
+
+
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+@require_POST
+def cluster_work_areas(request, org_slug, opp_id):
+    redirect_url = reverse(
+        "microplanning:microplanning_home",
+        kwargs={"org_slug": org_slug, "opp_id": opp_id},
+    )
+
+    if not WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists():
+        messages.error(request, _("Please upload Work Areas for this opportunity."))
+        return redirect(redirect_url)
+
+    if cache.get(get_cluster_area_cache_lock_key(opp_id)):
+        messages.error(request, _("Work Area Clustering is already in progress for this opportunity."))
+        return redirect(redirect_url)
+
+    task = cluster_work_areas_task.delay(request.opportunity.id)
+    redirect_url += f"?task_id={task.id}"
+    return redirect(redirect_url)
