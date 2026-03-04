@@ -265,18 +265,18 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
     def active_toggle_history_html(self):
         return HTML(
             """
-            {% if active_latest_event %}
+            {% if active_events %}
             <div class="flex items-center justify-between px-4 ps-0 pb-3 -mt-3">
                 <p class="text-xs text-slate-500">
                     Last changed by
-                    {% with ctx=active_latest_event.pgh_context %}
+                    {% with ctx=active_events.0.pgh_context %}
                     {% if not ctx or ctx.metadata.username == "system" %}
                         <span class="font-medium">System</span>
                     {% else %}
                         <span class="font-medium">{{ ctx.metadata.username }}</span>
                     {% endif %}
                     {% endwith %}
-                    on {{ active_latest_event.pgh_created_at|date:"d M Y" }}
+                    on {{ active_events.0.pgh_created_at|date:"d M Y" }}
                 </p>
                 <button
                     type="button"

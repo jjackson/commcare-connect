@@ -341,13 +341,12 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        active_events = list(
+        active_events = (
             OpportunityActiveEvent.objects.filter(pgh_obj=self.object)
             .select_related("pgh_context")
-            .order_by("-pgh_created_at", "-pgh_id")
+            .order_by("-pgh_created_at")
         )
         context["active_events"] = active_events
-        context["active_latest_event"] = active_events[0] if active_events else None
         return context
 
 

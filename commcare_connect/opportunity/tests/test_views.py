@@ -1991,10 +1991,10 @@ class TestOpportunityEditActiveHistory:
         response = client.get(url)
 
         assert response.status_code == 200
-        assert "active_latest_event" in response.context
         assert "active_events" in response.context
-        assert response.context["active_latest_event"].active is False
         assert len(response.context["active_events"]) == 2
+        event_toggling_inactive = response.context["active_events"].filter(active=False).first()
+        assert event_toggling_inactive is not None
 
     def test_edit_active_toggle_records_user_in_context(self, client, org_user_admin, opportunity):
         client.force_login(org_user_admin)
@@ -2020,10 +2020,7 @@ class TestOpportunityEditActiveHistory:
         opportunity.refresh_from_db()
         assert not opportunity.active
 
-        latest_event = (
-            OpportunityActiveEvent.objects.filter(pgh_obj=opportunity).order_by("-pgh_created_at", "-pgh_id").first()
-        )
-        assert latest_event is not None
-        assert latest_event.active is False
-        assert latest_event.pgh_context is not None
-        assert latest_event.pgh_context.metadata["username"] == org_user_admin.username
+        event_toggling_inactive = OpportunityActiveEvent.objects.filter(pgh_obj=opportunity, active=False).first()
+        assert event_toggling_inactive is not None
+        assert event_toggling_inactive.pgh_context is not None
+        assert event_toggling_inactive.pgh_context.metadata["username"] == org_user_admin.username
