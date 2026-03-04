@@ -18,6 +18,23 @@ Connect uses both [switches](https://waffle.readthedocs.io/en/stable/types/switc
 
 ## Configuration Details
 
-- Connect uses the django admin to manage the backend models and enable or disable switches and flags.
-- Connect uses the `WAFFLE_CREATE_MISSING_SWITCHES` so that switches are automatically added to the database when they are encountered in the codebase (specifically when using `switch_is_active()`). However, manually adding them prior to deploy is preferred.
-- For flags however, these will not automatically be added to the database (as the standard `flag_is_active()` waffle function will generally not be used). Rather, the custom `is_active_for()` method on the custom `Flag` model will be used, and flags should be created prior to deploy.
+Switches and Flags are actual Django models and not just set in code.
+
+They can be managed by users with required access
+
+- by navigating to "Toggles & Switches" under "Internal Features"
+- via Django Admin
+
+### Switches
+
+- switches names are added in the file `switch_names.py`
+- use `switch_is_active` to check if switch is enabled
+- for new switches, `WAFFLE_CREATE_MISSING_SWITCHES` is set to automatically add new switches to database when they are encountered in the codebase
+
+### Flags
+
+Connect uses a custom Flag model `commcare_connect.flags.models.Flag` to define its own entities for access
+
+- flags names are added in the file `flag_names.py`
+- use `is_active_for()` method on the custom `Flag` model to check access to a feature
+- for new flags, they **should** be created on the relevant environment prior to deploy via django admin or added via a migration with the release
