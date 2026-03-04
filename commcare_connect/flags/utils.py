@@ -6,4 +6,4 @@ from commcare_connect.program.models import Program
 
 def is_flag_active(flag_name, obj: Opportunity | Organization | Program):
     flag, _ = Flag.objects.get_or_create(name=flag_name)
-    return flag.obj_has_access(obj)
+    return flag.is_active_for(obj)
