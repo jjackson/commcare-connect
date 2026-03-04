@@ -9,8 +9,6 @@ from jsonpath_ng import JSONPathError
 from jsonpath_ng.ext import parse
 
 from commcare_connect.commcarehq.models import HQServer
-from commcare_connect.flags.flag_names import MICROPLANNING
-from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.const import CCC_LEARN_XMLNS
 from commcare_connect.form_receiver.exceptions import ProcessingError
 from commcare_connect.form_receiver.serializers import XForm
@@ -333,10 +331,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             elif counts["entity"] > 0:
                 user_visit.status = VisitValidationStatus.duplicate
 
-        if is_flag_active(MICROPLANNING, opportunity):
-            case_id = xform.form.get("case", {}).get("@case_id")
-            if case_id:
-                user_visit.work_area = WorkArea.objects.filter(case_id=case_id, opportunity=opportunity).first()
+        case_id = xform.form.get("case", {}).get("@case_id")
+        if case_id:
+            user_visit.work_area = WorkArea.objects.filter(case_id=case_id, opportunity=opportunity).first()
 
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:
