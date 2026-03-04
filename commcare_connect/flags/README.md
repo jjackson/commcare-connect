@@ -4,6 +4,8 @@ Commcare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) 
 
 Waffle provides different tools to control access to a feature on the environment.
 
+For now, features are being released directly to users so new switches & flags should be added only when necessary.
+
 ## Usage
 
 Connect uses both [switches](https://waffle.readthedocs.io/en/stable/types/switch.html) and [flags](https://waffle.readthedocs.io/en/stable/types/flag.html).
