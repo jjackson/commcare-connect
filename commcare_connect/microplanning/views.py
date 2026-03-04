@@ -177,7 +177,7 @@ def cluster_work_areas(request, org_slug, opp_id):
         <div id='clustering-status' class='mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center'
             hx-get="{status_url}" hx-trigger="every 2s" hx-swap="outerHTML">
             <div class="animate-spin rounded-full h-4 w-4 border-4 border-brand-mango border-t-transparent"></div>
-            <span>Work Area Clustering in progress.</span>
+            <span>{_("Work Area Clustering in progress.")}</span>
         </div>
     """
     return HttpResponse(mark_safe(html), headers={"HX-Push-Url": redirect_url})
@@ -204,10 +204,10 @@ def clustering_status(request, org_slug, opp_id):
         icon = None
 
         if status == CELERY_TASK_SUCCESS:
-            message = "Work Area Clustering was successful. You may close this window."
+            message = _("Work Area Clustering was successful. You may close this window.")
             icon = "fa-solid fa-circle-check text-green-600"
         elif status == CELERY_TASK_FAILURE:
-            message = "There was an error. Please try again."
+            message = _("There was an error. Please try again.")
             icon = "fa-solid fa-circle-exclamation text-red-600"
         else:
             # htmx does not swap content when status 204 is returned.
