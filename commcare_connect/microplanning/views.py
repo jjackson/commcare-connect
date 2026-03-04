@@ -1,5 +1,6 @@
 import csv
 import uuid
+from http import HTTPStatus
 
 from celery.result import AsyncResult
 from django.conf import settings
@@ -11,6 +12,7 @@ from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.safestring import mark_safe
 from django.utils.timezone import localdate
 from django.utils.translation import gettext as _
 from django.views import View
@@ -20,6 +22,7 @@ from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.organization.decorators import opportunity_required, org_admin_required
+from commcare_connect.utils.celery import CELERY_TASK_FAILURE, CELERY_TASK_SUCCESS
 from commcare_connect.utils.file import get_file_extension
 
 from .tasks import (
@@ -162,5 +165,52 @@ def cluster_work_areas(request, org_slug, opp_id):
         return redirect(redirect_url)
 
     task = cluster_work_areas_task.delay(request.opportunity.id)
-    redirect_url += f"?task_id={task.id}"
+    redirect_url += f"?clustering_task_id={task.id}"
     return redirect(redirect_url)
+
+
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def clustering_status(request, org_slug, opp_id):
+    task_id = request.GET.get("clustering_task_id", None)
+
+    if task_id:
+        try:
+            _ = uuid.UUID(task_id)
+        except (ValueError, TypeError):
+            return redirect(
+                reverse("microplanning:microplanning_home", kwargs={"org_slug": org_slug, "opp_id": opp_id}),
+            )
+
+        task = AsyncResult(task_id)
+        task_meta = task._get_task_meta()
+        status = task_meta.get("status")
+        message = None
+        icon = None
+
+        if status == CELERY_TASK_SUCCESS:
+            message = "Work Area Clustering was successful. You may close this window."
+            icon = "fa-solid fa-circle-check text-green-600"
+            reload = False
+        elif status == CELERY_TASK_FAILURE:
+            message = "There was an error. Please try again."
+            icon = "fa-solid fa-circle-exclamation text-red-600"
+            reload = False
+        else:
+            message = "Work Area Clustering in progress."
+            icon = "fa-solid fa-stopwatch text-brand-marigold"
+            reload = True
+
+        url = "{}?clustering_task_id={}".format(
+            reverse("microplanning:clustering_status", args=(org_slug, opp_id)), task_id
+        )
+        reload_html = f'hx-get="{url}" hx-trigger="load delay:2s" hx-swap="outerHTML"' if reload else ""
+        html = f"""
+            <div id="clustering-status" class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center" {reload_html}>
+                <i class='fa-solid {icon} text-xl'></i><span>{message}</span>
+            </div>
+        """
+        return HttpResponse(mark_safe(html), status=HTTPStatus.OK)
+
+    return redirect("microplanning:microplanning_home", args=(org_slug, opp_id))
