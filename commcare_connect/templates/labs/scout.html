@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="flex flex-col" style="height: calc(100vh - 120px);">
+<div class="flex flex-col" style="min-height: calc(100vh - 120px);">
   <div class="flex items-center justify-between mb-4">
     <h1 class="text-2xl font-bold text-gray-900">
       <i class="fa-solid fa-robot text-indigo-600 mr-2"></i>
@@ -22,7 +22,7 @@
   </div>
 
   <!-- Scout widget container (hidden when auth prompt is shown) -->
-  <div id="scout-container" class="flex-1 rounded-lg overflow-hidden border border-gray-200 bg-white"></div>
+  <div id="scout-container" class="flex-1 rounded-lg overflow-visible border border-gray-200 bg-white"></div>
 </div>
 
 <script>
