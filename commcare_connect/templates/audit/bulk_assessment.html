@@ -159,17 +159,17 @@
       </div>
       <div class="flex gap-2 items-center flex-wrap">
         <button @click="passAllPending()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-check mr-1"></i>Pass All Pending
         </button>
         <button @click="failAllPending()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-times mr-1"></i>Fail All Pending
         </button>
         <button @click="clearAllAssessments()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-eraser mr-1"></i>Clear All Assessments
         </button>
@@ -179,7 +179,7 @@
           <!-- AI Review Dropdown -->
           <div class="relative" x-data="{ showAiMenu: false }">
             <button @click="showAiMenu = !showAiMenu"
-                    :disabled="loading || bulkProcessing || bulkAiProcessing"
+                    :disabled="isReadOnly || loading || bulkProcessing || bulkAiProcessing"
                     class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-1">
               <i class="fa-solid fa-robot" :class="{'fa-spin': bulkAiProcessing}"></i>
               <span x-text="bulkAiProcessing ? ('AI: ' + aiProcessingStatus) : 'Run AI Review Agent'"></span>
@@ -513,6 +513,10 @@
             Completed on {{ session.completed_at|date:"M d, Y \\a\\t H:i" }}
           </span>
         </div>
+        <p class="text-xs text-green-600 mt-1 ml-6">
+          <i class="fa-solid fa-lock mr-1"></i>
+          Pass/fail is read-only. Notes can still be updated and saved.
+        </p>
       </div>
       {% endif %}
 
@@ -695,6 +699,7 @@ function bulkAssessmentInterface() {
     completionNotes: '{{ session.notes|default:""|escapejs }}',
     kpiNotes: '{{ session.kpi_notes|default:""|escapejs }}',
     submittingCompletion: false,
+    isReadOnly: '{{ session.status }}' === 'completed',
     allAssessments: [],
     assessments: [],
     questionIds: [],
@@ -944,6 +949,16 @@ function bulkAssessmentInterface() {
       return resultValue || '';
     },
     handleAssessmentUpdate(detail) {
+      // In read-only (completed) mode, block pass/fail changes
+      if (this.isReadOnly) {
+        if (detail.callback) {
+          const existing = this.allAssessments.find(
+            a => a.blob_id === detail.blobId && a.visit_id === detail.visitId
+          );
+          detail.callback(existing?.result || 'pending');
+        }
+        return;
+      }
       const normalized = this.updateAssessmentLocal(
         detail.visitId,
         detail.blobId,

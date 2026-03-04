@@ -13,7 +13,7 @@ DEFINITION = {
     "statuses": [
         {"id": "config", "label": "Configuring", "color": "gray"},
         {"id": "creating", "label": "Creating Review", "color": "blue"},
-        {"id": "reviewing", "label": "In Review", "color": "yellow"},
+        {"id": "in_progress", "label": "In Review", "color": "yellow"},
         {"id": "completed", "label": "Completed", "color": "green"},
         {"id": "failed", "label": "Failed", "color": "red"},
     ],
@@ -31,12 +31,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             id: 'ors_photo',
             label: 'ORS Photo',
             path: 'service_delivery/ors_group/ors_photo',
+            hq_url_path: 'service_delivery/ors_group/photo_link_ors',
             icon: 'fa-droplet',
         },
         {
             id: 'muac_photo',
             label: 'MUAC Photo',
-            path: 'service_delivery/muac_group/muac_display_1/muac_photo',
+            path: 'service_delivery/muac_group/muac_display_group_1/muac_photo',
+            hq_url_path: 'service_delivery/muac_group/muac_photo_link',
             icon: 'fa-ruler',
         },
         {
@@ -51,7 +53,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [phase, setPhase] = React.useState(instance.state?.phase || 'config');
 
     // ── CSRF helper ─────────────────────────────────────────────────────────
-    // CSRF_USE_SESSIONS=True means no csrftoken cookie — read from DOM instead.
     function getCsrfToken() {
         return document.getElementById('workflow-root')?.dataset?.csrfToken
             || document.querySelector('[name=csrfmiddlewaretoken]')?.value
@@ -61,7 +62,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // ── Config state ────────────────────────────────────────────────────────
     const [selectedOpps, setSelectedOpps] = React.useState(
         instance.state?.config?.selected_opps || []
-    );  // [{id, name}]
+    );
     const [searchQuery, setSearchQuery] = React.useState('');
     const [searchResults, setSearchResults] = React.useState([]);
     const [isSearching, setIsSearching] = React.useState(false);
@@ -122,17 +123,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setSelectedOpps(prev => prev.filter(o => o.id !== id));
     };
 
-    // ── Date helpers (copied from audit_with_ai_review.py) ──────────────────
+    // ── Date helpers ─────────────────────────────────────────────────────────
     const calculateDateRange = (preset) => {
         const today = new Date(); today.setHours(0,0,0,0);
         let start, end;
         switch (preset) {
             case 'last_week': {
-                // US week: Sunday through Saturday
-                const dow = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+                const dow = today.getDay();
                 const thisSun = new Date(today); thisSun.setDate(today.getDate() - dow);
-                end = new Date(thisSun); end.setDate(thisSun.getDate() - 1); // prev Saturday
-                start = new Date(thisSun); start.setDate(thisSun.getDate() - 7); // prev Sunday
+                end = new Date(thisSun); end.setDate(thisSun.getDate() - 1);
+                start = new Date(thisSun); start.setDate(thisSun.getDate() - 7);
                 break;
             }
             case 'last_7_days':
@@ -180,13 +180,40 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [isCancelling, setIsCancelling] = React.useState(false);
     const [progress, setProgress] = React.useState(null);
     const [taskId, setTaskId] = React.useState(null);
-    const [sessionId, setSessionId] = React.useState(instance.state?.session_id || null);
     const cleanupRef = React.useRef(null);
 
     // Cleanup SSE on unmount
     React.useEffect(() => {
         return () => { if (cleanupRef.current) cleanupRef.current(); };
     }, []);
+
+    // ── Linked sessions state ─────────────────────────────────────────────────
+    const [linkedSessions, setLinkedSessions] = React.useState([]);
+    const [loadingSessions, setLoadingSessions] = React.useState(true);
+
+    // Fetch sessions on mount
+    React.useEffect(() => {
+        if (!instance.id) { setLoadingSessions(false); return; }
+        fetch('/audit/api/workflow/' + instance.id + '/sessions/')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.sessions) setLinkedSessions(data.sessions);
+                setLoadingSessions(false);
+            })
+            .catch(() => setLoadingSessions(false));
+    }, [instance.id]);
+
+    const refreshSessions = () => {
+        if (!instance.id) return Promise.resolve([]);
+        return fetch('/audit/api/workflow/' + instance.id + '/sessions/')
+            .then(res => res.json())
+            .then(data => {
+                const sessions = data.sessions || [];
+                if (data.success) setLinkedSessions(sessions);
+                return sessions;
+            })
+            .catch(() => []);
+    };
 
     // Reconnect to running job on page load (if user refreshed mid-creation)
     React.useEffect(() => {
@@ -208,32 +235,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     async (final) => {
                         setIsRunning(false);
                         setProgress({ status: 'completed', ...final });
-                        // Try to find session_id from completion payload
-                        let sid = final?.session_id || final?.sessions?.[0]?.id;
-                        if (!sid) {
-                            // Fallback: fetch from workflow sessions API
-                            try {
-                                const r = await fetch('/audit/api/workflow/' + instance.id + '/sessions/');
-                                const d = await r.json();
-                                sid = d.sessions?.[0]?.id;
-                            } catch (e) { /* ignore */ }
-                        }
-                        if (sid) {
-                            setSessionId(sid);
-                            setPhase('reviewing');
-                            onUpdateState({
-                                phase: 'reviewing',
-                                session_id: sid,
-                                active_job: {
-                                    job_id: activeJob.job_id,
-                                    status: 'completed',
-                                    completed_at: new Date().toISOString(),
-                                },
-                            }).catch(() => {});
-                        } else {
-                            setPhase('config');
-                            onUpdateState({ phase: 'config' }).catch(() => {});
-                        }
+                        const sessions = await refreshSessions();
+                        setPhase('reviewing');
+                        const config = instance.state?.config || {};
+                        onUpdateState({
+                            phase: 'reviewing',
+                            status: 'in_progress',
+                            flw_count: sessions.length,
+                            period_start: config.start_date || null,
+                            period_end: config.end_date || null,
+                            active_job: {
+                                job_id: activeJob.job_id,
+                                status: 'completed',
+                                completed_at: new Date().toISOString(),
+                            },
+                        }).catch(() => {});
                     },
                     (err) => {
                         setIsRunning(false);
@@ -257,7 +273,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         const imageTypeObj = IMAGE_TYPES.find(t => t.id === imageType);
         if (!imageTypeObj) {
-            setIsRunning(false);
             setProgress({ status: 'failed', error: 'Unknown image type: ' + imageType });
             setPhase('config');
             return;
@@ -276,7 +291,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         };
 
         setIsRunning(true);
-        setProgress({ status: 'starting', message: 'Initializing...' });
+        setProgress({ status: 'starting', stage_name: 'Initializing', message: 'Starting...' });
         setPhase('creating');
 
         await onUpdateState({ phase: 'creating', config });
@@ -287,7 +302,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             end_date: auditMode === 'date_range' ? endDate : null,
             count_per_opp: auditMode === 'last_n_per_opp' ? lastNCount : null,
             sample_percentage: samplePct,
-            related_fields: [{ image_path: imageTypeObj.path, filter_by_image: true }],
+            related_fields: [{ image_path: imageTypeObj.path, hq_url_path: imageTypeObj.hq_url_path || null, filter_by_image: true }],
         };
 
         try {
@@ -313,32 +328,20 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     async (final) => {
                         setIsRunning(false);
                         setProgress({ status: 'completed', ...final });
-                        // Try to find session_id from completion payload
-                        let sid = final?.session_id || final?.sessions?.[0]?.id;
-                        if (!sid) {
-                            // Fallback: fetch from workflow sessions API
-                            try {
-                                const r = await fetch('/audit/api/workflow/' + instance.id + '/sessions/');
-                                const d = await r.json();
-                                sid = d.sessions?.[0]?.id;
-                            } catch (e) { /* ignore */ }
-                        }
-                        if (sid) {
-                            setSessionId(sid);
-                            setPhase('reviewing');
-                            onUpdateState({
-                                phase: 'reviewing',
-                                session_id: sid,
-                                active_job: {
-                                    job_id: result.task_id,
-                                    status: 'completed',
-                                    completed_at: new Date().toISOString(),
-                                },
-                            }).catch(() => {});
-                        } else {
-                            setPhase('config');
-                            onUpdateState({ phase: 'config' }).catch(() => {});
-                        }
+                        const sessions = await refreshSessions();
+                        setPhase('reviewing');
+                        onUpdateState({
+                            phase: 'reviewing',
+                            status: 'in_progress',
+                            flw_count: sessions.length,
+                            period_start: auditMode === 'date_range' ? startDate : null,
+                            period_end: auditMode === 'date_range' ? endDate : null,
+                            active_job: {
+                                job_id: result.task_id,
+                                status: 'completed',
+                                completed_at: new Date().toISOString(),
+                            },
+                        }).catch(() => {});
                     },
                     (err) => {
                         setIsRunning(false);
@@ -383,171 +386,211 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
     };
 
-    // ── Review state ─────────────────────────────────────────────────────────
-    const [assessments, setAssessments] = React.useState([]);
-    const [loadingReview, setLoadingReview] = React.useState(false);
-    const [reviewError, setReviewError] = React.useState(null);
-    const [isSaving, setIsSaving] = React.useState(false);
-    const [aiRunning, setAiRunning] = React.useState({});  // {blob_id: true/false}
-
-    // ── FLW table sort/filter state ──────────────────────────────────────────────
-    const [flwSort, setFlwSort] = React.useState({ col: 'flw_name', dir: 'asc' });
-    const [flwFilter, setFlwFilter] = React.useState('');
-    const [oppFilter, setOppFilter] = React.useState('');
-    const [resultFilter, setResultFilter] = React.useState('all');
-
-    const sortFlwTable = (col) => {
-        setFlwSort(prev => ({
-            col,
-            dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc',
-        }));
+    // ── Compute average % passed across sessions ──────────────────────────────
+    const computeAvgPassed = (sessions) => {
+        if (!sessions || sessions.length === 0) return null;
+        const pcts = sessions.map(s => {
+            const stats = s.assessment_stats || {};
+            const total = (stats.pass || 0) + (stats.fail || 0);
+            return total > 0 ? Math.round((stats.pass || 0) / total * 100) : null;
+        }).filter(pct => pct !== null);
+        if (pcts.length === 0) return null;
+        return Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
     };
 
-    // ── Completion state ─────────────────────────────────────────────────────────
-    const [showCompleteForm, setShowCompleteForm] = React.useState(false);
-    const [completionNotes, setCompletionNotes] = React.useState('');
+    // ── Complete handler (mark workflow done) ─────────────────────────────────
     const [isCompleting, setIsCompleting] = React.useState(false);
     const [completeError, setCompleteError] = React.useState(null);
-    const [manualOverallResult, setManualOverallResult] = React.useState(null);
 
     const handleComplete = async () => {
-        const config = instance.state?.config || {};
-        const flwRows = buildFlwRows(assessments, config);
-        const allPassing = flwRows.length > 0 && flwRows.every(r => r.pct >= threshold);
-        const autoResult = allPassing ? 'pass' : 'fail';
-        const overallResult = manualOverallResult || autoResult;
-        const visitResults = buildVisitResults(assessments);
-
-        const fd = new FormData();
-        fd.append('overall_result', overallResult);
-        fd.append('notes', completionNotes);
-        fd.append('kpi_notes', '');
-        fd.append('visit_results', JSON.stringify(visitResults));
-
+        const avgPassed = computeAvgPassed(linkedSessions);
         setIsCompleting(true);
         setCompleteError(null);
         try {
-            const res = await fetch('/audit/api/' + sessionId + '/complete/', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': getCsrfToken() },
-                body: fd,
+            await onUpdateState({
+                phase: 'completed',
+                status: 'completed',
+                avg_passed: avgPassed,
+                completion: { completed_at: new Date().toISOString() },
             });
-            const data = await res.json();
-            if (data.success) {
-                const completedAt = new Date().toISOString();
-                await onUpdateState({
-                    phase: 'completed',
-                    completion: { notes: completionNotes, completed_at: completedAt, overall_result: overallResult },
-                });
-                const oppId = instance.opportunity_id || '';
-                window.location.href = '/labs/workflow/' + (oppId ? '?opportunity_id=' + oppId : '');
-            } else {
-                setCompleteError(data.error || 'Failed to complete review');
-            }
+            const oppId = instance.opportunity_id || '';
+            window.location.href = '/labs/workflow/' + (oppId ? '?opportunity_id=' + oppId : '');
         } catch (err) {
-            setCompleteError(err.message);
-        } finally {
+            setCompleteError(err.message || 'Failed to complete');
             setIsCompleting(false);
         }
     };
 
-    // Load assessment data when entering review phase
-    React.useEffect(() => {
-        if (phase !== 'reviewing' || !sessionId) return;
-        setLoadingReview(true);
-        setReviewError(null);
-        fetch('/audit/api/' + sessionId + '/bulk-data/')
-            .then(r => r.json())
-            .then(data => {
-                setAssessments(data.assessments || []);
-                setLoadingReview(false);
-            })
-            .catch(err => {
-                setReviewError(err.message);
-                setLoadingReview(false);
-            });
-    }, [phase, sessionId]);
+    // ── Inner component: Sessions Table ──────────────────────────────────────
+    const SessionsTable = ({ sessions, readOnly }) => {
+        const allCompleted = sessions.length > 0 && sessions.every(s => s.status === 'completed');
+        const avgPct = computeAvgPassed(sessions);
 
-    // Update a single assessment field locally
-    const updateAssessment = (id, patch) => {
-        setAssessments(prev => prev.map(a => a.id === id ? { ...a, ...patch } : a));
-    };
+        return (
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className={'px-6 py-4 border-b ' + (readOnly ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100')}>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className={'text-lg font-semibold flex items-center gap-2 ' + (readOnly ? 'text-green-800' : 'text-blue-800')}>
+                                <i className={'fa-solid ' + (readOnly ? 'fa-check-circle' : 'fa-images')}></i>
+                                {readOnly ? 'Completed Review' : 'Audit Sessions'}
+                            </h2>
+                            <p className={'text-sm mt-1 ' + (readOnly ? 'text-green-600' : 'text-blue-600')}>
+                                {sessions.length} session{sessions.length !== 1 ? 's' : ''} &bull;{' '}
+                                {sessions.filter(s => s.status === 'completed').length} completed
+                                {avgPct !== null && (
+                                    <span className={'ml-2 font-medium ' + (avgPct >= threshold ? 'text-green-700' : 'text-red-700')}>
+                                        &bull; Avg {avgPct}% passed
+                                    </span>
+                                )}
+                            </p>
+                        </div>
+                        {!readOnly && allCompleted && (
+                            <div className="flex items-center gap-3">
+                                {completeError && (
+                                    <span className="text-sm text-red-600">{completeError}</span>
+                                )}
+                                <button onClick={handleComplete} disabled={isCompleting}
+                                    className={'inline-flex items-center px-4 py-2 bg-green-600 text-white ' +
+                                        'rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium text-sm'}>
+                                    {isCompleting
+                                        ? <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                                        : <i className="fa-solid fa-flag-checkered mr-2"></i>}
+                                    Mark Complete
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className={'px-4 py-3 text-left text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>FLW</th>
+                                <th className={'px-4 py-3 text-center text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>Visits</th>
+                                <th className={'px-4 py-3 text-center text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>Status</th>
+                                <th className={'px-4 py-3 text-center text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>
+                                    <span className="text-green-600">Pass</span>
+                                    {' / '}
+                                    <span className="text-red-600">Fail</span>
+                                    {' / '}
+                                    <span className="text-gray-500">Pending</span>
+                                </th>
+                                <th className={'px-4 py-3 text-center text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>% Passed</th>
+                                <th className={'px-4 py-3 text-right text-xs font-medium ' +
+                                    'text-gray-500 uppercase tracking-wider'}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {sessions.map(session => {
+                                const stats = session.assessment_stats || {};
+                                const total = (stats.pass || 0) + (stats.fail || 0);
+                                const pct = total > 0 ? Math.round((stats.pass || 0) / total * 100) : null;
+                                return (
+                                    <tr key={session.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-4">
+                                            <div className="text-sm font-medium text-gray-900">
+                                                {session.flw_display_name || session.flw_username || 'Unknown'}
+                                            </div>
+                                            {session.flw_display_name !== session.flw_username
+                                                && session.flw_username && (
+                                                <div className="text-xs text-gray-400 mt-0.5 font-mono">
+                                                    {session.flw_username}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            <span className="text-sm font-medium text-blue-600">
+                                                {session.visit_count || 0}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            <span className={'px-2 py-1 text-xs font-medium rounded ' +
+                                                (session.status === 'completed'
+                                                    ? 'bg-green-100 text-green-700'
+                                                    : 'bg-yellow-100 text-yellow-700')}>
+                                                {session.status === 'completed' ? 'Completed' : 'In Progress'}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            <div className="flex items-center justify-center gap-1.5 text-sm">
+                                                <span className="text-green-600 font-medium">{stats.pass || 0}</span>
+                                                <span className="text-gray-300">/</span>
+                                                <span className="text-red-600 font-medium">{stats.fail || 0}</span>
+                                                <span className="text-gray-300">/</span>
+                                                <span className="text-gray-500">{stats.pending || 0}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                            {pct !== null
+                                                ? <span className={'text-sm font-medium ' +
+                                                    (pct >= threshold ? 'text-green-700' : 'text-red-700')}>
+                                                    {pct}%
+                                                  </span>
+                                                : <span className="text-gray-400 text-sm">&mdash;</span>}
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                            <a
+                                                href={'/audit/' + session.id + '/bulk/' +
+                                                    '?opportunity_id=' + session.opportunity_id}
+                                                className={'inline-flex items-center px-3 py-1.5 text-sm ' +
+                                                    'bg-blue-50 text-blue-700 rounded hover:bg-blue-100 ' +
+                                                    'border border-blue-200 transition-colors'}
+                                            >
+                                                <i className={'fa-solid mr-1.5 ' +
+                                                    (session.status === 'completed'
+                                                        ? 'fa-eye'
+                                                        : 'fa-arrow-up-right-from-square')}></i>
+                                                {session.status === 'completed' ? 'View' : 'Review'}
+                                            </a>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
 
-    // Build visit_results structure expected by backend
-    const buildVisitResults = (asmnts) => {
-        const vr = {};
-        for (const a of asmnts) {
-            const vid = String(a.visit_id);
-            if (!vr[vid]) vr[vid] = { assessments: {} };
-            vr[vid].assessments[a.blob_id] = {
-                question_id: a.question_id,
-                result: a.result || '',
-                notes: a.notes || '',
-                ai_result: a.ai_result || '',
-                ai_notes: a.ai_notes || '',
-            };
-        }
-        return vr;
-    };
-
-    // Save progress to backend
-    const saveProgress = async (updatedAssessments) => {
-        if (!sessionId) return;
-        const asmnts = updatedAssessments || assessments;
-        const visitResults = buildVisitResults(asmnts);
-        const fd = new FormData();
-        fd.append('visit_results', JSON.stringify(visitResults));
-        setIsSaving(true);
-        try {
-            await fetch('/audit/api/' + sessionId + '/save/', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': getCsrfToken() },
-                body: fd,
-            });
-        } finally {
-            setIsSaving(false);
-        }
-    };
-
-    // Handle pass/fail button click — update locally and save
-    const handleAssessResult = async (id, result) => {
-        const updated = assessments.map(a =>
-            a.id === id ? { ...a, result, status: result } : a
+                {/* Aggregate footer */}
+                {sessions.length > 1 && (
+                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-gray-700">Totals:</span>
+                            <div className="flex gap-6 text-sm">
+                                <span className="text-gray-600">
+                                    <span className="font-medium">
+                                        {sessions.reduce((sum, s) => sum + (s.visit_count || 0), 0)}
+                                    </span> visits
+                                </span>
+                                <span className="text-green-600">
+                                    <i className="fa-solid fa-check mr-1"></i>
+                                    {sessions.reduce(
+                                        (sum, s) => sum + (s.assessment_stats?.pass || 0), 0
+                                    )} pass
+                                </span>
+                                <span className="text-red-600">
+                                    <i className="fa-solid fa-xmark mr-1"></i>
+                                    {sessions.reduce(
+                                        (sum, s) => sum + (s.assessment_stats?.fail || 0), 0
+                                    )} fail
+                                </span>
+                                {avgPct !== null && (
+                                    <span className={'font-medium ' +
+                                        (avgPct >= threshold ? 'text-green-700' : 'text-red-700')}>
+                                        Avg {avgPct}% passed
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
         );
-        setAssessments(updated);
-        await saveProgress(updated);
-    };
-
-    // Handle notes change — debounced save
-    const notesTimeout = React.useRef(null);
-    const handleNotesChange = (id, notes) => {
-        const updated = assessments.map(a => a.id === id ? { ...a, notes } : a);
-        setAssessments(updated);
-        if (notesTimeout.current) clearTimeout(notesTimeout.current);
-        notesTimeout.current = setTimeout(() => saveProgress(updated), 800);
-    };
-
-    // ── FLW summary helper ───────────────────────────────────────────────────
-    const buildFlwRows = (asmnts, config) => {
-        const byUser = {};
-        for (const a of asmnts) {
-            const key = a.username;
-            if (!byUser[key]) {
-                byUser[key] = {
-                    flw_name: a.username,
-                    opp_name: (config?.selected_opps || []).find(o => String(o.id) === String(a.opportunity_id))?.name
-                        || (config?.selected_opps || [])[0]?.name || '—',
-                    passed: 0,
-                    total: 0,
-                };
-            }
-            byUser[key].total += 1;
-            if (a.status === 'pass') byUser[key].passed += 1;
-        }
-        return Object.values(byUser).map(row => ({
-            ...row,
-            pct: row.total > 0 ? Math.round(row.passed / row.total * 100) : 0,
-        }));
     };
 
     // ── Inner component: Visit Selection ────────────────────────────────────
@@ -710,7 +753,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             </div>
 
             {/* Visit Selection */}
-            <VisitSelectionSection />
+            {VisitSelectionSection()}
 
             {/* Sampling */}
             <div>
@@ -805,7 +848,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     </div>
                     <button onClick={() => setPhase('config')}
                         className="mt-3 text-sm text-blue-600 hover:underline">
-                        ← Back to configuration
+                        &larr; Back to configuration
                     </button>
                 </div>
             )}
@@ -817,455 +860,39 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     </div>
                     <button onClick={() => setPhase('config')}
                         className="mt-3 text-sm text-blue-600 hover:underline">
-                        ← Back to configuration
+                        &larr; Back to configuration
                     </button>
                 </div>
             )}
         </div>
     );
-    // ── Inner component: PhotoCard ───────────────────────────────────────────
-    const PhotoCard = ({ assessment: a, isScalePhoto }) => {
-        const [expanded, setExpanded] = React.useState(false);
-        const isAiRunning = aiRunning[a.blob_id];
-
-        const handleAiReview = async () => {
-            if (!isScalePhoto || !sessionId) return;
-            setAiRunning(prev => ({ ...prev, [a.blob_id]: true }));
-            try {
-                const reading = (a.related_fields || []).find(rf => rf.value)?.value || '';
-                const body = JSON.stringify({
-                    assessments: [{ visit_id: a.visit_id, blob_id: a.blob_id, reading }],
-                    agent_id: 'scale_validation',
-                    opportunity_id: a.opportunity_id,
-                });
-                const res = await fetch('/audit/api/' + sessionId + '/ai-review/', {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
-                    body,
-                });
-                const data = await res.json();
-                const result = (data.results || [])[0];
-                if (result) {
-                    updateAssessment(a.id, { ai_result: result.ai_result || '', ai_notes: result.ai_notes || '' });
-                }
-            } finally {
-                setAiRunning(prev => ({ ...prev, [a.blob_id]: false }));
-            }
-        };
-
-        const statusBorderColor = a.status === 'pass' ? 'border-green-200'
-            : a.status === 'fail' ? 'border-red-200' : 'border-gray-200';
-
-        return (
-            <div className={'bg-white rounded-lg shadow-sm border ' + statusBorderColor}>
-                <div className="p-4 flex gap-4">
-                    {/* Thumbnail */}
-                    <div className="flex-shrink-0 w-24 h-24 bg-gray-100 rounded overflow-hidden cursor-pointer"
-                        onClick={() => setExpanded(!expanded)}>
-                        <img src={a.image_url} alt="visit photo"
-                            className="w-full h-full object-cover"
-                            loading="lazy" />
-                    </div>
-                    {/* Meta + controls */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-gray-900 truncate">
-                                {a.entity_name || 'Unknown'}
-                            </span>
-                            <span className="text-xs text-gray-400">{a.visit_date}</span>
-                        </div>
-                        <div className="text-xs text-gray-500 font-mono mb-2">{a.username}</div>
-
-                        {/* Pass / Fail buttons */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <button onClick={() => handleAssessResult(a.id, 'pass')}
-                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
-                                    (a.status === 'pass'
-                                        ? 'bg-green-600 text-white border-green-600'
-                                        : 'bg-white text-green-700 border-green-300 hover:bg-green-50')}>
-                                <i className="fa-solid fa-check mr-1"></i>Pass
-                            </button>
-                            <button onClick={() => handleAssessResult(a.id, 'fail')}
-                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
-                                    (a.status === 'fail'
-                                        ? 'bg-red-600 text-white border-red-600'
-                                        : 'bg-white text-red-700 border-red-300 hover:bg-red-50')}>
-                                <i className="fa-solid fa-times mr-1"></i>Fail
-                            </button>
-
-                            {/* AI Review — enabled for scale photos only */}
-                            <button
-                                onClick={handleAiReview}
-                                disabled={!isScalePhoto || isAiRunning}
-                                title={!isScalePhoto ? 'AI review is only available for Scale Photos' : 'Run AI review'}
-                                className={'px-3 py-1 text-sm rounded border transition-colors ' +
-                                    (isScalePhoto
-                                        ? 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
-                                        : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50')}>
-                                {isAiRunning
-                                    ? <i className="fa-solid fa-spinner fa-spin mr-1"></i>
-                                    : <i className="fa-solid fa-robot mr-1"></i>}
-                                AI Review
-                            </button>
-                        </div>
-
-                        {/* AI result badge */}
-                        {a.ai_result && (
-                            <div className={'mt-2 text-xs px-2 py-1 rounded inline-flex items-center gap-1 ' +
-                                (a.ai_result === 'match' ? 'bg-green-50 text-green-700'
-                                    : a.ai_result === 'no_match' ? 'bg-red-50 text-red-700'
-                                    : 'bg-yellow-50 text-yellow-700')}>
-                                <i className="fa-solid fa-robot"></i>
-                                AI: {a.ai_result}{a.ai_notes ? ' — ' + a.ai_notes : ''}
-                            </div>
-                        )}
-
-                        {/* Notes */}
-                        <input
-                            type="text"
-                            value={a.notes || ''}
-                            onChange={e => handleNotesChange(a.id, e.target.value)}
-                            placeholder="Add note..."
-                            className="mt-2 w-full text-sm border border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                        />
-                    </div>
-                </div>
-
-                {/* Expanded full image */}
-                {expanded && (
-                    <div className="border-t border-gray-100 p-4">
-                        <img src={a.image_url} alt="full visit photo"
-                            className="max-w-full rounded shadow-sm" />
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    // ── Inner component: FLW Summary Table ──────────────────────────────────
-    const FlwSummaryTable = ({ assessments: tableAssessments, threshold: tableThreshold, config, readOnly, overrideRows }) => {
-        const rows = overrideRows || buildFlwRows(tableAssessments || [], config);
-
-        // Filter
-        const filtered = rows.filter(r => {
-            const flwMatch = r.flw_name.toLowerCase().includes(flwFilter.toLowerCase());
-            const oppMatch = r.opp_name.toLowerCase().includes(oppFilter.toLowerCase());
-            const passing = r.pct >= tableThreshold;
-            const resultMatch = resultFilter === 'all'
-                || (resultFilter === 'pass' && passing)
-                || (resultFilter === 'fail' && !passing);
-            return flwMatch && oppMatch && resultMatch;
-        });
-
-        // Sort
-        const sorted = [...filtered].sort((a, b) => {
-            const dir = flwSort.dir === 'asc' ? 1 : -1;
-            const col = flwSort.col;
-            if (col === 'pct' || col === 'passed' || col === 'total') {
-                return (a[col] - b[col]) * dir;
-            }
-            if (col === 'result') {
-                return ((a.pct >= tableThreshold ? 1 : 0) - (b.pct >= tableThreshold ? 1 : 0)) * dir;
-            }
-            return String(a[col] ?? '').localeCompare(String(b[col] ?? '')) * dir;
-        });
-
-        const SortIcon = ({ col }) => (
-            <i className={'fa-solid ml-1 text-xs ' + (flwSort.col === col
-                ? (flwSort.dir === 'asc' ? 'fa-sort-up' : 'fa-sort-down')
-                : 'fa-sort text-gray-300')}></i>
-        );
-
-        return (
-            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-                    <h2 className="text-base font-semibold text-gray-800">
-                        <i className="fa-solid fa-users mr-2 text-gray-400"></i>
-                        FLW Summary
-                    </h2>
-                    <span className="text-sm text-gray-500">Threshold: {tableThreshold}%</span>
-                </div>
-
-                {!readOnly && (
-                    <div className="px-4 py-3 border-b border-gray-100 flex gap-3 flex-wrap">
-                        <input type="text" placeholder="Filter FLW name..." value={flwFilter}
-                            onChange={e => setFlwFilter(e.target.value)}
-                            className="text-sm border border-gray-300 rounded px-2 py-1.5 w-40" />
-                        <input type="text" placeholder="Filter opp name..." value={oppFilter}
-                            onChange={e => setOppFilter(e.target.value)}
-                            className="text-sm border border-gray-300 rounded px-2 py-1.5 w-40" />
-                        <select value={resultFilter} onChange={e => setResultFilter(e.target.value)}
-                            className="text-sm border border-gray-300 rounded px-2 py-1.5">
-                            <option value="all">All Results</option>
-                            <option value="pass">Pass Only</option>
-                            <option value="fail">Fail Only</option>
-                        </select>
-                    </div>
-                )}
-
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                {[
-                                    { id: 'opp_name', label: 'Opp Name' },
-                                    { id: 'flw_name', label: 'FLW Name' },
-                                    { id: 'passed', label: 'Passed / Assessments' },
-                                    { id: 'pct', label: '% Passed' },
-                                    { id: 'result', label: 'Result' },
-                                ].map(col => (
-                                    <th key={col.id}
-                                        onClick={() => sortFlwTable(col.id)}
-                                        className={'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:text-gray-700'}>
-                                        {col.label}
-                                        <SortIcon col={col.id} />
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {sorted.map((row, idx) => {
-                                const passing = row.pct >= tableThreshold;
-                                return (
-                                    <tr key={row.flw_name + '|' + row.opp_name} className="hover:bg-gray-50">
-                                        <td className="px-4 py-3 text-sm text-gray-700">{row.opp_name}</td>
-                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{row.flw_name}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-700">
-                                            <span className="text-green-600 font-medium">{row.passed}</span>
-                                            <span className="text-gray-400 mx-1">/</span>
-                                            <span>{row.total}</span>
-                                        </td>
-                                        <td className="px-4 py-3 text-sm font-medium">
-                                            <span className={passing ? 'text-green-700' : 'text-red-700'}>
-                                                {row.pct}%
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3 text-center">
-                                            {passing
-                                                ? <i className="fa-solid fa-circle-check text-green-500 text-lg" title="Passing"></i>
-                                                : <i className="fa-solid fa-circle-xmark text-red-500 text-lg" title="Failing"></i>}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                            {sorted.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="px-4 py-8 text-center text-gray-400 text-sm">
-                                        No FLWs match the current filters
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        );
-    };
-
-    // ── Inner component: Complete Section ───────────────────────────────────
-    const CompleteSection = ({ assessments: sectionAssessments }) => {
-        const pendingCount = (sectionAssessments || []).filter(a => a.status === 'pending').length;
-        const hasPending = pendingCount > 0;
-        const config = instance.state?.config || {};
-        const flwRows = buildFlwRows(sectionAssessments || [], config);
-        const allPassing = flwRows.length > 0 && flwRows.every(r => r.pct >= threshold);
-        const autoResult = allPassing ? 'pass' : 'fail';
-        const displayResult = manualOverallResult || autoResult;
-
-        return (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-                <h3 className="text-base font-semibold text-gray-800 mb-4">
-                    <i className="fa-solid fa-flag-checkered mr-2 text-gray-400"></i>
-                    Complete Image Review
-                </h3>
-
-                {hasPending && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                        <div className="flex items-center gap-2 text-amber-800">
-                            <i className="fa-solid fa-triangle-exclamation"></i>
-                            <span className="font-medium">
-                                {pendingCount} photo{pendingCount !== 1 ? 's' : ''} still pending review.
-                                All photos must be reviewed before completing.
-                            </span>
-                        </div>
-                    </div>
-                )}
-
-                {!hasPending && !showCompleteForm && (
-                    <button onClick={() => setShowCompleteForm(true)}
-                        className={'inline-flex items-center px-5 py-2.5 bg-green-600 text-white ' +
-                            'rounded-lg hover:bg-green-700 font-medium'}>
-                        <i className="fa-solid fa-check mr-2"></i>
-                        Complete Image Review
-                    </button>
-                )}
-
-                {showCompleteForm && !hasPending && (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Overall Result</label>
-                            <div className="flex gap-4">
-                                {['pass', 'fail'].map(val => (
-                                    <label key={val} className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="radio"
-                                            name="overall_result"
-                                            value={val}
-                                            checked={displayResult === val}
-                                            onChange={() => setManualOverallResult(val)}
-                                            className="text-blue-600"
-                                        />
-                                        <span className={'text-sm font-medium ' + (val === 'pass' ? 'text-green-700' : 'text-red-700')}>
-                                            {val === 'pass' ? 'Pass' : 'Fail'}
-                                        </span>
-                                        {val === autoResult && !manualOverallResult && (
-                                            <span className="text-xs text-gray-400">(auto)</span>
-                                        )}
-                                    </label>
-                                ))}
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                            <textarea
-                                value={completionNotes}
-                                onChange={e => setCompletionNotes(e.target.value)}
-                                rows={3}
-                                placeholder="Add any notes about this review..."
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500 focus:outline-none"
-                            />
-                        </div>
-                        {completeError && (
-                            <div className="text-red-600 text-sm">{completeError}</div>
-                        )}
-                        <div className="flex gap-3">
-                            <button onClick={handleComplete} disabled={isCompleting}
-                                className={'inline-flex items-center px-5 py-2.5 bg-green-600 text-white ' +
-                                    'rounded-lg hover:bg-green-700 disabled:bg-gray-400 font-medium'}>
-                                {isCompleting
-                                    ? <i className="fa-solid fa-spinner fa-spin mr-2"></i>
-                                    : <i className="fa-solid fa-check mr-2"></i>}
-                                Save
-                            </button>
-                            <button onClick={() => setShowCompleteForm(false)}
-                                className="px-5 py-2.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
-                                Cancel
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        );
-    };
 
     // ── Inner component: Review ──────────────────────────────────────────────
     const ReviewPhase = () => {
-        const config = instance.state?.config || {};
-        const isScalePhoto = imageType === 'scale_photo';
-
-        const total = assessments.length;
-        const passed = assessments.filter(a => a.status === 'pass').length;
-        const failed = assessments.filter(a => a.status === 'fail').length;
-        const pending = total - passed - failed;
-
-        if (loadingReview) return (
+        if (loadingSessions) return (
             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                 <i className="fa-solid fa-spinner fa-spin text-gray-400 text-3xl mb-3"></i>
-                <p className="text-gray-500 mt-3">Loading photos...</p>
+                <p className="text-gray-500 mt-3">Loading sessions...</p>
             </div>
         );
-        if (reviewError) return (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                <p className="text-red-700">Error loading review data: {reviewError}</p>
+        if (linkedSessions.length === 0) return (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6">
+                <p className="text-amber-700">No sessions found for this workflow run.</p>
+                <button onClick={() => setPhase('config')}
+                    className="mt-3 text-sm text-blue-600 hover:underline">
+                    &larr; Back to configuration
+                </button>
             </div>
         );
-
         return (
-            <div className="space-y-6">
-                {/* Stats bar */}
-                <div className="grid grid-cols-4 gap-4">
-                    {[
-                        { label: 'Total', value: total, color: 'blue', icon: 'fa-images' },
-                        { label: 'Pending', value: pending, color: 'yellow', icon: 'fa-clock' },
-                        { label: 'Passed', value: passed, color: 'green', icon: 'fa-check' },
-                        { label: 'Failed', value: failed, color: 'red', icon: 'fa-times' },
-                    ].map(card => (
-                        <div key={card.label}
-                            className={'bg-white rounded-lg shadow-sm p-4 border-l-4 border-' + card.color + '-500'}>
-                            <div className={'text-2xl font-bold text-' + card.color + '-600'}>
-                                {card.value}
-                            </div>
-                            <div className="text-sm text-gray-500 flex items-center gap-1 mt-1">
-                                <i className={'fa-solid ' + card.icon + ' text-xs'}></i>
-                                {card.label}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Save indicator */}
-                {isSaving && (
-                    <div className="text-sm text-gray-400 flex items-center gap-1">
-                        <i className="fa-solid fa-spinner fa-spin text-xs"></i> Saving...
-                    </div>
-                )}
-
-                {/* Photo list */}
-                <div className="space-y-3">
-                    {assessments.map(a => (
-                        <PhotoCard key={a.id} assessment={a} isScalePhoto={isScalePhoto} />
-                    ))}
-                    {assessments.length === 0 && (
-                        <div className="bg-white rounded-lg shadow-sm p-8 text-center text-gray-500">
-                            No photos found for the selected criteria.
-                        </div>
-                    )}
-                </div>
-
-                {/* FLW Summary Table */}
-                {FlwSummaryTable({ assessments, threshold, config, readOnly: false })}
-
-                {/* Complete Image Review */}
-                {CompleteSection({ assessments })}
-            </div>
-        );
-    };
-
-    // ── Inner component: Completed FLW Table (loads data for read-only view) ────
-    const CompletedFlwTable = ({ config, threshold: completedThreshold }) => {
-        const sid = sessionId;
-        const [rows, setRows] = React.useState([]);
-        const [loading, setLoading] = React.useState(true);
-
-        React.useEffect(() => {
-            if (!sid) { setLoading(false); return; }
-            fetch('/audit/api/' + sid + '/bulk-data/')
-                .then(r => r.json())
-                .then(data => {
-                    setRows(buildFlwRows(data.assessments || [], config));
-                    setLoading(false);
-                })
-                .catch(() => setLoading(false));
-        }, [sid]);
-
-        if (loading) return (
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                <i className="fa-solid fa-spinner fa-spin text-gray-400"></i>
-            </div>
-        );
-
-        return (
-            <FlwSummaryTable assessments={[]} threshold={completedThreshold}
-                config={config} readOnly={true} overrideRows={rows} />
+            <SessionsTable sessions={linkedSessions} readOnly={false} />
         );
     };
 
     // ── Inner component: Completed Phase ────────────────────────────────────
     const CompletedPhase = () => {
         const completion = instance.state?.completion || {};
-        const config = instance.state?.config || {};
-        const completedThreshold = config.threshold ?? 80;
-        const overallResult = completion.overall_result || 'pass';
+        const avgPassed = instance.state?.avg_passed;
         const completedAt = completion.completed_at
             ? new Date(completion.completed_at).toLocaleDateString('en-US',
                 { month: 'short', day: 'numeric', year: 'numeric' })
@@ -1284,25 +911,27 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             {completedAt && (
                                 <p className="text-sm text-green-600 mt-1">Completed on {completedAt}</p>
                             )}
-                            {completion.notes && (
-                                <p className="text-sm text-gray-700 mt-3 bg-white/60 rounded p-3 border border-green-100">
-                                    {completion.notes}
-                                </p>
-                            )}
                         </div>
-                        <span className={'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ' +
-                            (overallResult === 'pass'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800')}>
-                            {overallResult === 'pass'
-                                ? <React.Fragment><i className="fa-solid fa-circle-check"></i> Overall Pass</React.Fragment>
-                                : <React.Fragment><i className="fa-solid fa-circle-xmark"></i> Overall Fail</React.Fragment>}
-                        </span>
+                        {avgPassed !== null && avgPassed !== undefined && (
+                            <span className={'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ' +
+                                (avgPassed >= threshold
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800')}>
+                                <i className={'fa-solid ' +
+                                    (avgPassed >= threshold ? 'fa-circle-check' : 'fa-circle-xmark')}></i>
+                                Avg {avgPassed}% Passed
+                            </span>
+                        )}
                     </div>
                 </div>
 
-                {/* Read-only FLW summary */}
-                <CompletedFlwTable config={config} threshold={completedThreshold} />
+                {/* Sessions table (read-only) */}
+                {!loadingSessions && <SessionsTable sessions={linkedSessions} readOnly={true} />}
+                {loadingSessions && (
+                    <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                        <i className="fa-solid fa-spinner fa-spin text-gray-400"></i>
+                    </div>
+                )}
             </div>
         );
     };
