@@ -590,9 +590,20 @@ class PaymentInvoice(models.Model):
     date_of_expense = models.DateField(null=True, blank=True)
     status = models.CharField(choices=InvoiceStatus.choices, default=InvoiceStatus.PENDING_NM_REVIEW, max_length=50)
     archived_date = models.DateTimeField(null=True, blank=True)
+    invoice_ticket_link = models.URLField(null=True, blank=True)
 
     class Meta:
         unique_together = ("opportunity", "invoice_number")
+
+    @property
+    def invoice_type(self):
+        if self.service_delivery:
+            return PaymentInvoice.InvoiceType.service_delivery
+        return PaymentInvoice.InvoiceType.custom
+
+    @cached_property
+    def is_paid(self):
+        return Payment.objects.filter(invoice=self).exists()
 
     def get_status_display(self):
         return InvoiceStatus.get_label(self.status)
