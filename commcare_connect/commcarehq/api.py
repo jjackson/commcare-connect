@@ -90,12 +90,12 @@ def create_or_update_case(
     base_url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
     headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
 
-    with httpx.Client() as client:
+    with httpx.Client(base_url=base_url, headers=headers) as client:
         if case_id:
-            response = client.put(f"{base_url}{case_id}/", headers=headers, json=case_data)
+            response = client.put(f"{case_id}/", json=case_data)
             error_msg = f"Failed to update case data for {domain} with {case_id}."
         else:
-            response = client.post(base_url, headers=headers, json=case_data)
+            response = client.post("", json=case_data)
             error_msg = f"Failed to create case for {domain}."
 
     try:
