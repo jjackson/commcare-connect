@@ -168,6 +168,7 @@ class OrganizationSelectOrCreateForm(forms.Form):
         create_key_name="name",
     )
     org = forms.CharField(
+        max_length=255,
         label=gettext_lazy("Workspace Name"),
         widget=forms.Select(
             attrs={"x-ref": "org", "data-tomselect": "1", "data-tomselect:settings": '{"create": true}'}
