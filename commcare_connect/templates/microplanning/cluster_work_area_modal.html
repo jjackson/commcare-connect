@@ -1,0 +1,41 @@
+{% load i18n static %}
+<div id="cluster-work-area-modal" class="modal-backdrop" x-cloak
+  x-show="showCreateWorkAreaGroupsModal"
+  @keydown.escape.window="showCreateWorkAreaGroupsModal = false">
+  <div class="modal">
+    <div class="px-4 py-3">
+      <div class="header text-lg font-semibold text-brand-deep-purple flex flex-col items-center gap-4">
+          <i class="text-xl fa-solid fa-network-wired"></i>
+          <h1>{% translate "Create Work Area Groups" %}</h1>
+      </div>
+
+      <p class="mt-4">{% translate "This process may take few minutes. Please do not close this window until it has completed." %}</p>
+
+      <div class="flex flex-1 gap-2 mt-4">
+        <form action="{% url 'microplanning:cluster_work_areas' request.org.slug request.opportunity.opportunity_id %}"
+          method="post">
+          {% csrf_token %}
+          <button type="submit" class="button button-md primary-dark">{% trans 'Create Groups' %}</button>
+        </form>
+      </div>
+
+      {% if request.GET.clustering_task_id %}
+        <div>
+          <div id="clustering-status" class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center"
+            hx-get="{% url 'microplanning:clustering_status' request.org.slug request.opportunity.opportunity_id %}?clustering_task_id={{request.GET.clustering_task_id}}"
+            hx-trigger="load delay:2s"
+            hx-swap="outerHTML">
+            <div class="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-blue-500"></div>
+            <span class="sr-only">{% trans "Loading..." %}</span>
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="flex justify-end mt-4">
+        <button type="button" class="button button-md outline-style" @click="showCreateWorkAreaGroupsModal = false">
+            {% trans 'Close' %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
