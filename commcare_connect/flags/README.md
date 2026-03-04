@@ -1,12 +1,20 @@
-# Release Toggles in Commcare Connect
+# Release Toggles in CommCare Connect
 
-Commcare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) to manage feature release toggles.
+Commcare Connect uses [django waffle](https://waffle.readthedocs.io/en/stable/) to manage feature release.
+
+Waffle provides different tools to control access to a feature on the environment.
+
+## Usage
+
+Connect uses both [switches](https://waffle.readthedocs.io/en/stable/types/switch.html) and [flags](https://waffle.readthedocs.io/en/stable/types/flag.html).
+
+- While _switches_ are used to turn a feature **on or off for everyone**, _flags_ are used to enable a feature for **specific users, groups, users meeting certain criteria** (such as being authenticated, or superusers).
+- This allows for global releases, as well as targeted releases to specific users, organizations, opportunities, and/or programs.
 
 ## Expectations
 
-- Connect uses a mix of both switches and a custom flag model. This allows for global releases, as well as targeted releases to specific users, organizations, opportunities, and/or programs.
-- Switches and toggles should be as short lived as possible, existing through the release, but removed once the feature is out.
-- All switches and flags should have a detailed description in the note field of the model, describing the feature they control.
+- Switches and toggles should be as **short-lived** as possible, existing through the release, but removed once the feature is out.
+- All switches and flags should have a **detailed description** in the note field of the model, describing the feature they control.
 
 ## Configuration Details
 
