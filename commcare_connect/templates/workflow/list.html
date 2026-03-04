@@ -678,6 +678,9 @@
                                 <th class="py-2 text-left font-medium">Period</th>
                                 <th class="py-2 text-center font-medium">FLWs</th>
                                 <th class="py-2 text-left font-medium">Status</th>
+                                {% if workflow.template_type == "bulk_image_audit" %}
+                                <th class="py-2 text-center font-medium">Avg % Passed</th>
+                                {% endif %}
                                 <th class="py-2 text-right font-medium">Actions</th>
                             </tr>
                         </thead>
@@ -852,6 +855,19 @@
                                         </template>
                                     </div>
                                 </td>
+                                {% if workflow.template_type == "bulk_image_audit" %}
+                                <td class="py-3 text-center">
+                                    {% with avg=run.state.avg_passed %}
+                                    {% if avg != "" and avg is not None %}
+                                    <span class="text-sm font-medium {% if avg >= 80 %}text-green-700{% else %}text-red-700{% endif %}">
+                                        {{ avg }}%
+                                    </span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </td>
+                                {% endif %}
                                 <td class="py-3 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <a href="{% url 'labs:workflow:run' workflow.definition.id %}?run_id={{ run.id }}"

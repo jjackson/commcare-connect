@@ -95,15 +95,24 @@ class WorkflowRunRecord(LocalLabsRecord):
 
     @property
     def period_start(self):
-        return self.data.get("period_start")
+        top = self.data.get("period_start")
+        if top:
+            return top
+        return self.data.get("state", {}).get("period_start")
 
     @property
     def period_end(self):
-        return self.data.get("period_end")
+        top = self.data.get("period_end")
+        if top:
+            return top
+        return self.data.get("state", {}).get("period_end")
 
     @property
     def status(self):
-        return self.data.get("status", "in_progress")
+        top = self.data.get("status")
+        if top:
+            return top
+        return self.data.get("state", {}).get("status", "in_progress")
 
     @property
     def state(self):
@@ -118,9 +127,13 @@ class WorkflowRunRecord(LocalLabsRecord):
         state = self.data.get("state", {})
         if "selected_workers" in state:
             selected = state.get("selected_workers", [])
-        else:
+            return len(selected) if isinstance(selected, list) else 0
+        if "selected_flws" in state:
             selected = state.get("selected_flws", [])
-        return len(selected) if isinstance(selected, list) else 0
+            return len(selected) if isinstance(selected, list) else 0
+        if "flw_count" in state:
+            return state.get("flw_count", 0)
+        return 0
 
 
 class WorkflowChatHistoryRecord(LocalLabsRecord):
