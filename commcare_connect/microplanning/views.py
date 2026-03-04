@@ -160,6 +160,10 @@ def cluster_work_areas(request, org_slug, opp_id):
         messages.error(request, _("Please upload Work Areas for this opportunity."))
         return redirect(redirect_url)
 
+    if WorkAreaGroup.objects.filter(opportunity_id=request.opportunity.id).exists():
+        messages.error(request, _("Work Area Groups already exist for this opportunity."))
+        return redirect(redirect_url)
+
     if cache.get(get_cluster_area_cache_lock_key(opp_id)):
         messages.error(request, _("Work Area Clustering is already in progress for this opportunity."))
         return redirect(redirect_url)
