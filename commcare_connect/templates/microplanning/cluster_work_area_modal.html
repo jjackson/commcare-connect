@@ -15,7 +15,6 @@
         <button type="submit" class="button button-md primary-dark"
           hx-post="{% url 'microplanning:cluster_work_areas' request.org.slug request.opportunity.opportunity_id %}"
           hx-trigger="click"
-          hx-target="#clustering-status"
           hx-swap="outerHTML">
           {% trans 'Create Groups' %}
         </button>

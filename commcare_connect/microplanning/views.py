@@ -174,8 +174,9 @@ def cluster_work_areas(request, org_slug, opp_id):
     status_url = reverse("microplanning:clustering_status", args=(org_slug, opp_id))
     status_url += f"?clustering_task_id={task.id}"
     html = f"""
+        <button type="button" disabled class="button button-md primary-dark">Create Groups</button>
         <div id='clustering-status' class='mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center'
-            hx-get="{status_url}" hx-trigger="every 2s" hx-swap="outerHTML">
+            hx-get="{status_url}" hx-trigger="every 2s" hx-swap="outerHTML" hx-swap-oob="outerHTML:#clustering-status">
             <div class="animate-spin rounded-full h-4 w-4 border-4 border-brand-mango border-t-transparent"></div>
             <span>{_("Work Area Clustering in progress.")}</span>
         </div>
