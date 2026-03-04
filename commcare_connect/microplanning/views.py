@@ -191,7 +191,7 @@ def clustering_status(request, org_slug, opp_id):
 
     if task_id:
         try:
-            _ = uuid.UUID(task_id)
+            uuid.UUID(task_id)
         except (ValueError, TypeError):
             return redirect(
                 reverse("microplanning:microplanning_home", kwargs={"org_slug": org_slug, "opp_id": opp_id}),
