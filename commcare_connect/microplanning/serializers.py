@@ -6,7 +6,7 @@ from commcare_connect.microplanning.models import WorkArea
 
 class WorkAreaCaseSerializer(serializers.ModelSerializer):
     case_name = serializers.CharField(source="slug")
-    case_type = serializers.SerializerMethodField()
+    case_type = serializers.CharField(default=WORK_AREA_CASE_TYPE, read_only=True)
     external_id = serializers.CharField(source="id")
     owner_id = serializers.CharField(default=None, allow_null=True)
     properties = serializers.SerializerMethodField()
@@ -20,9 +20,6 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "owner_id",  # Required when creating new case in HQ, optional when doing update
             "properties",
         ]
-
-    def get_case_type(self, obj) -> str:
-        return WORK_AREA_CASE_TYPE
 
     def get_properties(self, obj) -> dict:
         return {
