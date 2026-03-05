@@ -341,6 +341,7 @@ def test_notify_user_for_scored_assessment(send_message_patch):
                 "action": "ccc_generic_opportunity",
                 "key": "scored_assessment",
                 "opportunity_status": "learn",
+                "opportunity_id": str(assessment.opportunity.id),
                 "opportunity_uuid": str(assessment.opportunity.opportunity_id),
                 "title": "Update on your Assessment",
                 "body": f"Assessment for opportunity '{assessment.opportunity.name}' scored, check your status",
