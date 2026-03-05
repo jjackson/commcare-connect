@@ -65,8 +65,12 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     opp_access = work_area.work_area_group.assigned_user
     api_key = opp_access.opportunity.api_key
     domain = opp_access.opportunity.deliver_app.cc_domain
+    user = opp_access.user
     case_data = WorkAreaCaseSerializer(work_area).data
-    if not work_area.case_id:
+    connect_id_user_link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
+    if connect_id_user_link and connect_id_user_link.hq_case_id:
+        case_data["owner_id"] = connect_id_user_link.hq_case_id
+    else:
         user_case = get_usercase(opp_access)
         case_data["owner_id"] = user_case.case_id
 
