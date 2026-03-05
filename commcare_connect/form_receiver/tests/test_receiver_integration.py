@@ -901,13 +901,14 @@ def test_update_completed_learn_date_migration(opportunity, mobile_user):
 
 
 @pytest.mark.django_db
-def test_receiver_deliver_form_with_work_area_and_flag_enabled(
+def test_receiver_deliver_form_with_work_area(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     work_area = WorkAreaFactory(opportunity=opportunity)
     deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=opportunity.paymentunit_set.first())
     oauth_application = opportunity.hq_server.oauth_application
-    stub = DeliverUnitStubFactory(id=deliver_unit.slug)
+    stub = DeliverUnitStubFactory(id=deliver_unit.slug, work_area_id=work_area.case_id)
+
     form_json = get_form_json(
         form_block={**stub.json, "case": {"@case_id": work_area.case_id}},
         domain=deliver_unit.app.cc_domain,

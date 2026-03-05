@@ -1,4 +1,5 @@
 import datetime
+import logging
 from functools import partial
 
 from django.db import transaction
@@ -36,6 +37,8 @@ from commcare_connect.opportunity.tasks import download_user_visit_attachments
 from commcare_connect.opportunity.visit_import import update_payment_accrued_for_user
 from commcare_connect.users.models import User
 from commcare_connect.utils.lock import try_redis_lock
+
+logger = logging.getLogger(__name__)
 
 LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("$..assessment")
@@ -331,9 +334,13 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             elif counts["entity"] > 0:
                 user_visit.status = VisitValidationStatus.duplicate
 
-        case_id = xform.form.get("case", {}).get("@case_id")
-        if case_id:
-            user_visit.work_area = WorkArea.objects.filter(case_id=case_id, opportunity=opportunity).first()
+        if work_area_case_id := deliver_unit_block.get("work_area_id"):
+            try:
+                user_visit.work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
+            except WorkArea.DoesNotExist:
+                logger.error(
+                    f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
+                )
 
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:
