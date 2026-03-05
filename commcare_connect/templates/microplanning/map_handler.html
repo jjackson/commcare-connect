@@ -14,6 +14,7 @@
                 const accessToken = '{{ mapbox_api_key|escapejs }}';
                 const tilesUrl = `${window.location.origin}{{ tiles_url|escapejs }}`;
                 const groupsUrl = '{{ groups_url|escapejs }}';
+                const minZoom = parseInt("{{ workarea_min_zoom|escapejs }}");
 
                 if (!MapboxUtils.setAccessToken(accessToken)) return;
 
@@ -36,7 +37,7 @@
                 this.map.addSource('workareas', {
                     type: 'vector',
                     tiles: [tilesUrl],
-                    minzoom: 6,
+                    minzoom: minZoom,
                     promoteId: { 'workareas': 'id' }
                 });
 
