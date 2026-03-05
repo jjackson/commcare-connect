@@ -170,10 +170,10 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
             },
         )
 
-        notify_user_for_scored_assessment.delay(assessment.pk)
-
         if not created:
             return ProcessingError("Learn Assessment is already completed")
+
+        notify_user_for_scored_assessment.delay(assessment.pk)
 
 
 def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Opportunity):
