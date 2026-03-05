@@ -15,9 +15,13 @@
       <p class="text-xs opacity-75"
          x-text="(bulkStartDate && bulkEndDate) ? bulkStartDate + ' to ' + bulkEndDate : (loading ? 'Loading...' : '')"></p>
       <div class="flex gap-2 mt-2">
-        <a href="{% url 'audit:session_list' %}"
+        <a x-show="!backUrl" href="{% url 'audit:session_list' %}"
            class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
-          <- Back to List
+          &larr; Back to List
+        </a>
+        <a x-show="backUrl" :href="backUrl"
+           class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
+          &larr; Back to Workflow
         </a>
       </div>
     </div>
@@ -105,19 +109,6 @@
     <div class="flex flex-wrap gap-4 items-center justify-between">
       <div class="flex flex-wrap gap-4 items-center">
         <div>
-          <label for="question-id-filter" class="block text-sm font-medium text-gray-700 mb-1">Assessment Type</label>
-          <select id="question-id-filter"
-                  x-model="selectedQuestionId"
-                  @change="applyFilters()"
-                  :disabled="loading"
-                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
-            <option value="">All Types</option>
-            <template x-for="questionId in questionIds" :key="questionId">
-              <option :value="questionId" x-text="questionId"></option>
-            </template>
-          </select>
-        </div>
-        <div>
           <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select id="status-filter"
                   x-model="selectedStatus"
@@ -173,11 +164,8 @@
                 class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-eraser mr-1"></i>Clear All Assessments
         </button>
-        <div class="border-l border-gray-300 h-8 mx-2"></div>
-        <!-- AI Review Section -->
-        <div class="flex gap-2 items-center">
-          <!-- AI Review Dropdown -->
-          <div class="relative" x-data="{ showAiMenu: false }">
+        <!-- AI Review section removed -->
+        <div class="hidden" x-data="{ showAiMenu: false }">
             <button @click="showAiMenu = !showAiMenu"
                     :disabled="isReadOnly || loading || bulkProcessing || bulkAiProcessing"
                     class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-1">
@@ -203,7 +191,6 @@
                 </template>
               </div>
             </div>
-          </div>
           <!-- AI Result Action Buttons -->
           <template x-if="currentAgentActions && Object.keys(currentAgentActions).length > 0">
             <div class="flex gap-1 items-center">
@@ -426,67 +413,50 @@
     </div>
   </template>
 
-  <!-- Visit Summary Table -->
-  <template x-if="!loading && !loadCancelled && !loadError && visitSummaries.length > 0">
+  <!-- FLW Summary Table -->
+  <template x-if="!loading && !loadCancelled && !loadError && flwSummaries.length > 0">
     <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
       <h2 class="text-lg font-bold text-gray-900 mb-4">
-        <i class="fa-solid fa-list-check mr-2 text-brand-indigo"></i>Visit-Level Summary
+        <i class="fa-solid fa-users mr-2 text-brand-indigo"></i>FLW Summary
       </h2>
       <div class="overflow-x-auto">
-        <table class="table table-bordered mb-0 w-full text-sm">
+        <table class="w-full text-sm">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Visit</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Assessments</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Passed</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Failed</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">FLW</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Passed / Total</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">% Passed</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Pending</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Result</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <template x-for="visit in visitSummaries" :key="visit.visit_id">
+            <template x-for="flw in flwSummaries" :key="flw.username">
               <tr>
-                <td class="px-4 py-3">
-                  <a :href="visitDetailUrl(visit.visit_id)"
-                     target="_blank"
-                     class="text-sm font-medium text-brand-indigo hover:text-brand-deep-purple hover:underline"
-                     x-text="visit.visit_id"></a>
-                  <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
+                <td class="px-4 py-3 font-medium text-gray-900" x-text="flw.username"></td>
+                <td class="px-4 py-3 text-center">
+                  <span class="text-green-600 font-medium" x-text="flw.passed"></span>
+                  <span class="text-gray-400 mx-1">/</span>
+                  <span class="font-medium" x-text="flw.total"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium" x-text="visit.total_assessments"></span>
+                  <span class="font-medium"
+                        :class="flw.total > 0 && (flw.passed / flw.total * 100) >= passThreshold ? 'text-green-600' : 'text-red-600'"
+                        x-text="flw.total > 0 ? Math.round(flw.passed / flw.total * 100) + '%' : '—'"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-green-600" x-text="visit.passed_count"></span>
+                  <span :class="flw.pending > 0 ? 'text-orange-600 font-medium' : 'text-gray-400'"
+                        x-text="flw.pending"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-red-600" x-text="visit.failed_count"></span>
-                </td>
-                <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-gray-600" x-text="visit.pending_count"></span>
-                </td>
-                <td class="px-4 py-3 text-center">
-                  <div class="flex gap-2 justify-center">
-                    <button @click="setVisitResult(visit.visit_id, 'pass')"
-                            :disabled="loading || bulkProcessing"
-                            :class="{
-                              'bg-green-600 text-white': visitResults[visit.visit_id]?.result === 'pass' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'pass'),
-                              'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id]?.result !== 'pass' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'pass')
-                            }"
-                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                      <i class="fa-solid fa-check mr-1"></i>Pass
-                    </button>
-                    <button @click="setVisitResult(visit.visit_id, 'fail')"
-                            :disabled="loading || bulkProcessing"
-                            :class="{
-                              'bg-red-600 text-white': visitResults[visit.visit_id]?.result === 'fail' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'fail'),
-                              'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id]?.result !== 'fail' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'fail')
-                            }"
-                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                      <i class="fa-solid fa-times mr-1"></i>Fail
-                    </button>
-                  </div>
+                  <template x-if="flw.pending === 0 && flw.total > 0">
+                    <span :class="(flw.passed / flw.total * 100) >= passThreshold ? 'text-green-600' : 'text-red-600'">
+                      <i :class="(flw.passed / flw.total * 100) >= passThreshold ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-xmark'"></i>
+                    </span>
+                  </template>
+                  <template x-if="flw.pending > 0 || flw.total === 0">
+                    <span class="text-orange-500"><i class="fa-solid fa-clock"></i></span>
+                  </template>
                 </td>
               </tr>
             </template>
@@ -496,13 +466,13 @@
     </div>
   </template>
 
-  <!-- Complete Audit Section -->
+  <!-- Complete Image Review Section -->
   <div class="bg-white rounded-lg shadow-sm mb-4"
        x-show="!loading && !loadCancelled && !loadError">
     <div class="p-6">
       <h2 class="text-xl font-bold text-brand-deep-purple mb-4 flex items-center gap-2">
         <i class="fa-solid fa-flag-checkered"></i>
-        Complete Audit
+        Complete Image Review
       </h2>
 
       {% if session.status == 'completed' %}
@@ -520,50 +490,36 @@
       </div>
       {% endif %}
 
+      <!-- Pending warning -->
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-center gap-2"
+           x-show="stats.pending > 0">
+        <i class="fa-solid fa-exclamation-triangle text-amber-600"></i>
+        <span class="text-sm text-amber-800">
+          <span class="font-medium" x-text="stats.pending"></span> image(s) still pending review.
+          Save progress now, or review all images before completing.
+        </span>
+      </div>
+
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            Overall Result
-          </label>
-          <div class="flex gap-4">
-            <label class="flex items-center cursor-pointer">
-              <input type="radio" x-model="overallResult" value="pass" class="mr-2">
-              <span class="px-4 py-2 bg-green-100 text-green-800 rounded font-medium">PASS</span>
-            </label>
-            <label class="flex items-center cursor-pointer">
-              <input type="radio" x-model="overallResult" value="fail" class="mr-2">
-              <span class="px-4 py-2 bg-red-100 text-red-800 rounded font-medium">FAIL</span>
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            Overall Audit Notes
-          </label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Notes</label>
           <textarea x-model="completionNotes"
-                    placeholder="Enter any additional notes about this audit..."
-                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent"
+                    :disabled="stats.pending > 0"
+                    placeholder="Enter any notes about this review..."
+                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
                     rows="4"></textarea>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            KPI Notes
-          </label>
-          <textarea x-model="kpiNotes"
-                    placeholder="Enter KPI-related notes or reasons for failure..."
-                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent"
-                    rows="3"></textarea>
+          <p class="text-xs text-gray-500 mt-1" x-show="stats.pending > 0">
+            Notes can be entered after all images are reviewed.
+          </p>
         </div>
 
         <div class="flex items-center gap-3">
-          <button @click="completeAudit()"
+          <button @click="saveImageReview()"
                   :disabled="submittingCompletion"
                   class="px-6 py-3 bg-brand-indigo hover:bg-brand-deep-purple text-white font-bold rounded-lg transition-colors flex items-center gap-2"
                   :class="submittingCompletion ? 'opacity-50 cursor-not-allowed' : ''">
             <i class="fa-solid fa-save"></i>
-            <span x-show="!submittingCompletion">Save</span>
+            <span x-show="!submittingCompletion" x-text="stats.pending > 0 ? 'Save Progress' : 'Complete Image Review'"></span>
             <span x-show="submittingCompletion" class="flex items-center gap-2">
               <i class="fa-solid fa-spinner fa-spin"></i>
               Saving...
@@ -656,12 +612,17 @@ const sessionId = {{ session.pk }};
 const opportunityId = {{ opportunity_id|default:"null" }};
 const connectUrl = '{{ connect_url|default:"https://connect.dimagi.com" }}';
 const orgSlug = '{{ org_slug|default:"" }}';
+const workflowRunId = {{ workflow_run_id|default:"null" }};
+const passThreshold = parseInt('{{ pass_threshold|default:"80" }}') || 80;
 
 function bulkAssessmentInterface() {
   return {
     selectedQuestionId: '{{ selected_question_id }}',
     selectedStatus: '{{ selected_status }}',
     widgetSize: 300,
+    passThreshold: passThreshold,
+    workflowRunId: workflowRunId,
+    backUrl: null,
     stats: {
       total: 0,
       pending: 0,
@@ -718,6 +679,10 @@ function bulkAssessmentInterface() {
       }
       const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
       this.csrfToken = tokenInput ? tokenInput.value : '';
+      // Set back URL: workflow page if launched from workflow, else audit list
+      if (workflowRunId && opportunityId) {
+        this.backUrl = '/labs/workflow/?opportunity_id=' + opportunityId;
+      }
       this.updateUrlParams();
       this.fetchData();
       this.fetchAgents();
@@ -876,6 +841,20 @@ function bulkAssessmentInterface() {
           };
         })
         .sort((a, b) => (a.visit_date_sort || '').localeCompare(b.visit_date_sort || ''));
+    },
+    get flwSummaries() {
+      const flwMap = {};
+      this.allAssessments.forEach((a) => {
+        const key = a.username || 'Unknown';
+        if (!flwMap[key]) {
+          flwMap[key] = { username: key, passed: 0, failed: 0, pending: 0, total: 0 };
+        }
+        flwMap[key].total++;
+        if (a.result === 'pass') flwMap[key].passed++;
+        else if (a.result === 'fail') flwMap[key].failed++;
+        else flwMap[key].pending++;
+      });
+      return Object.values(flwMap).sort((a, b) => a.username.localeCompare(b.username));
     },
     recalculateStats() {
       const total = this.allAssessments.length;
@@ -1292,6 +1271,80 @@ function bulkAssessmentInterface() {
         window.location.href = '{% url "audit:session_list" %}';
       } catch (error) {
         alert('Error completing audit: ' + error.message);
+      } finally {
+        this.submittingCompletion = false;
+      }
+    },
+    async saveImageReview() {
+      // Called by the "Complete Image Review" / "Save Progress" button.
+      // If images still pending: save as in_progress (no redirect).
+      // If all images reviewed: complete the session and redirect to workflow.
+      if (this.submittingCompletion) return;
+      this.submittingCompletion = true;
+      try {
+        const hasPending = this.stats.pending > 0;
+        const formData = new FormData();
+        formData.append('visit_results', JSON.stringify(this.visitResults));
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+
+        if (hasPending) {
+          // Save progress only - keep in_progress status
+          const response = await fetch(this.saveUrl, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save progress');
+          }
+          this.hasUnsavedChanges = false;
+        } else {
+          // Complete the session
+          const overallResult = this.stats.fail > 0 ? 'fail' : 'pass';
+          formData.append('overall_result', overallResult);
+          formData.append('notes', this.completionNotes);
+          formData.append('kpi_notes', '');
+          const response = await fetch(this.completeUrl, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to complete review');
+          }
+          this.hasUnsavedChanges = false;
+
+          // Update workflow run state if launched from a workflow
+          if (workflowRunId) {
+            const totalAssessed = this.stats.pass + this.stats.fail;
+            const avgPassed = totalAssessed > 0 ? Math.round(this.stats.pass / totalAssessed * 100) : null;
+            try {
+              await fetch('/labs/workflow/api/run/' + workflowRunId + '/state/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': this.csrfToken,
+                },
+                body: JSON.stringify({
+                  phase: 'completed',
+                  status: 'completed',
+                  avg_passed: avgPassed,
+                  completion: { completed_at: new Date().toISOString() },
+                }),
+              });
+            } catch (e) {
+              console.warn('Failed to update workflow state:', e);
+            }
+          }
+
+          // Redirect to workflow or audit list
+          const redirectUrl = (workflowRunId && opportunityId)
+            ? '/labs/workflow/?opportunity_id=' + opportunityId
+            : '{% url "audit:session_list" %}';
+          window.location.href = redirectUrl;
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
       } finally {
         this.submittingCompletion = false;
       }

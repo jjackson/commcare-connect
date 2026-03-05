@@ -236,20 +236,31 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         setIsRunning(false);
                         setProgress({ status: 'completed', ...final });
                         const sessions = await refreshSessions();
-                        setPhase('reviewing');
                         const config = instance.state?.config || {};
-                        onUpdateState({
-                            phase: 'reviewing',
-                            status: 'in_progress',
-                            flw_count: sessions.length,
-                            period_start: config.start_date || null,
-                            period_end: config.end_date || null,
-                            active_job: {
-                                job_id: activeJob.job_id,
-                                status: 'completed',
-                                completed_at: new Date().toISOString(),
-                            },
-                        }).catch(() => {});
+                        try {
+                            await onUpdateState({
+                                phase: 'reviewing',
+                                status: 'in_progress',
+                                flw_count: sessions.length,
+                                period_start: config.start_date || null,
+                                period_end: config.end_date || null,
+                                active_job: {
+                                    job_id: activeJob.job_id,
+                                    status: 'completed',
+                                    completed_at: new Date().toISOString(),
+                                },
+                            });
+                        } catch (e) { /* non-fatal */ }
+                        if (sessions.length > 0) {
+                            const s = sessions[0];
+                            const params = new URLSearchParams();
+                            if (s.opportunity_id) params.set('opportunity_id', s.opportunity_id);
+                            params.set('threshold', config.threshold || threshold);
+                            if (instance.id) params.set('workflow_run_id', instance.id);
+                            window.location.href = '/audit/' + s.id + '/bulk/?' + params.toString();
+                        } else {
+                            setPhase('reviewing');
+                        }
                     },
                     (err) => {
                         setIsRunning(false);
@@ -329,19 +340,31 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         setIsRunning(false);
                         setProgress({ status: 'completed', ...final });
                         const sessions = await refreshSessions();
-                        setPhase('reviewing');
-                        onUpdateState({
-                            phase: 'reviewing',
-                            status: 'in_progress',
-                            flw_count: sessions.length,
-                            period_start: auditMode === 'date_range' ? startDate : null,
-                            period_end: auditMode === 'date_range' ? endDate : null,
-                            active_job: {
-                                job_id: result.task_id,
-                                status: 'completed',
-                                completed_at: new Date().toISOString(),
-                            },
-                        }).catch(() => {});
+                        try {
+                            await onUpdateState({
+                                phase: 'reviewing',
+                                status: 'in_progress',
+                                flw_count: sessions.length,
+                                period_start: auditMode === 'date_range' ? startDate : null,
+                                period_end: auditMode === 'date_range' ? endDate : null,
+                                active_job: {
+                                    job_id: result.task_id,
+                                    status: 'completed',
+                                    completed_at: new Date().toISOString(),
+                                },
+                            });
+                        } catch (e) { /* non-fatal */ }
+                        // Navigate directly to the bulk assessment page
+                        if (sessions.length > 0) {
+                            const s = sessions[0];
+                            const params = new URLSearchParams();
+                            if (s.opportunity_id) params.set('opportunity_id', s.opportunity_id);
+                            params.set('threshold', threshold);
+                            if (instance.id) params.set('workflow_run_id', instance.id);
+                            window.location.href = '/audit/' + s.id + '/bulk/?' + params.toString();
+                        } else {
+                            setPhase('reviewing');
+                        }
                     },
                     (err) => {
                         setIsRunning(false);
@@ -884,8 +907,28 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 </button>
             </div>
         );
+        const s = linkedSessions[0];
+        const reviewParams = new URLSearchParams();
+        if (s.opportunity_id) reviewParams.set('opportunity_id', s.opportunity_id);
+        reviewParams.set('threshold', threshold);
+        if (instance.id) reviewParams.set('workflow_run_id', instance.id);
+        const reviewUrl = '/audit/' + s.id + '/bulk/?' + reviewParams.toString();
         return (
-            <SessionsTable sessions={linkedSessions} readOnly={false} />
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-blue-800 flex items-center gap-2 mb-2">
+                    <i className="fa-solid fa-images text-blue-600"></i>
+                    Image Review In Progress
+                </h2>
+                <p className="text-sm text-blue-600 mb-4">
+                    {linkedSessions.length} session{linkedSessions.length !== 1 ? 's' : ''} created.
+                    Click below to continue reviewing.
+                </p>
+                <a href={reviewUrl}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
+                    <i className="fa-solid fa-arrow-up-right-from-square mr-2"></i>
+                    Resume Review
+                </a>
+            </div>
         );
     };
 
