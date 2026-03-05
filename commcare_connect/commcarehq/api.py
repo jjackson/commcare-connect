@@ -45,9 +45,8 @@ def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters
         headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
     ) as client:
         while url is not None:
-            response = client.get(url)
-
             try:
+                response = client.get(url)
                 response.raise_for_status()
             except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise CommCareHQAPIException(f"Failed to fetch case data for {domain}. HQ Error: {e}") from e
@@ -94,15 +93,14 @@ def create_or_update_case(
     base_url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
     headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
 
-    with httpx.Client(base_url=base_url, headers=headers) as client:
-        if case_id:
-            response = client.put(f"{case_id}/", json=case_data)
-            error_msg = f"Failed to update case data for {domain} with {case_id}."
-        else:
-            response = client.post("", json=case_data)
-            error_msg = f"Failed to create case for {domain}."
-
     try:
+        with httpx.Client(base_url=base_url, headers=headers) as client:
+            if case_id:
+                error_msg = f"Failed to update case data for {domain} with {case_id}."
+                response = client.put(f"{case_id}/", json=case_data)
+            else:
+                error_msg = f"Failed to create case for {domain}."
+                response = client.post("", json=case_data)
         response.raise_for_status()
     except (httpx.HTTPStatusError, httpx.RequestError) as e:
         raise CommCareHQAPIException(f"{error_msg} HQ Error: {e}") from e
