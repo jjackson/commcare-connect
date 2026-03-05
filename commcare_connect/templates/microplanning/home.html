@@ -92,36 +92,37 @@
                 </div>
             </template>
 
-                <!-- Selected work area detail panel -->
-                <template x-if="selectedFeature">
-                    <div>
-                        <dl class="space-y-2">
-                            <div class="grid grid-cols-2 items-center gap-2">
-                                <dt class="text-sm text-gray-500">{% translate "Assignee" %}</dt>
-                                <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"
-                                    x-text="selectedFeature.assignee ?? '—'"></dd>
+            <!-- Selected work area detail panel -->
+            <template x-if="selectedFeature">
+                <div>
+                    <dl class="space-y-2">
+                        <div class="grid grid-cols-2 items-center gap-2">
+                            <dt class="text-sm text-gray-500">{% translate "Assignee" %}</dt>
+                            <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"
+                                x-text="selectedFeature.assignee ?? '—'"></dd>
 
-                                <dt class="text-sm text-gray-500">{% translate "Work Area Group" %}</dt>
-                                <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"
-                                    x-text="selectedFeature.group_name ?? '—'"></dd>
+                            <dt class="text-sm text-gray-500">{% translate "Work Area Group" %}</dt>
+                            <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"
+                                x-text="selectedFeature.group_name ?? '—'"></dd>
 
-                                <dt class="text-sm text-gray-500">{% translate "Expected Visit Count" %}</dt>
-                                <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                                    x-text="selectedFeature.expected_visit_count ?? '—'"></dd>
+                            <dt class="text-sm text-gray-500">{% translate "Expected Visit Count" %}</dt>
+                            <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
+                                x-text="selectedFeature.expected_visit_count ?? '—'"></dd>
 
                             <dt class="text-sm text-gray-500">{% translate "Number of Buildings" %}</dt>
                             <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                            x-text="selectedFeature.building_count ?? '—'"></dd>
+                                x-text="selectedFeature.building_count ?? '—'"></dd>
                         </div>
                         <div class="flex items-center gap-4"
-                        x-data="{statusMeta: JSON.parse(document.getElementById('status-meta-data').textContent)}">
-                        <dt class="text-sm text-gray-500 shrink-0">{% translate "Status" %}</dt>
-                        <dd class="flex-1 min-w-0">
-                            <span class="block w-full text-center text-sm font-semibold rounded-lg px-3 py-2"
-                                :class="statusMeta[selectedFeature.status]?.class" x-text="statusMeta[selectedFeature.status]?.label">
-                            </span>
-                        </span>
-                    </dd>
+                            x-data="{statusMeta: JSON.parse(document.getElementById('status-meta-data').textContent)}">
+                            <dt class="text-sm text-gray-500 shrink-0">{% translate "Status" %}</dt>
+                            <dd class="flex-1 min-w-0">
+                                <span class="block w-full text-center text-sm font-semibold rounded-lg px-3 py-2"
+                                    :class="statusMeta[selectedFeature.status]?.class"
+                                    x-text="statusMeta[selectedFeature.status]?.label">
+                                </span>
+                                </span>
+                            </dd>
                         </div>
                     </dl>
                     <div class="mt-4 flex justify-end">
@@ -132,7 +133,7 @@
                     </div>
                 </div>
             </template>
-</aside>
+        </aside>
 </div>
 </div>
 </div>
