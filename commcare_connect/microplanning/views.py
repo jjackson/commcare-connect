@@ -194,9 +194,7 @@ def clustering_status(request, org_slug, opp_id):
         try:
             uuid.UUID(task_id)
         except (ValueError, TypeError):
-            return redirect(
-                reverse("microplanning:microplanning_home", kwargs={"org_slug": org_slug, "opp_id": opp_id}),
-            )
+            return redirect("microplanning:microplanning_home", org_slug, opp_id)
 
         task = AsyncResult(task_id)
         task_meta = task._get_task_meta()
@@ -224,4 +222,4 @@ def clustering_status(request, org_slug, opp_id):
         )
         return HttpResponse(mark_safe(html), status=HTTPStatus.OK)
 
-    return redirect("microplanning:microplanning_home", args=(org_slug, opp_id))
+    return redirect("microplanning:microplanning_home", org_slug, opp_id)
