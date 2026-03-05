@@ -30,6 +30,8 @@ from commcare_connect.utils.file import get_file_extension
 
 from .tasks import WorkAreaCSVImporter, get_import_area_cache_key, import_work_areas_task
 
+WORKAREA_MIN_ZOOM = 6
+
 
 @require_GET
 @org_admin_required
@@ -66,6 +68,7 @@ def microplanning_home(request, *args, **kwargs):
             "metrics": get_metrics_for_microplanning(opportunity),
             "tiles_url": tiles_url,
             "groups_url": groups_url,
+            "workarea_min_zoom": WORKAREA_MIN_ZOOM,
         },
     )
 
@@ -165,7 +168,7 @@ class WorkAreaVectorLayer(VectorLayer):
         "group_id",
     )
     geom_field = "boundary"
-    min_zoom = 6
+    min_zoom = WORKAREA_MIN_ZOOM
 
     def __init__(self, *args, opp_id=None, **kwargs):
         self.opp_id = opp_id
@@ -189,6 +192,9 @@ class WorkAreaTileView(MVTView):
 @opportunity_required
 @require_flag_for_opp(MICROPLANNING)
 def workareas_group_geojson(request, org_slug, opp_id):
+    # This view aggregates group boundaries for map display.
+    # To be removed in https://dimagi.atlassian.net/browse/CCCT-2213 for a better performant alternative
+
     qs = WorkArea.objects.filter(opportunity_id=request.opportunity.id)
 
     group_features = [
