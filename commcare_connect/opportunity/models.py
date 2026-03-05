@@ -830,7 +830,7 @@ class UserVisit(XFormBaseModel):
         "microplanning.WorkArea",
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
     )
     status_modified_date = models.DateTimeField(null=True)
     review_status = models.CharField(
