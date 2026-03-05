@@ -207,6 +207,8 @@ class ExperimentBulkAssessmentView(LoginRequiredMixin, DetailView):
                 "org_slug": org_slug,
                 "opportunity_id": opportunity_id,
                 "connect_url": settings.CONNECT_PRODUCTION_URL,
+                "workflow_run_id": session.workflow_run_id,
+                "pass_threshold": self.request.GET.get("threshold", "80"),
             }
         )
 
@@ -468,11 +470,16 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                         "question_id": img["question_id"],
                         "filename": img["name"],
                         "related_fields": img.get("related_fields", []),
+                        "hq_url": img.get("hq_url"),
                     }
                     for img in images_metadata
                 }
 
-                def build_image_url(blob_id: str) -> str:
+                def build_image_url(blob_id: str, hq_url: str | None = None) -> str:
+                    if hq_url:
+                        from urllib.parse import quote
+                        proxy_url = reverse("audit:audit_image_hq")
+                        return f"{proxy_url}?url={quote(hq_url, safe='')}"
                     # Use Connect API image endpoint
                     url = reverse("audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id})
                     return url
@@ -496,7 +503,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "result": result_value,
                             "notes": assessment_data.get("notes", ""),
                             "status": status_value,
-                            "image_url": build_image_url(blob_id),
+                            "image_url": build_image_url(blob_id, metadata.get("hq_url")),
                             "visit_date": visit_date_display,
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
@@ -650,6 +657,50 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
 
             print(f"[ERROR] Image fetch failed for blob_id={blob_id}, opp_id={opp_id}")
             print(f"[ERROR] {traceback.format_exc()}")
+            return HttpResponse(f"Image not found: {e}", status=404)
+
+
+class CommCareHQImageProxyView(LoginRequiredMixin, View):
+    """Proxy CommCareHQ form attachment images using API key auth.
+
+    Used for opportunities where photos are stored as CommCareHQ attachments
+    (photo_link_ors, muac_photo_link) rather than Connect blobs.
+    """
+
+    def get(self, request):
+        from urllib.parse import urlparse
+
+        hq_url = request.GET.get("url", "")
+        if not hq_url:
+            return HttpResponse("Missing url parameter", status=400)
+
+        # Security: only proxy CommCareHQ URLs
+        try:
+            parsed = urlparse(hq_url)
+            commcarehq_host = urlparse(settings.COMMCARE_HQ_URL).netloc
+            if parsed.netloc not in (commcarehq_host, "www.commcarehq.org"):
+                return HttpResponse("Invalid URL host", status=400)
+        except Exception:
+            return HttpResponse("Invalid URL", status=400)
+
+        api_key = getattr(settings, "COMMCARE_API_KEY", "")
+        username = getattr(settings, "COMMCARE_USERNAME", "")
+        if not api_key or not username:
+            logger.error("[HQImageProxy] COMMCARE_API_KEY / COMMCARE_USERNAME not configured")
+            return HttpResponse("CommCareHQ credentials not configured", status=503)
+
+        try:
+            resp = httpx.get(
+                hq_url,
+                headers={"Authorization": f"ApiKey {username}:{api_key}"},
+                timeout=30.0,
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            return HttpResponse(resp.content, content_type=content_type)
+        except Exception as e:
+            logger.error(f"[HQImageProxy] Failed to fetch {hq_url}: {e}")
             return HttpResponse(f"Image not found: {e}", status=404)
 
 
