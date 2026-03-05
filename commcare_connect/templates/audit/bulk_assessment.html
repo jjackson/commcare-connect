@@ -284,10 +284,20 @@
              @keydown.window="handleKeydown($event, assessment.id)">
           <div class="relative bg-gray-100"
                :style="`height: ${widgetSize}px`">
-            <img :src="assessment.image_url"
-                 alt="Assessment image"
-                 class="w-full h-full object-contain"
-                 loading="lazy">
+            <template x-if="assessment.hq_url">
+              <a :href="assessment.hq_url" target="_blank" rel="noopener">
+                <img :src="assessment.image_url"
+                     alt="Assessment image"
+                     class="w-full h-full object-contain"
+                     loading="lazy">
+              </a>
+            </template>
+            <template x-if="!assessment.hq_url">
+              <img :src="assessment.image_url"
+                   alt="Assessment image"
+                   class="w-full h-full object-contain"
+                   loading="lazy">
+            </template>
             <!-- AI Result Badge - Top Left -->
             <div class="absolute top-2 left-2"
                  x-show="aiResult"
@@ -433,7 +443,7 @@
           <tbody class="bg-white divide-y divide-gray-200">
             <template x-for="flw in flwSummaries" :key="flw.username">
               <tr>
-                <td class="px-4 py-3 font-medium text-gray-900" x-text="flw.username"></td>
+                <td class="px-4 py-3 font-medium text-gray-900" x-text="flw.flw_name"></td>
                 <td class="px-4 py-3 text-center">
                   <span class="text-green-600 font-medium" x-text="flw.passed"></span>
                   <span class="text-gray-400 mx-1">/</span>
@@ -504,13 +514,9 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Notes</label>
           <textarea x-model="completionNotes"
-                    :disabled="stats.pending > 0"
                     placeholder="Enter any notes about this review..."
-                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400 disabled:cursor-not-allowed"
+                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent"
                     rows="4"></textarea>
-          <p class="text-xs text-gray-500 mt-1" x-show="stats.pending > 0">
-            Notes can be entered after all images are reviewed.
-          </p>
         </div>
 
         <div class="flex items-center gap-3">
@@ -847,7 +853,7 @@ function bulkAssessmentInterface() {
       this.allAssessments.forEach((a) => {
         const key = a.username || 'Unknown';
         if (!flwMap[key]) {
-          flwMap[key] = { username: key, passed: 0, failed: 0, pending: 0, total: 0 };
+          flwMap[key] = { username: key, flw_name: a.flw_name || key, passed: 0, failed: 0, pending: 0, total: 0 };
         }
         flwMap[key].total++;
         if (a.result === 'pass') flwMap[key].passed++;
@@ -1298,6 +1304,10 @@ function bulkAssessmentInterface() {
             throw new Error(data.error || 'Failed to save progress');
           }
           this.hasUnsavedChanges = false;
+          const redirectUrl = (workflowRunId && opportunityId)
+            ? '/labs/workflow/?opportunity_id=' + opportunityId
+            : '{% url "audit:session_list" %}';
+          window.location.href = redirectUrl;
         } else {
           // Complete the session
           const overallResult = this.stats.fail > 0 ? 'fail' : 'pass';
@@ -1326,10 +1336,15 @@ function bulkAssessmentInterface() {
                   'X-CSRFToken': this.csrfToken,
                 },
                 body: JSON.stringify({
-                  phase: 'completed',
-                  status: 'completed',
-                  avg_passed: avgPassed,
-                  completion: { completed_at: new Date().toISOString() },
+                  state: {
+                    phase: 'completed',
+                    status: 'completed',
+                    avg_passed: avgPassed,
+                    flw_count: new Set(this.allAssessments.map(a => a.username)).size,
+                    period_start: this.bulkStartDate,
+                    period_end: this.bulkEndDate,
+                    completion: { completed_at: new Date().toISOString() },
+                  }
                 }),
               });
             } catch (e) {

@@ -302,7 +302,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         };
 
         setIsRunning(true);
-        setProgress({ status: 'starting', stage_name: 'Initializing', message: 'Starting...' });
+        setProgress({ status: 'starting', stage_name: 'Initializing', message: 'Submitting to task queue...' });
         setPhase('creating');
 
         await onUpdateState({ phase: 'creating', config });
@@ -837,8 +837,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         <div className="flex items-center gap-3">
                             <i className="fa-solid fa-spinner fa-spin text-blue-600"></i>
                             <span className="font-medium text-blue-800">
-                                {progress.stage_name || 'Processing...'}
+                                Creating Review Session...
                             </span>
+                            {progress.stage_name && progress.stage_name !== 'Initializing' && (
+                                <span className="text-xs text-blue-600 ml-2">({progress.stage_name})</span>
+                            )}
                         </div>
                         <div className="flex items-center gap-3">
                             {progress.current_stage && progress.total_stages && (
@@ -892,6 +895,17 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // ── Inner component: Review ──────────────────────────────────────────────
     const ReviewPhase = () => {
+        React.useEffect(() => {
+            if (!loadingSessions && linkedSessions.length > 0) {
+                const s = linkedSessions[0];
+                const params = new URLSearchParams();
+                if (s.opportunity_id) params.set('opportunity_id', s.opportunity_id);
+                params.set('threshold', threshold);
+                if (instance.id) params.set('workflow_run_id', instance.id);
+                window.location.href = '/audit/' + s.id + '/bulk/?' + params.toString();
+            }
+        }, [loadingSessions, linkedSessions]);
+
         if (loadingSessions) return (
             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                 <i className="fa-solid fa-spinner fa-spin text-gray-400 text-3xl mb-3"></i>
@@ -907,27 +921,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 </button>
             </div>
         );
-        const s = linkedSessions[0];
-        const reviewParams = new URLSearchParams();
-        if (s.opportunity_id) reviewParams.set('opportunity_id', s.opportunity_id);
-        reviewParams.set('threshold', threshold);
-        if (instance.id) reviewParams.set('workflow_run_id', instance.id);
-        const reviewUrl = '/audit/' + s.id + '/bulk/?' + reviewParams.toString();
         return (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
                 <h2 className="text-lg font-semibold text-blue-800 flex items-center gap-2 mb-2">
-                    <i className="fa-solid fa-images text-blue-600"></i>
-                    Image Review In Progress
+                    <i className="fa-solid fa-spinner fa-spin text-blue-600"></i>
+                    Redirecting to review...
                 </h2>
-                <p className="text-sm text-blue-600 mb-4">
-                    {linkedSessions.length} session{linkedSessions.length !== 1 ? 's' : ''} created.
-                    Click below to continue reviewing.
-                </p>
-                <a href={reviewUrl}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm">
-                    <i className="fa-solid fa-arrow-up-right-from-square mr-2"></i>
-                    Resume Review
-                </a>
             </div>
         );
     };

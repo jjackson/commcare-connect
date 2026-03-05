@@ -426,6 +426,13 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
             bulk_primary_username = ""
             assessment_counter = 0  # Counter to ensure unique IDs even for duplicate visits
 
+            # Fetch FLW display names for the opportunity
+            flw_names = {}
+            try:
+                flw_names = data_access.get_flw_names(opportunity_id)
+            except Exception:
+                pass
+
             # Use stored visit_images data - no need to fetch visits again!
             for visit_id in visit_ids:
                 visit_result_entry = session.get_visit_result(visit_id) or {}
@@ -504,10 +511,12 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "notes": assessment_data.get("notes", ""),
                             "status": status_value,
                             "image_url": build_image_url(blob_id, metadata.get("hq_url")),
+                            "hq_url": metadata.get("hq_url") or "",
                             "visit_date": visit_date_display,
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "flw_name": flw_names.get(username, username),
                             "opportunity_id": opportunity_id,
                             "related_fields": metadata.get("related_fields", []),
                             "ai_result": assessment_data.get("ai_result", ""),
@@ -537,15 +546,19 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "notes": assessment_data.get("notes", ""),
                             "status": status_value,
                             "image_url": build_image_url(blob_id),
+                            "hq_url": "",
                             "visit_date": visit_date_display,
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
                             "username": username,
+                            "flw_name": flw_names.get(username, username),
                             "opportunity_id": opportunity_id,
                             "ai_result": assessment_data.get("ai_result", ""),
                             "ai_notes": assessment_data.get("ai_notes", ""),
                         }
                     )
+
+            all_assessments.sort(key=lambda a: a.get("visit_date_sort") or "")
 
             # All filtering happens client-side now
             total_assessments = len(all_assessments)
