@@ -717,6 +717,7 @@ def notify_user_for_scored_assessment(assessment_pk):
             "action": "ccc_generic_opportunity",
             "key": "scored_assessment",
             "opportunity_status": "learn",
+            "opportunity_id": str(opportunity.id),  # added for backward compatibility
             "opportunity_uuid": str(opportunity.opportunity_id),
             "title": "Update on your Assessment",
             "body": f"Assessment for opportunity '{opportunity.name}' scored, check your status",
