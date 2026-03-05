@@ -31,7 +31,7 @@ They can be managed by users with required access
 
 - switch names are added in the file `switch_names.py`
 - use `switch_is_active` to check if switch is enabled
-- for new switches, `WAFFLE_CREATE_MISSING_SWITCHES` is set to automatically add new switches to database when they are encountered in the codebase
+- for new switches, they can be created prior to deploy via Django Admin or added via migration with the release. However, `WAFFLE_CREATE_MISSING_SWITCHES` is set to automatically add new switches to database when they are encountered in the codebase. Description should be added as a followup if created automatically.
 
 ### Flags
 
@@ -39,4 +39,4 @@ Connect uses a custom Flag model `commcare_connect.flags.models.Flag` to define 
 
 - flags names are added in the file `flag_names.py`
 - use `is_active_for()` method on the custom `Flag` model to check access to a feature
-- for new flags, they **should** be created on the relevant environment prior to deploy via django admin or added via a migration with the release
+- for new flags, they **should** be created on the relevant environment prior to deploy via Django Admin or added via a migration with the release
