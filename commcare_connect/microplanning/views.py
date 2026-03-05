@@ -158,16 +158,16 @@ def cluster_work_areas(request, org_slug, opp_id):
 
     if not WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists():
         messages.error(request, _("Please upload Work Areas for this opportunity."))
-        return redirect(redirect_url)
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     if WorkAreaGroup.objects.filter(opportunity_id=request.opportunity.id).exists():
         messages.error(request, _("Work Area Groups already exist for this opportunity."))
-        return redirect(redirect_url)
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     lock_key = get_cluster_area_cache_lock_key(request.opportunity.id)
     if cache.get(lock_key):
         messages.error(request, _("Work Area Clustering is already in progress for this opportunity."))
-        return redirect(redirect_url)
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     task = cluster_work_areas_task.delay(request.opportunity.id)
     cache.set(lock_key, task.id, timeout=1200)
