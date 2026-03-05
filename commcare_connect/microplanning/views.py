@@ -61,7 +61,7 @@ def microplanning_home(request, *args, **kwargs):
     status_meta = {
         status.value: {
             "label": status.label,
-            "class": WORK_AREA_STATUS_COLORS.get(status, "bg-gray-200 text-gray-700"),
+            "class": WORK_AREA_STATUS_COLORS.get(status),
         }
         for status in WorkAreaStatus
     }
