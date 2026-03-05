@@ -232,5 +232,7 @@ def import_work_areas_task(self, opp_id, file_name):
 
 @celery_app.task()
 def cluster_work_areas_task(opp_id):
-    with cache.lock(get_cluster_area_cache_lock_key(opp_id), timeout=900):
+    try:
         WorkAreaGrouper(opp_id).cluster_work_areas()
+    finally:
+        cache.delete(get_cluster_area_cache_lock_key(opp_id))

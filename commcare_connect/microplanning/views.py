@@ -164,11 +164,13 @@ def cluster_work_areas(request, org_slug, opp_id):
         messages.error(request, _("Work Area Groups already exist for this opportunity."))
         return redirect(redirect_url)
 
-    if cache.get(get_cluster_area_cache_lock_key(opp_id)):
+    lock_key = get_cluster_area_cache_lock_key(request.opportunity.id)
+    if cache.get(lock_key):
         messages.error(request, _("Work Area Clustering is already in progress for this opportunity."))
         return redirect(redirect_url)
 
     task = cluster_work_areas_task.delay(request.opportunity.id)
+    cache.set(lock_key, task.id, timeout=1200)
     redirect_url += f"?clustering_task_id={task.id}"
 
     status_url = reverse("microplanning:clustering_status", args=(org_slug, opp_id))
