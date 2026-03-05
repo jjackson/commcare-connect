@@ -1,5 +1,8 @@
 """
-Labs environment settings.
+Labs AWS environment settings (labs.connect.dimagi.com).
+
+This settings file is ONLY for the AWS ECS Fargate deployment.
+For local development (even of labs features), use config.settings.local.
 
 Session-based OAuth authentication with no user database storage.
 """

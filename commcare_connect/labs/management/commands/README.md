@@ -21,7 +21,7 @@ The tests run in the same environment as `runserver` using Django's test client 
 Test all three labs projects (solicitations, tasks, audit) in one command:
 
 ```bash
-python manage.py test_all_labs_urls --settings=config.settings.labs
+python manage.py test_all_labs_urls --settings=config.settings.labs_aws
 ```
 
 Options:
@@ -34,16 +34,16 @@ Examples:
 
 ```bash
 # Test all projects with default user
-python manage.py test_all_labs_urls --settings=config.settings.labs
+python manage.py test_all_labs_urls --settings=config.settings.labs_aws
 
 # Test only solicitations
-python manage.py test_all_labs_urls --project solicitations --settings=config.settings.labs
+python manage.py test_all_labs_urls --project solicitations --settings=config.settings.labs_aws
 
 # Test with verbose output
-python manage.py test_all_labs_urls --verbose --settings=config.settings.labs
+python manage.py test_all_labs_urls --verbose --settings=config.settings.labs_aws
 
 # Test with different user
-python manage.py test_all_labs_urls --user another-user@example.com --settings=config.settings.labs
+python manage.py test_all_labs_urls --user another-user@example.com --settings=config.settings.labs_aws
 ```
 
 ### Test Individual Projects
@@ -52,13 +52,13 @@ Test a specific project:
 
 ```bash
 # Test solicitations
-python manage.py test_solicitations_urls --settings=config.settings.labs
+python manage.py test_solicitations_urls --settings=config.settings.labs_aws
 
 # Test tasks
-python manage.py test_tasks_urls --settings=config.settings.labs
+python manage.py test_tasks_urls --settings=config.settings.labs_aws
 
 # Test audit
-python manage.py test_audit_urls --settings=config.settings.labs
+python manage.py test_audit_urls --settings=config.settings.labs_aws
 ```
 
 Options (same for all individual commands):
@@ -71,10 +71,10 @@ Examples:
 
 ```bash
 # Test specific URL in solicitations
-python manage.py test_solicitations_urls --url /solicitations/dashboard/ --settings=config.settings.labs
+python manage.py test_solicitations_urls --url /solicitations/dashboard/ --settings=config.settings.labs_aws
 
 # Test with verbose output
-python manage.py test_solicitations_urls --verbose --settings=config.settings.labs
+python manage.py test_solicitations_urls --verbose --settings=config.settings.labs_aws
 ```
 
 ## Adding Tests for New Labs Projects
@@ -187,7 +187,7 @@ These commands can be integrated into CI/CD pipelines:
 
 ```bash
 # In your CI script
-python manage.py test_all_labs_urls --settings=config.settings.labs --user ci-test-user@example.com
+python manage.py test_all_labs_urls --settings=config.settings.labs_aws --user ci-test-user@example.com
 
 # Check exit code
 if [ $? -ne 0 ]; then

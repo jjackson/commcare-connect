@@ -39,7 +39,7 @@ RUN apt-get update \
 RUN addgroup --system django \
     && adduser --system --ingroup django django
 
-ENV DJANGO_SETTINGS_MODULE=config.settings.labs
+ENV DJANGO_SETTINGS_MODULE=config.settings.labs_aws
 
 COPY --from=build-node /app/commcare_connect/static/bundles /app/commcare_connect/static/bundles
 COPY --from=build-python /wheels /wheels
