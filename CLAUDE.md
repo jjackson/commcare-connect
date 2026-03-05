@@ -42,7 +42,7 @@ pre-commit run --all-files          # Run linters/formatters
 ## Critical Warnings
 
 - **DO NOT** query Django ORM models (`Opportunity`, `User`, `Organization`) expecting production data. Use `LabsRecordAPIClient`.
-- **DO NOT** use `config.settings.labs` for local development. Use `config.settings.local` (the default). Labs settings are for the AWS deployment at `labs.connect.dimagi.com`.
+- **DO NOT** use `config.settings.labs_aws` for local development. Use `config.settings.local` (the default). The `labs_aws` settings are only for the AWS deployment at `labs.connect.dimagi.com`.
 - **DO NOT** call `.save()` on `LabsUser` or `LocalLabsRecord` — they raise `NotImplementedError`. Use `LabsRecordAPIClient` for persistence.
 - **DO NOT** modify models in `opportunity/`, `organization/`, `program/`, or `users/` for labs features. That is production ORM code.
 - New app URL prefixes must be added to `WHITELISTED_PREFIXES` in `commcare_connect/labs/middleware.py` or they will redirect to production.

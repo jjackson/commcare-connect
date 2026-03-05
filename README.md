@@ -31,7 +31,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-**Important:** Use `config.settings.local` (the default) for local development, NOT `config.settings.labs`. The labs settings are for the AWS deployment only.
+**Important:** Use `config.settings.local` (the default) for local development, NOT `config.settings.labs_aws`. The `labs_aws` settings are only for the AWS deployment at `labs.connect.dimagi.com`.
 
 ## Labs Apps
 
