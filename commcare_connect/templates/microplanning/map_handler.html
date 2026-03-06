@@ -2,7 +2,7 @@
     document.addEventListener("alpine:init", () => {
         Alpine.data("mapController", () => ({
             map: null,
-            selectedAreas: new Set(),
+            selectedFeature: null,
 
             init() {
                 this.$nextTick(() => {
@@ -99,7 +99,7 @@
                     'source-layer': 'workareas',
                     minzoom: 8,
                     paint: {
-                        'line-color': '#ffff00',
+                        'line-color': '#00ffff',
                         'line-width': 3,
                         'line-opacity': [
                             'case',
@@ -159,19 +159,42 @@
                     .catch(err => console.error(err));
 
 
-                // Toggles selection state on clicked workareas.
+                // When the user clicks on the map, Mapbox returns the geographic object
+                // under the cursor as a "feature". A feature represents a single polygon
+                // (in our case a workarea) along with its attributes in `properties`.
+                // `feature` → the raw Mapbox object returned from the click event.
+                // `selectedFeature` → our Alpine state that stores the currently selected workarea.
+                // We store its properties and ID so we can toggle the highlight and access its data.
                 this.map.on('click', 'workareas-fill', (e) => {
                     const feature = e.features?.[0];
                     if (!feature || feature.id == null) return;
                     const id = feature.id;
-                    if (this.selectedAreas.has(id)) {
-                        this.selectedAreas.delete(id);
-                    } else {
-                        this.selectedAreas.add(id);
+                    if (this.selectedFeature) {
+                        this.map.setFeatureState(
+                            {
+                                source: 'workareas',
+                                sourceLayer: 'workareas',
+                                id: this.selectedFeature._id
+                            },
+                            { selected: false }
+                        );
                     }
+                    if (this.selectedFeature && this.selectedFeature._id === id) {
+                        this.selectedFeature = null;
+                        return;
+                    }
+                    this.selectedFeature = {
+                        ...e.features[0].properties,
+                        _id: id
+                    };
+
                     this.map.setFeatureState(
-                        { source: 'workareas', sourceLayer: 'workareas', id },
-                        { selected: this.selectedAreas.has(id) }
+                        {
+                            source: 'workareas',
+                            sourceLayer: 'workareas',
+                            id
+                        },
+                        { selected: true }
                     );
                 });
 
