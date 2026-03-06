@@ -2,7 +2,7 @@ from collections import defaultdict, deque
 from uuid import uuid4
 
 from pyproj import Transformer
-from shapely import shared_paths, wkb
+from shapely import shared_paths, unary_union, wkb
 from shapely.ops import transform
 from shapely.strtree import STRtree
 
@@ -97,8 +97,15 @@ class WorkAreaGrouper:
 
         for key, work_area_ids in work_area_groups.items():
             ward, group_id = key
+            combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
+            group_boundary = combined_work_area_boundary.convex_hull.wkt
+            group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
             work_area_group = WorkAreaGroup.objects.create(
-                opportunity_id=self.opportunity_id, ward=ward, name=group_id
+                opportunity_id=self.opportunity_id,
+                ward=ward,
+                name=group_id,
+                boundary=group_boundary,
+                building_count=group_building_count,
             )
             WorkArea.objects.filter(
                 id__in=work_area_ids,
@@ -113,7 +120,7 @@ class WorkAreaGrouper:
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
-            transformed_geoms[wa_id] = transform(transformer.transform, wa["geometry"])
+            transformed_geoms[wa_id] = transform(transformer.transform, wa["boundary"])
 
         wa_ids_list = list(transformed_geoms.keys())
         geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
@@ -189,7 +196,7 @@ class WorkAreaGrouper:
                 "id": wa.id,
                 "ward": wa.ward,
                 "centroid": wkb.loads(bytes(wa.centroid.wkb)),
-                "geometry": wkb.loads(bytes(wa.boundary.wkb)),
+                "boundary": wkb.loads(bytes(wa.boundary.wkb)),
                 "building_count": wa.building_count,
             }
         return work_areas
