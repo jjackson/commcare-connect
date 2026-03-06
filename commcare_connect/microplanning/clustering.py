@@ -179,7 +179,12 @@ class WorkAreaGrouper:
 
     def _prepare_data(self):
         work_areas = {}
-        for wa in WorkArea.objects.filter(opportunity_id=self.opportunity_id, work_area_group__isnull=True):
+        work_area_qs = WorkArea.objects.filter(
+            opportunity_id=self.opportunity_id,
+            work_area_group__isnull=True,
+            building_count__gt=0,
+        )
+        for wa in work_area_qs:
             work_areas[wa.id] = {
                 "id": wa.id,
                 "ward": wa.ward,
