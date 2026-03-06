@@ -59,7 +59,7 @@ def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters
 
 def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     if not (work_area.work_area_group and work_area.work_area_group.assigned_user):
-        raise ValueError("Work Area must have an assigned user through its Work Area Group")
+        raise ValueError("Work Area must have an assigned Opportunity Access through its Work Area Group")
 
     opp_access = work_area.work_area_group.assigned_user
     api_key = opp_access.opportunity.api_key

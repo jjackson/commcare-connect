@@ -73,6 +73,6 @@ class TestCreateOrUpdateCaseByWorkArea:
         work_area_group = WorkAreaGroupFactory(assigned_user=None)
         work_area = WorkAreaFactory(work_area_group=work_area_group)
 
-        expected_error_message = "Work Area must have an assigned user through its Work Area Group"
+        expected_error_message = "Work Area must have an assigned Opportunity Access through its Work Area Group"
         with pytest.raises(ValueError, match=expected_error_message):
             create_or_update_case_by_work_area(work_area)
