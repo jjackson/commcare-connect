@@ -5,6 +5,7 @@ import pytest
 
 from commcare_connect.commcarehq.api import CommCareCase, create_or_update_case_by_work_area
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
+from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import HQApiKeyFactory, OpportunityAccessFactory
 
@@ -15,7 +16,7 @@ def make_commcare_case(**kwargs) -> CommCareCase:
     defaults = dict(
         domain=DOMAIN,
         case_id=str(uuid.uuid4()),
-        case_type="work-area",
+        case_type=WORK_AREA_CASE_TYPE,
         case_name="area-1",
         external_id=None,
         owner_id=str(uuid.uuid4()),
@@ -53,9 +54,12 @@ class TestCreateOrUpdateCaseByWorkArea:
         user_case = make_commcare_case(case_id=owner_id, owner_id=owner_id)
         work_area_case = make_commcare_case(case_id=str(existing_case_id or uuid.uuid4()))
 
-        with patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case), patch(
-            "commcare_connect.commcarehq.api.create_or_update_case", return_value=work_area_case
-        ) as mock_create_or_update:
+        with (
+            patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case),
+            patch(
+                "commcare_connect.commcarehq.api.create_or_update_case", return_value=work_area_case
+            ) as mock_create_or_update,
+        ):
             create_or_update_case_by_work_area(work_area)
 
         mock_create_or_update.assert_called_once()
@@ -69,5 +73,6 @@ class TestCreateOrUpdateCaseByWorkArea:
         work_area_group = WorkAreaGroupFactory(assigned_user=None)
         work_area = WorkAreaFactory(work_area_group=work_area_group)
 
-        with pytest.raises(ValueError, match="assigned user"):
+        expected_error_message = "Work Area must have an assigned Opportunity Access through its Work Area Group"
+        with pytest.raises(ValueError, match=expected_error_message):
             create_or_update_case_by_work_area(work_area)

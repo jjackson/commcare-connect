@@ -12,6 +12,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="workarea",
             name="case_id",
-            field=models.UUIDField(blank=True, null=True),
+            field=models.UUIDField(blank=True, null=True, unique=True),
+        ),
+        migrations.AddField(
+            model_name="workarea",
+            name="extra_case_properties",
+            field=models.JSONField(default=dict, null=True, blank=True),
         ),
     ]

@@ -1,8 +1,9 @@
 import dataclasses
-from typing import TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlencode
 
 import httpx
+from django.db import transaction
 
 from commcare_connect.microplanning.models import WorkArea
 from commcare_connect.microplanning.serializers import WorkAreaCaseSerializer
@@ -31,7 +32,7 @@ class CommCareCase:
     closed: bool
     date_closed: str | None
     properties: dict[str, str]
-    indices: dict[str, any]
+    indices: dict[str, Any]
 
 
 def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters) -> list[CommCareCase]:
@@ -44,12 +45,11 @@ def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters
         headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
     ) as client:
         while url is not None:
-            response = client.get(url)
-
             try:
+                response = client.get(url)
                 response.raise_for_status()
-            except httpx.HTTPStatusError as e:
-                raise CommCareHQAPIException(f"Failed to fetch case data for {domain}. HQ Error: {e}")
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                raise CommCareHQAPIException(f"Failed to fetch case data for {domain}. HQ Error: {e}") from e
 
             data = response.json()
             cases.extend(CommCareCase(**case_data) for case_data in data.get("cases", []))
@@ -59,52 +59,57 @@ def get_case_list(api_key: HQApiKey, domain: str, filters: GetCaseDataAPIFilters
 
 def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     if not (work_area.work_area_group and work_area.work_area_group.assigned_user):
-        raise ValueError("Work Area must have an assigned user through its Work Area Group")
+        raise ValueError("Work Area must have an assigned Opportunity Access through its Work Area Group")
 
     opp_access = work_area.work_area_group.assigned_user
     api_key = opp_access.opportunity.api_key
     domain = opp_access.opportunity.deliver_app.cc_domain
-    user_case = get_usercase(opp_access)
-
+    user = opp_access.user
     case_data = WorkAreaCaseSerializer(work_area).data
-    case_data["owner_id"] = user_case.case_id
+    connect_id_user_link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
+    if connect_id_user_link and connect_id_user_link.hq_case_id:
+        case_data["owner_id"] = connect_id_user_link.hq_case_id
+    else:
+        user_case = get_usercase(opp_access)
+        case_data["owner_id"] = user_case.case_id
 
-    case = create_or_update_case(api_key, domain, case_data, case_id=work_area.case_id)
-    if work_area.case_id is None:
-        work_area.case_id = case.case_id
-        work_area.save()
+    with transaction.atomic():
+        # Re-fetch with a row-level lock to prevent a race condition where two
+        # concurrent calls both see case_id as None
+        locked_work_area = WorkArea.objects.select_for_update().get(pk=work_area.pk)
+        case = create_or_update_case(api_key, domain, case_data, case_id=locked_work_area.case_id)
+        if locked_work_area.case_id is None:
+            locked_work_area.case_id = case.case_id
+            locked_work_area.save(update_fields=["case_id"])
     return case
 
 
 def create_or_update_case(
     api_key: HQApiKey,
     domain: str,
-    case_data: dict[str, any],
+    case_data: dict[str, Any],
     case_id: str | None = None,
 ) -> CommCareCase:
-    url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
-    if case_id:
-        url += f"{case_id}/"
-        method, error_msg = httpx.put, f"Failed to update case data for {domain} with {case_id}."
-    else:
-        method, error_msg = httpx.post, f"Failed to create case for {domain}."
-
-    response = method(
-        url,
-        headers={"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"},
-        json=case_data,
-    )
+    base_url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
+    headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
 
     try:
+        with httpx.Client(base_url=base_url, headers=headers) as client:
+            if case_id:
+                error_msg = f"Failed to update case data for {domain} with {case_id}."
+                response = client.put(f"{case_id}/", json=case_data)
+            else:
+                error_msg = f"Failed to create case for {domain}."
+                response = client.post("", json=case_data)
         response.raise_for_status()
-    except httpx.HTTPStatusError as e:
-        raise CommCareHQAPIException(f"{error_msg} HQ Error: {e}")
+    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+        raise CommCareHQAPIException(f"{error_msg} HQ Error: {e}") from e
 
     data = response.json()
     return CommCareCase(**data.get("case", {}))
 
 
-def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, any]) -> CommCareCase:
+def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, Any]) -> CommCareCase:
     domain = opportunity_access.opportunity.deliver_app.cc_domain
     api_key = opportunity_access.opportunity.api_key
     hq_server = api_key.hq_server
