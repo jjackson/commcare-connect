@@ -13,6 +13,12 @@ def test_work_area_case_serializer():
         work_area_group=group,
         building_count=5,
         expected_visit_count=10,
+        extra_case_properties={
+            "max_wag": "3",
+            "wag_serial_number": "WAG123",
+            "lga": "LGA1",
+            "state": "State1",
+        },
     )
 
     data = WorkAreaCaseSerializer(work_area).data
@@ -29,5 +35,10 @@ def test_work_area_case_serializer():
             "wa_status": work_area.status,
             "ward": "ward-x",
             "work_area_group": "group-a",
+            "delivered_visit_count": "0",
+            "max_wag": "3",
+            "wag_serial_number": "WAG123",
+            "lga": "LGA1",
+            "state": "State1",
         },
     }
