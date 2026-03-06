@@ -43,9 +43,8 @@ def microplanning_home(request, *args, **kwargs):
     areas_present = WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists()
     show_area_btn = not (cache.get(get_import_area_cache_key(opportunity.id)) is not None or areas_present)
     work_area_groups_present = WorkAreaGroup.objects.filter(opportunity_id=opportunity.id).exists()
-    show_workarea_groups_btn = areas_present and (
-        cache.get(get_cluster_area_cache_lock_key(opportunity.id)) is None and not work_area_groups_present
-    )
+    clustering_lock = cache.lock(get_cluster_area_cache_lock_key(opportunity.id))
+    show_workarea_groups_btn = areas_present and not (clustering_lock.locked() or work_area_groups_present)
     return render(
         request,
         template_name="microplanning/home.html",
@@ -166,7 +165,7 @@ def cluster_work_areas(request, org_slug, opp_id):
         return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     lock_key = get_cluster_area_cache_lock_key(request.opportunity.id)
-    if cache.get(lock_key):
+    if cache.lock(lock_key).locked():
         messages.error(request, _("Work Area Clustering is already in progress for this opportunity."))
         return HttpResponse(headers={"HX-Redirect": redirect_url})
 
