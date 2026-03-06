@@ -2,6 +2,7 @@ import datetime
 import logging
 from functools import partial
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Min, Q
 from django.utils.timezone import now
@@ -341,6 +342,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 logger.error(
                     f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
                 )
+            except ValidationError:
+                logger.error(f"Invalid work area case id specified: {work_area_case_id}")
 
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:
