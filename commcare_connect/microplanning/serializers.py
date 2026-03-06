@@ -30,7 +30,6 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "wa_status": obj.status,
             "ward": obj.ward,
             "work_area_group": getattr(obj.work_area_group, "name", ""),
-            "delivered_visit_count": str(0),  # Use the default value as this will get updated in HQ
             "max_wag": str(obj.extra_case_properties.get("max_wag", "")),
             "wag_serial_number": str(obj.extra_case_properties.get("wag_serial_number", "")),
             "lga": str(obj.extra_case_properties.get("lga", "")),
