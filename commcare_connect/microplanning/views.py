@@ -170,7 +170,6 @@ def cluster_work_areas(request, org_slug, opp_id):
         return HttpResponse(headers={"HX-Redirect": redirect_url})
 
     task = cluster_work_areas_task.delay(request.opportunity.id)
-    cache.set(lock_key, task.id, timeout=1200)
     redirect_url += f"?clustering_task_id={task.id}"
 
     status_url = reverse("microplanning:clustering_status", args=(org_slug, opp_id))
