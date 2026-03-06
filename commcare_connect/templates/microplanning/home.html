@@ -82,7 +82,7 @@
                 <!-- Sidebar content goes here -->
             </aside>
 
-        <aside id="right-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
+        <aside id="lower-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
             {{ status_meta|json_script:"status-meta-data" }}
             <h2 class="text-lg font-semibold mb-2">{% translate "Select Work Area" %}</h2>
             <template x-if="!selectedFeature">
@@ -99,7 +99,7 @@
                         <div class="grid grid-cols-2 items-center gap-2">
                             <dt class="text-sm text-gray-500">{% translate "Assignee" %}</dt>
                             <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"
-                                x-text="selectedFeature.assignee ?? '—'"></dd>
+                                x-text="selectedFeature.assignee_name ?? '—'"></dd>
 
                             <dt class="text-sm text-gray-500">{% translate "Work Area Group" %}</dt>
                             <dd class="text-sm font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 truncate"

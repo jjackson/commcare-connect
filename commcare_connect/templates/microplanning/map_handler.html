@@ -159,7 +159,12 @@
                     .catch(err => console.error(err));
 
 
-                // Toggles selection state on clicked workareas.
+                // When the user clicks on the map, Mapbox returns the geographic object
+                // under the cursor as a "feature". A feature represents a single polygon
+                // (in our case a workarea) along with its attributes in `properties`.
+                // `feature` → the raw Mapbox object returned from the click event.
+                // `selectedFeature` → our Alpine state that stores the currently selected workarea.
+                // We store its properties and ID so we can toggle the highlight and access its data.
                 this.map.on('click', 'workareas-fill', (e) => {
                     const feature = e.features?.[0];
                     if (!feature || feature.id == null) return;

@@ -173,7 +173,7 @@ def import_status(request, org_slug, opp_id):
 
 class WorkAreaVectorLayer(VectorLayer):
     id = "workareas"
-    tile_fields = ("id", "status", "building_count", "expected_visit_count", "group_id", "group_name", "assignee")
+    tile_fields = ("id", "status", "building_count", "expected_visit_count", "group_id", "group_name", "assignee_name")
     geom_field = "boundary"
     min_zoom = WORKAREA_MIN_ZOOM
 
@@ -185,7 +185,7 @@ class WorkAreaVectorLayer(VectorLayer):
         return WorkArea.objects.filter(opportunity_id=self.opp_id).annotate(
             group_id=F("work_area_group__id"),
             group_name=F("work_area_group__name"),
-            assignee=F("work_area_group__assigned_user__user__name"),
+            assignee_name=F("work_area_group__assigned_user__user__name"),
         )
 
 
