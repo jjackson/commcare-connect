@@ -225,4 +225,5 @@ def clustering_status(request, org_slug, opp_id):
         )
         return HttpResponse(mark_safe(html), status=HTTPStatus.OK)
 
-    return redirect("microplanning:microplanning_home", org_slug, opp_id)
+    redirect_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
