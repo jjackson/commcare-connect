@@ -98,6 +98,7 @@ class AuditCriteria:
                 {
                     "image_path": rf.get("image_path") or rf.get("imagePath", ""),
                     "field_path": rf.get("field_path") or rf.get("fieldPath", ""),
+                    "hq_url_path": rf.get("hq_url_path") or rf.get("hqUrlPath", ""),
                     "label": rf.get("label", ""),
                     "filter_by_image": rf.get("filter_by_image") or rf.get("filterByImage", False),
                     "filter_by_field": rf.get("filter_by_field") or rf.get("filterByField", False),
@@ -736,6 +737,63 @@ class AuditDataAccess:
         for vid in visit_ids:
             if str(vid) not in result:
                 result[str(vid)] = []
+
+        # Build visit lookup once — shared by enrichment and fallback sections below
+        visit_dict_by_id = {str(v.get("id", "")): v for v in visit_dicts}
+
+        # Fetch cc_domain for building CommCareHQ attachment URLs (cached, ~1 API call per hour)
+        cc_domain = None
+        try:
+            from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
+            meta = fetch_opportunity_metadata(self.access_token, opp_id)
+            cc_domain = meta.get("cc_domain")
+        except Exception as e:
+            logger.debug(f"[ImageExtract] Could not fetch cc_domain for hq_url construction: {e}")
+
+        # Enrich Connect blob images with xform_id and build hq_url
+        hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
+        for visit_id_str, images in result.items():
+            visit_data = visit_dict_by_id.get(visit_id_str, {})
+            form_json = visit_data.get("form_json", {})
+            xform_id = form_json.get("id") or ""
+            for img in images:
+                img["xform_id"] = xform_id
+                if cc_domain and xform_id and img.get("name") and not img.get("hq_url"):
+                    img["hq_url"] = f"{hq_base}/a/{cc_domain}/api/form/attachment/{xform_id}/{img['name']}"
+
+        # Fallback: for visits with no Connect blobs, extract CommCareHQ URL images
+        # from form_json using hq_url_path rules in related_fields.
+        if related_fields:
+            import hashlib
+            hq_url_rules = [r for r in related_fields if r.get("hq_url_path")]
+            if hq_url_rules:
+                for visit_id_str, images in result.items():
+                    if images:
+                        continue  # Already has Connect blob images
+                    visit_data = visit_dict_by_id.get(visit_id_str, {})
+                    form_json = visit_data.get("form_json", {})
+                    form_data = form_json.get("form", form_json)
+                    xform_id = form_json.get("id") or ""
+                    username = visit_data.get("username") or ""
+                    # Use form.meta.timeEnd for actual submission time; fall back to visit_date (date only)
+                    visit_date = form_data.get("meta", {}).get("timeEnd") or visit_data.get("visit_date") or ""
+                    entity_name = visit_data.get("entity_name") or "No Entity"
+                    for rule in hq_url_rules:
+                        hq_url_path = rule.get("hq_url_path", "")
+                        image_path = rule.get("image_path", "")
+                        hq_url = self._extract_field_value(form_data, hq_url_path)
+                        if hq_url and isinstance(hq_url, str) and hq_url.startswith("http"):
+                            blob_id = "hq_" + hashlib.sha256(hq_url.encode()).hexdigest()[:16]
+                            images.append({
+                                "blob_id": blob_id,
+                                "hq_url": hq_url,
+                                "xform_id": xform_id,
+                                "name": hq_url_path.split("/")[-1],
+                                "question_id": image_path,
+                                "username": username,
+                                "visit_date": visit_date,
+                                "entity_name": entity_name,
+                            })
 
         # Add related field values if rules provided
         if related_fields:
