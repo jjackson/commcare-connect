@@ -794,6 +794,20 @@
                                 }">
                                 <td class="py-3">
                                     <span class="text-sm font-medium text-gray-900">Run #{{ run.id }}</span>
+                                    {% if workflow.template_type == "bulk_image_audit" %}
+                                    {% with img_type=run.state.config.image_type %}
+                                    {% if img_type %}
+                                    <div class="mt-0.5">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                                            {% if img_type == "ors_photo" %}<i class="fa-solid fa-droplet mr-1"></i>ORS
+                                            {% elif img_type == "muac_photo" %}<i class="fa-solid fa-ruler mr-1"></i>MUAC
+                                            {% elif img_type == "scale_photo" %}<i class="fa-solid fa-weight-scale mr-1"></i>Scale
+                                            {% else %}{{ img_type }}{% endif %}
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
+                                    {% endif %}
                                 </td>
                                 <td class="py-3">
                                     <span class="text-sm text-gray-500">

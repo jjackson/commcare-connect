@@ -701,6 +701,12 @@ class WorkflowDataAccess(BaseDataAccess):
         merged_state = {**current_state, **new_state}
         updated_data = {**run.data, "state": merged_state}
 
+        # Promote certain fields from state to top-level data so WorkflowRunRecord
+        # properties (which check top-level first) reflect the latest values.
+        for key in ("status", "period_start", "period_end"):
+            if key in new_state:
+                updated_data[key] = new_state[key]
+
         result = self.labs_api.update_record(
             record_id=run_id,
             experiment=self.EXPERIMENT,
