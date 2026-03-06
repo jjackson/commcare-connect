@@ -1,8 +1,8 @@
 import datetime
 import logging
 from functools import partial
+from uuid import UUID
 
-from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Min, Q
 from django.utils.timezone import now
@@ -44,6 +44,14 @@ logger = logging.getLogger(__name__)
 LEARN_MODULE_JSONPATH = parse("$..module")
 ASSESSMENT_JSONPATH = parse("$..assessment")
 DELIVER_UNIT_JSONPATH = parse("$..deliver")
+
+
+def is_a_uuid(value):
+    try:
+        UUID(str(value))
+        return True
+    except ValueError:
+        return False
 
 
 def process_xform(xform: XForm, hq_server: HQServer):
@@ -336,13 +344,14 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 user_visit.status = VisitValidationStatus.duplicate
 
         if work_area_case_id := deliver_unit_block.get("work_area_id"):
-            try:
-                user_visit.work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
-            except WorkArea.DoesNotExist:
-                logger.error(
-                    f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
-                )
-            except ValidationError:
+            if is_a_uuid(work_area_case_id):
+                try:
+                    user_visit.work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
+                except WorkArea.DoesNotExist:
+                    logger.error(
+                        f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
+                    )
+            else:
                 logger.error(f"Invalid work area case id specified: {work_area_case_id}")
 
         flags = clean_form_submission(access, user_visit, xform)
