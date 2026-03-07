@@ -382,6 +382,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [searchText, setSearchText] = React.useState('');
     const [sortBy, setSortBy] = React.useState('name');
     const [sortDir, setSortDir] = React.useState('asc');
+    const [selectedVisitIdx, setSelectedVisitIdx] = React.useState(0);
 
     // --- Computed data ---
     const visitRows = pipelines && pipelines.visits ? (pipelines.visits.rows || []) : [];
@@ -413,21 +414,184 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setChildListFilter('all');
     };
 
-    // --- Timeline Stub ---
-    const TimelineStub = () => (
-        <div className="space-y-4">
-            <button
-                onClick={handleBackToDashboard}
-                className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-            >
-                &larr; Back to Dashboard
-            </button>
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                <p className="text-gray-500 text-lg">Child Timeline</p>
-                <p className="text-gray-400 text-sm mt-2">Coming soon</p>
+    // --- Child Timeline ---
+    const ChildTimeline = () => {
+        const child = children.find(c => c.beneficiary_case_id === selectedChildId);
+        if (!child) return <div className="p-8 text-center text-gray-500">Child not found</div>;
+
+        const sortedVisits = [...child.visits].reverse();
+
+        const handleBackToList = () => {
+            setCurrentView('childList');
+            setSelectedChildId(null);
+            setSelectedVisitIdx(0);
+        };
+
+        // Status badge
+        const getStatusBadge = () => {
+            if (child.kmc_status === 'discharged') {
+                return { label: 'Discharged', bg: 'bg-blue-100', text: 'text-blue-800' };
+            }
+            if (child.kmc_status === 'lost_to_followup') {
+                return { label: 'Lost to Follow-up', bg: 'bg-red-100', text: 'text-red-800' };
+            }
+            if (child.isOverdue) {
+                return { label: 'Overdue', bg: 'bg-yellow-100', text: 'text-yellow-800' };
+            }
+            return { label: 'Active', bg: 'bg-green-100', text: 'text-green-800' };
+        };
+        const status = getStatusBadge();
+
+        // Computed values for header
+        const birthWeightNum = child.birth_weight != null && !isNaN(child.birth_weight) ? child.birth_weight : null;
+        const currentWeightNum = child.currentWeight != null && !isNaN(child.currentWeight) ? child.currentWeight : null;
+        const weightGainPct = (child.weightGain != null && birthWeightNum != null && birthWeightNum > 0)
+            ? ((child.weightGain / birthWeightNum) * 100).toFixed(0)
+            : null;
+        const weeksInProgram = child.reg_date ? Math.round(daysSince(child.reg_date) / 7) : null;
+        const avgGainPerWeek = child.avgWeightGainPerWeek != null ? Math.round(child.avgWeightGainPerWeek) : null;
+
+        return (
+            <div className="space-y-4">
+                {/* Header Card */}
+                <div className="bg-white rounded-lg shadow-sm p-5">
+                    {/* Top row: back button, name, status */}
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleBackToList}
+                                className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                                &larr; Back to list
+                            </button>
+                            <h2 className="text-lg font-semibold text-gray-900">
+                                {child.child_name || 'Unknown Child'}
+                            </h2>
+                        </div>
+                        <span className={"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium " + status.bg + " " + status.text}>
+                            {status.label}
+                        </span>
+                    </div>
+
+                    {/* 3-column info grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {/* Column 1: Child Info */}
+                        <div className="space-y-2">
+                            <div>
+                                <span className="text-xs text-gray-500">DOB</span>
+                                <div className="text-sm text-gray-900">{child.child_dob || '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Gender</span>
+                                <div className="text-sm text-gray-900">{child.child_gender || '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Visits</span>
+                                <div className="text-sm text-gray-900">{child.visitCount}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">In program</span>
+                                <div className="text-sm text-gray-900">{weeksInProgram != null ? weeksInProgram + ' wk' : '-'}</div>
+                            </div>
+                        </div>
+
+                        {/* Column 2: Weight */}
+                        <div className="space-y-2">
+                            <div>
+                                <span className="text-xs text-gray-500">Birth weight</span>
+                                <div className="text-sm text-gray-900">{birthWeightNum != null ? birthWeightNum.toLocaleString() + 'g' : '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Current weight</span>
+                                <div className="text-sm text-gray-900">{currentWeightNum != null ? currentWeightNum.toLocaleString() + 'g' : '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Weight gain</span>
+                                <div className="text-sm text-gray-900">
+                                    {child.weightGain != null
+                                        ? '+' + Math.round(child.weightGain).toLocaleString() + 'g' + (weightGainPct != null ? ' (+' + weightGainPct + '%)' : '')
+                                        : '-'}
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Gain/week</span>
+                                <div className="text-sm text-gray-900">{avgGainPerWeek != null ? avgGainPerWeek + 'g' : '-'}</div>
+                            </div>
+                        </div>
+
+                        {/* Column 3: Contact */}
+                        <div className="space-y-2">
+                            <div>
+                                <span className="text-xs text-gray-500">Mother</span>
+                                <div className="text-sm text-gray-900">{child.mother_name || '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Phone</span>
+                                <div className="text-sm text-gray-900">{child.mother_phone || '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Village</span>
+                                <div className="text-sm text-gray-900">{child.village || '-'}</div>
+                            </div>
+                            <div>
+                                <span className="text-xs text-gray-500">Subcounty</span>
+                                <div className="text-sm text-gray-900">{child.subcounty || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3-column body layout */}
+                <div style={{display: 'grid', gridTemplateColumns: '220px 1fr 300px', gap: '16px'}}>
+                    {/* Left: Visit History Sidebar */}
+                    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                        <div className="px-3 py-2 bg-gray-50 border-b text-xs font-medium text-gray-500 uppercase">
+                            Visits ({child.visits.length})
+                        </div>
+                        <div style={{maxHeight: '500px', overflowY: 'auto'}}>
+                            {sortedVisits.map((visit, idx) => (
+                                <div
+                                    key={idx}
+                                    onClick={() => setSelectedVisitIdx(idx)}
+                                    className={
+                                        "px-3 py-2 cursor-pointer border-b border-gray-50 " +
+                                        (selectedVisitIdx === idx ? "bg-blue-50 border-l-2 border-l-blue-500" : "hover:bg-gray-50")
+                                    }
+                                >
+                                    <div className="text-sm font-medium text-gray-900">
+                                        {visit.visit_number ? 'Visit ' + visit.visit_number : visit.form_name || 'Visit'}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                        {visit.visit_date || 'No date'}
+                                    </div>
+                                    {visit.weight != null && visit.weight !== '' && (
+                                        <div className="text-xs text-gray-600 mt-0.5">
+                                            {parseFloat(visit.weight).toLocaleString()}g
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Center: Chart + Map placeholder */}
+                    <div className="space-y-4">
+                        <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
+                            <p>Weight Chart (coming in Task 6)</p>
+                        </div>
+                        <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
+                            <p>Visit Map (coming in Task 7)</p>
+                        </div>
+                    </div>
+
+                    {/* Right: Detail Panel placeholder */}
+                    <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
+                        <p>Clinical Details (coming in Task 8)</p>
+                    </div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // --- Child List ---
     const ChildList = () => {
@@ -597,7 +761,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // --- View Router ---
     if (currentView === 'timeline' && selectedChildId) {
-        return <TimelineStub />;
+        return <ChildTimeline />;
     }
     if (currentView === 'childList') {
         return <ChildList />;
