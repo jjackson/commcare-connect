@@ -384,10 +384,184 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [sortDir, setSortDir] = React.useState('asc');
     const [selectedVisitIdx, setSelectedVisitIdx] = React.useState(0);
 
+    // --- Dashboard chart refs ---
+    const enrollmentChartRef = React.useRef(null);
+    const enrollmentChartInstance = React.useRef(null);
+    const visitsChartRef = React.useRef(null);
+    const visitsChartInstance = React.useRef(null);
+
     // --- Computed data ---
     const visitRows = pipelines && pipelines.visits ? (pipelines.visits.rows || []) : [];
     const children = React.useMemo(() => groupVisitsByChild(visitRows), [visitRows]);
     const kpis = React.useMemo(() => computeKPIs(children), [children]);
+
+    // --- Weekly data for dashboard charts ---
+    const weeklyData = React.useMemo(() => {
+        if (children.length === 0) return { enrollment: [], visits: [] };
+
+        // Helper: get ISO week string (YYYY-WXX)
+        const getWeekKey = (dateStr) => {
+            if (!dateStr) return null;
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return null;
+            // Get ISO week number
+            const jan1 = new Date(d.getFullYear(), 0, 1);
+            const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+            return d.getFullYear() + '-W' + String(weekNum).padStart(2, '0');
+        };
+
+        // Get the Monday date for a week key
+        const weekKeyToDate = (weekKey) => {
+            const [year, wStr] = weekKey.split('-W');
+            const jan1 = new Date(parseInt(year), 0, 1);
+            const dayOffset = (jan1.getDay() + 6) % 7; // days since last Monday
+            const firstMonday = new Date(jan1);
+            firstMonday.setDate(jan1.getDate() - dayOffset);
+            firstMonday.setDate(firstMonday.getDate() + (parseInt(wStr) - 1) * 7);
+            return firstMonday.toISOString().split('T')[0];
+        };
+
+        // Enrollment: count children by week of their first visit
+        const enrollmentByWeek = {};
+        children.forEach(c => {
+            const firstDate = c.visits[0] && c.visits[0].visit_date;
+            const week = getWeekKey(firstDate);
+            if (week) {
+                enrollmentByWeek[week] = (enrollmentByWeek[week] || 0) + 1;
+            }
+        });
+
+        // Visits: count all visits by week
+        const visitsByWeek = {};
+        children.forEach(c => {
+            c.visits.forEach(v => {
+                const week = getWeekKey(v.visit_date);
+                if (week) {
+                    visitsByWeek[week] = (visitsByWeek[week] || 0) + 1;
+                }
+            });
+        });
+
+        // Get all weeks, sorted
+        const allWeeks = [...new Set([...Object.keys(enrollmentByWeek), ...Object.keys(visitsByWeek)])].sort();
+
+        // Build cumulative enrollment
+        let cumulative = 0;
+        const enrollment = allWeeks.map(week => {
+            cumulative += (enrollmentByWeek[week] || 0);
+            return { week, date: weekKeyToDate(week), count: cumulative };
+        });
+
+        const visits = allWeeks.map(week => ({
+            week,
+            date: weekKeyToDate(week),
+            count: visitsByWeek[week] || 0,
+        }));
+
+        return { enrollment, visits };
+    }, [children]);
+
+    // --- Enrollment chart ---
+    React.useEffect(() => {
+        if (currentView !== 'dashboard') return;
+        if (!enrollmentChartRef.current || !window.Chart || weeklyData.enrollment.length === 0) return;
+
+        if (enrollmentChartInstance.current) enrollmentChartInstance.current.destroy();
+
+        const ctx = enrollmentChartRef.current.getContext('2d');
+        enrollmentChartInstance.current = new window.Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: weeklyData.enrollment.map(d => d.date),
+                datasets: [{
+                    label: 'Children Enrolled',
+                    data: weeklyData.enrollment.map(d => d.count),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'week', tooltipFormat: 'MMM d, yyyy' },
+                        title: { display: false },
+                        ticks: { font: { size: 10 } },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: false },
+                        ticks: { font: { size: 10 } },
+                    },
+                },
+            },
+        });
+
+        return () => {
+            if (enrollmentChartInstance.current) {
+                enrollmentChartInstance.current.destroy();
+                enrollmentChartInstance.current = null;
+            }
+        };
+    }, [currentView, weeklyData]);
+
+    // --- Visits per week chart ---
+    React.useEffect(() => {
+        if (currentView !== 'dashboard') return;
+        if (!visitsChartRef.current || !window.Chart || weeklyData.visits.length === 0) return;
+
+        if (visitsChartInstance.current) visitsChartInstance.current.destroy();
+
+        const ctx = visitsChartRef.current.getContext('2d');
+        visitsChartInstance.current = new window.Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: weeklyData.visits.map(d => d.date),
+                datasets: [{
+                    label: 'Visits',
+                    data: weeklyData.visits.map(d => d.count),
+                    backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                    borderColor: '#10b981',
+                    borderWidth: 1,
+                }],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'week', tooltipFormat: 'MMM d, yyyy' },
+                        title: { display: false },
+                        ticks: { font: { size: 10 } },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: false },
+                        ticks: { font: { size: 10 }, stepSize: 1 },
+                    },
+                },
+            },
+        });
+
+        return () => {
+            if (visitsChartInstance.current) {
+                visitsChartInstance.current.destroy();
+                visitsChartInstance.current = null;
+            }
+        };
+    }, [currentView, weeklyData]);
 
     // --- Loading state ---
     if (!pipelines || !pipelines.visits || !pipelines.visits.rows) {
@@ -1152,6 +1326,22 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 {kpis.totalVisits} total visits across {kpis.totalChildren} children
                 ({kpis.avgVisitsPerChild.toFixed(1)} visits/child avg)
             </p>
+            {weeklyData.enrollment.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                    <div className="bg-white rounded-lg shadow-sm p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Enrollment Over Time</h3>
+                        <div style={{height: '200px'}}>
+                            <canvas ref={enrollmentChartRef}></canvas>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg shadow-sm p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Visits Per Week</h3>
+                        <div style={{height: '200px'}}>
+                            <canvas ref={visitsChartRef}></canvas>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }"""
