@@ -6,6 +6,9 @@ python_files = [
     "tests.py",
     "test_*.py",
 ]
+markers = [
+    "e2e: End-to-end browser tests (require real OAuth token and runserver)",
+]
 
 # ==== Coverage ====
 [tool.coverage.run]

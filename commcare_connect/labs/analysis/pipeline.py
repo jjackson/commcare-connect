@@ -124,6 +124,7 @@ class AnalysisPipeline:
         skip_form_json: bool = False,
         filter_visit_ids: set[int] | None = None,
         force_refresh: bool = False,
+        include_images: bool = False,
     ) -> list[dict]:
         """
         Fetch raw visit data. Backend handles caching internally.
@@ -162,6 +163,7 @@ class AnalysisPipeline:
             force_refresh=force_refresh,
             skip_form_json=skip_form_json,
             filter_visit_ids=filter_visit_ids,
+            include_images=include_images,
         )
 
     def has_valid_raw_cache(self, opportunity_id: int | None = None) -> bool:
