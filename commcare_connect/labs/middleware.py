@@ -135,7 +135,7 @@ class LabsURLWhitelistMiddleware:
             return HttpResponseRedirect(prod_url)
 
         # Whitelisted path - require authentication (except login/oauth/logout and admin)
-        public_paths = ["/labs/login/", "/labs/initiate/", "/labs/callback/", "/labs/logout/"]
+        public_paths = ["/labs/login/", "/labs/initiate/", "/labs/callback/", "/labs/logout/", "/labs/test-auth/"]
 
         # Admin URLs don't require OAuth authentication (they use Django's standard auth)
         if not path.startswith("/admin/") and path not in public_paths:

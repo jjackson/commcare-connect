@@ -74,7 +74,7 @@ class BaseSSEStreamView(LoginRequiredMixin, View):
     heartbeat_enabled = True
     heartbeat_interval = 20  # seconds between heartbeat comments
 
-    def get(self, request):
+    def get(self, request, **kwargs):
         """
         Handle GET request and return streaming response.
 

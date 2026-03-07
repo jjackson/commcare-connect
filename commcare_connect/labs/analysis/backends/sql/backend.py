@@ -103,6 +103,7 @@ class SQLBackend:
         skip_form_json: bool = False,
         filter_visit_ids: set[int] | None = None,
         tolerance_pct: int = 100,
+        include_images: bool = False,
     ) -> list[dict]:
         """
         Fetch raw visit data from SQL cache or API.
@@ -120,7 +121,7 @@ class SQLBackend:
 
         # Cache miss or force refresh - fetch from API
         logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, fetching from API")
-        csv_bytes = self._fetch_from_api(opportunity_id, access_token)
+        csv_bytes = self._fetch_from_api(opportunity_id, access_token, include_images=include_images)
 
         # Parse full data (always with form_json for storage)
         visit_dicts = parse_csv_bytes(csv_bytes, opportunity_id, skip_form_json=False)
@@ -131,8 +132,11 @@ class SQLBackend:
         logger.info(f"[SQL] Stored {visit_count} visits to RawVisitCache")
 
         # Apply filters for return value
+        # Normalize to strings for comparison — visit_id is CharField in cache
+        # but parse_csv_bytes returns int IDs, and callers may pass either type.
         if filter_visit_ids:
-            visit_dicts = [v for v in visit_dicts if v.get("id") in filter_visit_ids]
+            str_filter = {str(vid) for vid in filter_visit_ids}
+            visit_dicts = [v for v in visit_dicts if str(v.get("id")) in str_filter]
 
         if skip_form_json:
             for v in visit_dicts:
@@ -309,9 +313,11 @@ class SQLBackend:
         logger.info(f"[SQL] Loaded {len(visits)} visits from RawVisitCache")
         return visits
 
-    def _fetch_from_api(self, opportunity_id: int, access_token: str) -> bytes:
+    def _fetch_from_api(self, opportunity_id: int, access_token: str, include_images: bool = False) -> bytes:
         """Fetch raw CSV bytes from Connect API."""
         url = f"{settings.CONNECT_PRODUCTION_URL}/export/opportunity/{opportunity_id}/user_visits/"
+        if include_images:
+            url += "?images=true"
         headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept-Encoding": "gzip, deflate",

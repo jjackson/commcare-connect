@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from commcare_connect.labs import views
+from commcare_connect.labs import views, views_test_auth
 from commcare_connect.labs.analysis import views as analysis_views
 from commcare_connect.labs.integrations.commcare import oauth_views as commcare_oauth_views
 from commcare_connect.labs.integrations.connect import oauth_views as connect_oauth_views
@@ -18,6 +18,8 @@ urlpatterns = [
     path("callback/", connect_oauth_views.labs_oauth_callback, name="oauth_callback"),
     path("logout/", connect_oauth_views.labs_logout, name="logout"),
     path("dashboard/", connect_oauth_views.labs_dashboard, name="dashboard"),
+    # E2E test auth (DEBUG only)
+    path("test-auth/", views_test_auth.test_auth_view, name="test_auth"),
     # Labs Overview
     path("overview/", views.LabsOverviewView.as_view(), name="overview"),
     # Scout data agent
