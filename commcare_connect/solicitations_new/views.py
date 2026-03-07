@@ -37,6 +37,12 @@ class ManagerRequiredMixin(LabsLoginRequiredMixin, UserPassesTestMixin):
 # -- Helpers ----------------------------------------------------------------
 
 
+def _has_program_context(request):
+    """Check if the request has a program_id in labs_context."""
+    labs_context = getattr(request, "labs_context", {})
+    return bool(labs_context.get("program_id"))
+
+
 def _get_data_access(request):
     """Create data access from request. Works for authed requests."""
     return SolicitationsNewDataAccess(request=request)
@@ -93,15 +99,19 @@ class ManageSolicitationsView(ManagerRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx["has_context"] = _has_program_context(self.request)
+        if not ctx["has_context"]:
+            ctx["solicitations"] = []
+            return ctx
         try:
             da = _get_data_access(self.request)
             solicitations = da.get_solicitations()
             for s in solicitations:
                 try:
                     responses = da.get_responses_for_solicitation(s.pk)
-                    s._response_count = len(responses)
+                    s.response_count = len(responses)
                 except Exception:
-                    s._response_count = 0
+                    s.response_count = 0
             ctx["solicitations"] = solicitations
         except Exception:
             logger.exception("Failed to load solicitations for manage view")
@@ -116,12 +126,18 @@ class SolicitationCreateView(ManagerRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx["has_context"] = _has_program_context(self.request)
         ctx["form"] = SolicitationForm()
         ctx["is_create"] = True
         ctx["existing_questions_json"] = "[]"
         return ctx
 
     def post(self, request, *args, **kwargs):
+        if not _has_program_context(request):
+            ctx = self.get_context_data(**kwargs)
+            ctx["error"] = "Please select a program from the context selector before creating a solicitation."
+            return self.render_to_response(ctx)
+
         form = SolicitationForm(request.POST)
         if form.is_valid():
             data = form.to_data_dict()
@@ -151,6 +167,7 @@ class SolicitationEditView(ManagerRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx["has_context"] = _has_program_context(self.request)
         pk = kwargs["pk"]
         try:
             da = _get_data_access(self.request)
@@ -256,7 +273,6 @@ class RespondView(LabsLoginRequiredMixin, TemplateView):
                 ctx["not_accepting"] = True
             ctx["solicitation"] = solicitation
             ctx["form"] = SolicitationResponseForm(questions=solicitation.questions)
-            ctx["organizations"] = getattr(self.request.user, "organizations", [])
         except Http404:
             raise
         except Exception:
@@ -282,15 +298,6 @@ class RespondView(LabsLoginRequiredMixin, TemplateView):
 
         form = SolicitationResponseForm(questions=solicitation.questions, data=request.POST)
         if form.is_valid():
-            # Determine LLO entity info
-            create_new = request.POST.get("create_new_entity") == "on"
-            if create_new:
-                llo_entity_id = ""
-                llo_entity_name = request.POST.get("new_entity_name", "").strip()
-            else:
-                llo_entity_id = request.POST.get("llo_entity_id", "")
-                llo_entity_name = request.POST.get("llo_entity_name", "")
-
             # Determine status based on which button was pressed
             if "save_draft" in request.POST:
                 status = "draft"
@@ -299,8 +306,6 @@ class RespondView(LabsLoginRequiredMixin, TemplateView):
 
             data = {
                 "solicitation_id": pk,
-                "llo_entity_id": llo_entity_id,
-                "llo_entity_name": llo_entity_name,
                 "responses": form.get_responses_dict(),
                 "status": status,
                 "submitted_by_name": request.user.get_full_name() or request.user.username,
@@ -311,7 +316,7 @@ class RespondView(LabsLoginRequiredMixin, TemplateView):
             try:
                 da.create_response(
                     solicitation_id=pk,
-                    llo_entity_id=llo_entity_id or "new",
+                    llo_entity_id="individual",
                     data=data,
                 )
                 return redirect("solicitations_new:public_detail", pk=pk)

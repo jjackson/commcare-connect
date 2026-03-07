@@ -50,7 +50,10 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from django.views.generic import CreateView, DetailView, UpdateView
 from django_tables2 import RequestConfig, SingleTableView
 from django_tables2.export import TableExport
-from django_weasyprint.views import WeasyTemplateResponse
+try:
+    from django_weasyprint.views import WeasyTemplateResponse
+except OSError:
+    WeasyTemplateResponse = None
 from geopy import distance
 from waffle import switch_is_active
 
