@@ -379,6 +379,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [currentView, setCurrentView] = React.useState('dashboard');
     const [selectedChildId, setSelectedChildId] = React.useState(null);
     const [childListFilter, setChildListFilter] = React.useState('all');
+    const [searchText, setSearchText] = React.useState('');
+    const [sortBy, setSortBy] = React.useState('name');
+    const [sortDir, setSortDir] = React.useState('asc');
 
     // --- Computed data ---
     const visitRows = pipelines && pipelines.visits ? (pipelines.visits.rows || []) : [];
@@ -426,30 +429,178 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         </div>
     );
 
-    // --- Child List Stub ---
-    const ChildListStub = () => (
-        <div className="space-y-4">
-            <button
-                onClick={handleBackToDashboard}
-                className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
-            >
-                &larr; Back to Dashboard
-            </button>
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                <p className="text-gray-500 text-lg">
-                    Child List (filter: {childListFilter})
-                </p>
-                <p className="text-gray-400 text-sm mt-2">Coming soon</p>
+    // --- Child List ---
+    const ChildList = () => {
+        const filterOptions = [
+            { value: 'all', label: 'All' },
+            { value: 'active', label: 'Active' },
+            { value: 'overdue', label: 'Overdue' },
+            { value: 'low_gain', label: 'Below Avg Gain' },
+            { value: 'threshold_met', label: 'Reached 2.5kg' },
+            { value: 'discharged', label: 'Discharged' },
+        ];
+
+        // Apply status filter
+        const statusFiltered = children.filter((child) => {
+            if (childListFilter === 'all') return true;
+            if (childListFilter === 'active') return !child.isOverdue && child.kmc_status !== 'discharged';
+            if (childListFilter === 'overdue') return child.isOverdue;
+            if (childListFilter === 'low_gain') return child.avgWeightGainPerWeek != null && child.avgWeightGainPerWeek < 100;
+            if (childListFilter === 'threshold_met') return child.reachedThreshold;
+            if (childListFilter === 'discharged') return child.kmc_status === 'discharged';
+            return true;
+        });
+
+        // Apply search filter
+        const filteredChildren = statusFiltered.filter((child) => {
+            if (!searchText) return true;
+            const q = searchText.toLowerCase();
+            const cn = (child.child_name || '').toLowerCase();
+            const mn = (child.mother_name || '').toLowerCase();
+            return cn.includes(q) || mn.includes(q);
+        });
+
+        // Sort
+        const handleSort = (col) => {
+            if (sortBy === col) {
+                setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+            } else {
+                setSortBy(col);
+                setSortDir('asc');
+            }
+        };
+
+        const sortedChildren = [...filteredChildren].sort((a, b) => {
+            let cmp = 0;
+            if (sortBy === 'name') cmp = (a.child_name || '').localeCompare(b.child_name || '');
+            else if (sortBy === 'flw') cmp = (a.flw_username || '').localeCompare(b.flw_username || '');
+            else if (sortBy === 'visits') cmp = a.visitCount - b.visitCount;
+            else if (sortBy === 'weight') cmp = (a.currentWeight || 0) - (b.currentWeight || 0);
+            else if (sortBy === 'gain') cmp = (a.weightGain || 0) - (b.weightGain || 0);
+            else if (sortBy === 'lastVisit') cmp = (daysSince(a.lastVisitDate) || 9999) - (daysSince(b.lastVisitDate) || 9999);
+            return sortDir === 'asc' ? cmp : -cmp;
+        });
+
+        const sortArrow = (col) => {
+            if (sortBy !== col) return '';
+            return sortDir === 'asc' ? ' \\u2191' : ' \\u2193';
+        };
+
+        const columns = [
+            { key: 'name', label: 'Child Name' },
+            { key: 'flw', label: 'FLW' },
+            { key: 'visits', label: 'Visits' },
+            { key: 'weight', label: 'Current Weight' },
+            { key: 'gain', label: 'Weight Gain' },
+            { key: 'lastVisit', label: 'Last Visit' },
+        ];
+
+        return (
+            <div className="space-y-4">
+                {/* Filter bar */}
+                <div className="bg-white rounded-lg shadow-sm p-4 flex flex-wrap items-center gap-4">
+                    <button
+                        onClick={handleBackToDashboard}
+                        className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                        &larr; Back to Dashboard
+                    </button>
+                    <select
+                        value={childListFilter}
+                        onChange={(e) => setChildListFilter(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        {filterOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </select>
+                    <input
+                        type="text"
+                        placeholder="Search by child or mother name..."
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex-1 min-w-[200px]"
+                    />
+                    <span className="text-sm text-gray-500">
+                        Showing {sortedChildren.length} of {children.length} children
+                    </span>
+                </div>
+
+                {/* Table */}
+                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    {columns.map((col) => (
+                                        <th
+                                            key={col.key}
+                                            onClick={() => handleSort(col.key)}
+                                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+                                        >
+                                            {col.label}{sortArrow(col.key)}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-100">
+                                {sortedChildren.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={columns.length} className="px-4 py-8 text-center text-gray-400 text-sm">
+                                            No children match the current filters.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    sortedChildren.map((child) => {
+                                        const daysAgo = daysSince(child.lastVisitDate);
+                                        const lastVisitText = daysAgo != null ? (daysAgo === 0 ? 'Today' : daysAgo + ' days ago') : '-';
+                                        const lastVisitClass = daysAgo != null && daysAgo > 14 ? 'text-red-600 font-medium' : 'text-gray-700';
+                                        const weightText = child.currentWeight != null ? child.currentWeight + 'g' : '-';
+                                        const weightClass = child.currentWeight != null
+                                            ? (child.currentWeight >= 2500 ? 'text-green-600 font-medium' : 'text-amber-600 font-medium')
+                                            : 'text-gray-400';
+                                        const gainText = child.weightGain != null ? '+' + Math.round(child.weightGain) + 'g' : '-';
+                                        const gainPerWeek = child.avgWeightGainPerWeek != null ? Math.round(child.avgWeightGainPerWeek) + 'g/wk' : '';
+                                        return (
+                                            <tr
+                                                key={child.beneficiary_case_id}
+                                                onClick={() => { setSelectedChildId(child.beneficiary_case_id); setCurrentView('timeline'); }}
+                                                className="hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                                            >
+                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                    <div className="flex items-center gap-1.5">
+                                                        {child.isOverdue && (
+                                                            <span className="inline-block w-2 h-2 rounded-full bg-orange-400 flex-shrink-0" title="Overdue"></span>
+                                                        )}
+                                                        <span>{child.child_name || 'Unknown'}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-700">{child.flw_username || '-'}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-700">{child.visitCount}</td>
+                                                <td className={"px-4 py-3 text-sm " + weightClass}>{weightText}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-700">
+                                                    <div>{gainText}</div>
+                                                    {gainPerWeek && <div className="text-xs text-gray-400">{gainPerWeek}</div>}
+                                                </td>
+                                                <td className={"px-4 py-3 text-sm " + lastVisitClass}>{lastVisitText}</td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // --- View Router ---
     if (currentView === 'timeline' && selectedChildId) {
         return <TimelineStub />;
     }
     if (currentView === 'childList') {
-        return <ChildListStub />;
+        return <ChildList />;
     }
 
     // --- Dashboard View ---
