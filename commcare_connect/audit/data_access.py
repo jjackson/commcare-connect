@@ -335,6 +335,7 @@ class AuditDataAccess:
         return self.pipeline.fetch_raw_visits(
             opportunity_id=opp_id,
             filter_visit_ids=set(visit_ids),
+            include_images=True,
         )
 
     # =========================================================================
