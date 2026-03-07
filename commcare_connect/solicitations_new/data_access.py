@@ -60,6 +60,7 @@ class SolicitationsNewDataAccess:
             if not program_id and "program_id" in labs_context:
                 self.program_id = str(labs_context["program_id"])
 
+
         # Get OAuth token from labs session
         if not access_token and request:
             from django.utils import timezone

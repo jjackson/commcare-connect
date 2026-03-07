@@ -10,7 +10,10 @@ import gc
 import json
 import logging
 import platform
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
 from collections import Counter
 from collections.abc import Generator
 from datetime import date, datetime, timedelta, timezone as dt_timezone
@@ -98,6 +101,8 @@ def _parse_status_filter(raw: str | None) -> tuple[list[str], str | None]:
 
 def _log_rss(label: str) -> None:
     """Log current RSS (max resident set size) for memory diagnostics."""
+    if resource is None:
+        return
     rss_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     # macOS returns bytes, Linux returns kilobytes
     rss_mb = rss_kb / (1024 * 1024) if platform.system() == "Darwin" else rss_kb / 1024
