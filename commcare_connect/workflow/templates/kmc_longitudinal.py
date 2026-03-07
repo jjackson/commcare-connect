@@ -421,6 +421,125 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         const sortedVisits = [...child.visits].reverse();
 
+        // --- Chart refs and data ---
+        const chartRef = React.useRef(null);
+        const chartInstanceRef = React.useRef(null);
+
+        const chartVisits = child.visits.filter(v => v.weight != null && v.weight !== '');
+        const chartLabels = chartVisits.map(v => v.visit_date || v.time_end);
+        const chartWeights = chartVisits.map(v => parseFloat(v.weight));
+
+        React.useEffect(() => {
+            if (!chartRef.current || !window.Chart || chartVisits.length === 0) return;
+
+            if (chartInstanceRef.current) {
+                chartInstanceRef.current.destroy();
+            }
+
+            // Map selectedVisitIdx (index in sortedVisits) to index in chartVisits
+            const selectedVisit = sortedVisits[selectedVisitIdx];
+            const selectedChartIdx = selectedVisit ? chartVisits.findIndex(v => v === selectedVisit) : -1;
+
+            // Point colors: green for >= 2500g, amber for below, blue highlight for selected
+            const pointBackgroundColors = chartWeights.map((w, i) => {
+                if (i === selectedChartIdx) return '#3b82f6'; // blue-500
+                return w >= 2500 ? '#10b981' : '#f59e0b'; // emerald-500 : amber-500
+            });
+            const pointRadii = chartWeights.map((_, i) => i === selectedChartIdx ? 8 : 4);
+
+            const ctx = chartRef.current.getContext('2d');
+            chartInstanceRef.current = new window.Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: [
+                        {
+                            label: 'Weight (g)',
+                            data: chartWeights,
+                            borderColor: '#6b7280',
+                            backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointBackgroundColor: pointBackgroundColors,
+                            pointBorderColor: pointBackgroundColors,
+                            pointRadius: pointRadii,
+                            pointHoverRadius: 8,
+                        },
+                        // 2.5kg threshold line
+                        {
+                            label: '2.5kg Threshold',
+                            data: chartLabels.map(() => 2500),
+                            borderColor: '#ef4444',
+                            borderDash: [6, 4],
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                        },
+                        // Birth weight line (if available)
+                        ...(child.birth_weight != null ? [{
+                            label: 'Birth Weight',
+                            data: chartLabels.map(() => child.birth_weight),
+                            borderColor: '#94a3b8',
+                            borderDash: [3, 3],
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: false,
+                        }] : []),
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    onClick: (e, elements) => {
+                        if (elements.length > 0) {
+                            const chartIdx = elements[0].index;
+                            const clickedVisit = chartVisits[chartIdx];
+                            // Find the corresponding index in sortedVisits
+                            const sortedIdx = sortedVisits.findIndex(v => v === clickedVisit);
+                            if (sortedIdx >= 0) {
+                                setSelectedVisitIdx(sortedIdx);
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: { boxWidth: 12, font: { size: 11 } },
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => {
+                                    if (ctx.datasetIndex === 0) {
+                                        return ctx.parsed.y.toLocaleString() + 'g';
+                                    }
+                                    return ctx.dataset.label + ': ' + ctx.parsed.y.toLocaleString() + 'g';
+                                },
+                            },
+                        },
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'day', tooltipFormat: 'MMM d, yyyy' },
+                            title: { display: true, text: 'Visit Date', font: { size: 11 } },
+                        },
+                        y: {
+                            title: { display: true, text: 'Weight (grams)', font: { size: 11 } },
+                            beginAtZero: false,
+                        },
+                    },
+                },
+            });
+
+            return () => {
+                if (chartInstanceRef.current) {
+                    chartInstanceRef.current.destroy();
+                    chartInstanceRef.current = null;
+                }
+            };
+        }, [child.visits, selectedVisitIdx]);
+
         const handleBackToList = () => {
             setCurrentView('childList');
             setSelectedChildId(null);
@@ -574,10 +693,17 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     </div>
 
-                    {/* Center: Chart + Map placeholder */}
+                    {/* Center: Chart + Map */}
                     <div className="space-y-4">
-                        <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
-                            <p>Weight Chart (coming in Task 6)</p>
+                        <div className="bg-white rounded-lg shadow-sm p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Weight Progression</h3>
+                            {chartVisits.length > 0 ? (
+                                <div style={{height: '250px'}}>
+                                    <canvas ref={chartRef}></canvas>
+                                </div>
+                            ) : (
+                                <p className="text-gray-400 text-sm text-center py-8">No weight data available</p>
+                            )}
                         </div>
                         <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
                             <p>Visit Map (coming in Task 7)</p>
