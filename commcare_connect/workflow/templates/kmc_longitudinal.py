@@ -420,6 +420,76 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         if (!child) return <div className="p-8 text-center text-gray-500">Child not found</div>;
 
         const sortedVisits = [...child.visits].reverse();
+        const selectedVisit = sortedVisits[selectedVisitIdx] || {};
+
+        // --- Collapsible detail sections ---
+        const [expandedSections, setExpandedSections] = React.useState({
+            anthropometric: true,
+            kmc_practice: true,
+            feeding: true,
+            vitals: true,
+            visit_info: true,
+        });
+        const toggleSection = (key) => {
+            setExpandedSections(prev => ({...prev, [key]: !prev[key]}));
+        };
+
+        const formatValue = (val, suffix, isDanger) => {
+            if (val == null || val === '') return '\u2014';
+            const str = typeof val === 'number' ? val.toLocaleString() : String(val);
+            const display = suffix ? str + suffix : str;
+            if (isDanger && val && val !== 'none' && val !== 'no') {
+                return React.createElement('span', {className: 'text-red-600 font-medium'}, display);
+            }
+            return display;
+        };
+
+        const detailSections = [
+            {
+                key: 'anthropometric',
+                title: 'Anthropometric',
+                fields: [
+                    { label: 'Weight', value: selectedVisit.weight, suffix: 'g' },
+                    { label: 'Height', value: selectedVisit.height, suffix: 'cm' },
+                    { label: 'Birth Weight', value: child.birth_weight, suffix: 'g' },
+                ],
+            },
+            {
+                key: 'kmc_practice',
+                title: 'KMC Practice',
+                fields: [
+                    { label: 'KMC Hours', value: selectedVisit.kmc_hours },
+                    { label: 'KMC Providers', value: selectedVisit.kmc_providers },
+                    { label: 'Baby Position', value: selectedVisit.baby_position },
+                ],
+            },
+            {
+                key: 'feeding',
+                title: 'Feeding',
+                fields: [
+                    { label: 'Feeding Provided', value: selectedVisit.feeding_provided },
+                    { label: 'Successful Feeds', value: selectedVisit.successful_feeds },
+                ],
+            },
+            {
+                key: 'vitals',
+                title: 'Vital Signs',
+                fields: [
+                    { label: 'Temperature', value: selectedVisit.temperature, suffix: '\u00B0C' },
+                    { label: 'Breath Count', value: selectedVisit.breath_count },
+                    { label: 'Danger Signs', value: selectedVisit.danger_signs, isDanger: true },
+                ],
+            },
+            {
+                key: 'visit_info',
+                title: 'Visit Info',
+                fields: [
+                    { label: 'Location', value: selectedVisit.visit_location },
+                    { label: 'Timeliness', value: selectedVisit.visit_timeliness },
+                    { label: 'Status', value: selectedVisit.kmc_status },
+                ],
+            },
+        ];
 
         // --- Chart refs and data ---
         const chartRef = React.useRef(null);
@@ -807,9 +877,43 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     </div>
 
-                    {/* Right: Detail Panel placeholder */}
-                    <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
-                        <p>Clinical Details (coming in Task 8)</p>
+                    {/* Right: Clinical Detail Panel */}
+                    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                        <div className="px-4 py-3 bg-gray-50 border-b">
+                            <h3 className="text-sm font-medium text-gray-700">
+                                {selectedVisit.visit_number ? 'Visit ' + selectedVisit.visit_number : selectedVisit.form_name || 'Visit Details'}
+                            </h3>
+                            <p className="text-xs text-gray-500">{selectedVisit.visit_date || ''}</p>
+                        </div>
+                        <div style={{maxHeight: '460px', overflowY: 'auto'}}>
+                            {detailSections.map(section => (
+                                <div key={section.key} className="border-b border-gray-100 last:border-b-0">
+                                    <button
+                                        onClick={() => toggleSection(section.key)}
+                                        className="w-full px-4 py-2 flex justify-between items-center text-left hover:bg-gray-50"
+                                    >
+                                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                            {section.title}
+                                        </span>
+                                        <span className="text-gray-400 text-xs">
+                                            {expandedSections[section.key] ? '\u25B2' : '\u25BC'}
+                                        </span>
+                                    </button>
+                                    {expandedSections[section.key] && (
+                                        <div className="px-4 pb-3">
+                                            {section.fields.map(field => (
+                                                <div key={field.label} className="flex justify-between py-1">
+                                                    <span className="text-xs text-gray-500">{field.label}</span>
+                                                    <span className="text-sm text-gray-900 text-right">
+                                                        {formatValue(field.value, field.suffix, field.isDanger)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
