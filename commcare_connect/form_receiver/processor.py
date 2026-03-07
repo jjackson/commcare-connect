@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Count, Min, Q
 from django.utils.timezone import now
 from geopy.distance import distance
-from jsonpath_ng import JSONPathError
+from jsonpath_ng.exceptions import JSONPathError
 from jsonpath_ng.ext import parse
 
 from commcare_connect.commcarehq.models import HQServer
