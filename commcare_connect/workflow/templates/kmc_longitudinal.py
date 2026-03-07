@@ -540,6 +540,98 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             };
         }, [child.visits, selectedVisitIdx]);
 
+        // --- Map: GPS parser, data, refs, effects ---
+        const parseGPS = (gpsStr) => {
+            if (!gpsStr) return null;
+            const parts = String(gpsStr).trim().split(/\\s+/);
+            if (parts.length >= 2) {
+                const lat = parseFloat(parts[0]);
+                const lng = parseFloat(parts[1]);
+                if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+                    return [lat, lng];
+                }
+            }
+            return null;
+        };
+
+        const visitsWithGPS = child.visits.map((v, idx) => ({
+            visit: v,
+            originalIdx: idx,
+            coords: parseGPS(v.gps),
+        })).filter(item => item.coords !== null);
+
+        const mapRef = React.useRef(null);
+        const mapInstanceRef = React.useRef(null);
+        const markersRef = React.useRef([]);
+
+        React.useEffect(() => {
+            if (!mapRef.current || !window.L || mapInstanceRef.current) return;
+
+            mapInstanceRef.current = window.L.map(mapRef.current, {
+                scrollWheelZoom: false,
+            }).setView([0, 0], 2);
+
+            window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap',
+                maxZoom: 18,
+            }).addTo(mapInstanceRef.current);
+
+            return () => {
+                if (mapInstanceRef.current) {
+                    mapInstanceRef.current.remove();
+                    mapInstanceRef.current = null;
+                }
+            };
+        }, []);
+
+        React.useEffect(() => {
+            if (!mapInstanceRef.current || !window.L) return;
+
+            // Clear existing markers
+            markersRef.current.forEach(m => m.remove());
+            markersRef.current = [];
+
+            if (visitsWithGPS.length === 0) return;
+
+            // Map selectedVisitIdx (in sortedVisits) to original visit index
+            const selectedVisit = sortedVisits[selectedVisitIdx];
+            const selectedOriginalIdx = selectedVisit ? child.visits.indexOf(selectedVisit) : -1;
+
+            visitsWithGPS.forEach(({ visit, originalIdx, coords }) => {
+                const isSelected = originalIdx === selectedOriginalIdx;
+                const isFirst = originalIdx === 0;
+
+                const color = isSelected ? '#3b82f6' : isFirst ? '#6366f1' : '#10b981';
+                const radius = isSelected ? 10 : 6;
+
+                const marker = window.L.circleMarker(coords, {
+                    radius: radius,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9,
+                }).addTo(mapInstanceRef.current);
+
+                const label = visit.visit_number ? 'Visit ' + visit.visit_number : (visit.form_name || 'Visit');
+                marker.bindPopup(label + '<br>' + (visit.visit_date || ''));
+
+                marker.on('click', () => {
+                    const sortedIdx = sortedVisits.indexOf(visit);
+                    if (sortedIdx >= 0) {
+                        setSelectedVisitIdx(sortedIdx);
+                    }
+                });
+
+                markersRef.current.push(marker);
+            });
+
+            // Fit bounds
+            const bounds = window.L.latLngBounds(visitsWithGPS.map(v => v.coords));
+            mapInstanceRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 15 });
+
+        }, [child.visits, selectedVisitIdx]);
+
         const handleBackToList = () => {
             setCurrentView('childList');
             setSelectedChildId(null);
@@ -705,8 +797,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 <p className="text-gray-400 text-sm text-center py-8">No weight data available</p>
                             )}
                         </div>
-                        <div className="bg-white rounded-lg shadow-sm p-6 text-center text-gray-400">
-                            <p>Visit Map (coming in Task 7)</p>
+                        <div className="bg-white rounded-lg shadow-sm p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Visit Locations</h3>
+                            {visitsWithGPS.length > 0 ? (
+                                <div ref={mapRef} style={{height: '200px', borderRadius: '6px'}}></div>
+                            ) : (
+                                <p className="text-gray-400 text-sm text-center py-8">No GPS data available</p>
+                            )}
                         </div>
                     </div>
 
