@@ -575,6 +575,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         );
     }
 
+    // --- Empty data state ---
+    if (visitRows.length === 0) {
+        return (
+            <div className="text-center py-16">
+                <div className="inline-block p-4 rounded-full bg-gray-100 mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                </div>
+                <p className="text-gray-500 text-lg">No KMC visit data found</p>
+                <p className="text-gray-400 text-sm mt-1">Pipeline data may still be loading, or no visits have been recorded for this opportunity.</p>
+            </div>
+        );
+    }
+
     // --- Card click handler ---
     const handleCardClick = (filter) => {
         setChildListFilter(filter);
@@ -1260,12 +1275,57 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         );
     };
 
+    // --- Navigation Bar ---
+    const NavigationBar = () => {
+        const selectedChild = selectedChildId ? children.find(c => c.beneficiary_case_id === selectedChildId) : null;
+
+        return (
+            <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
+                <button
+                    onClick={handleBackToDashboard}
+                    className={"px-4 py-2 text-sm font-medium border-b-2 -mb-px " +
+                        (currentView === 'dashboard'
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")}
+                >
+                    Dashboard
+                </button>
+                <button
+                    onClick={() => setCurrentView('childList')}
+                    className={"px-4 py-2 text-sm font-medium border-b-2 -mb-px " +
+                        (currentView === 'childList'
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300")}
+                >
+                    All Children ({children.length})
+                </button>
+                {currentView === 'timeline' && selectedChild && (
+                    <button
+                        className="px-4 py-2 text-sm font-medium border-b-2 -mb-px border-blue-500 text-blue-600"
+                    >
+                        {selectedChild.child_name || 'Child'}
+                    </button>
+                )}
+            </div>
+        );
+    };
+
     // --- View Router ---
     if (currentView === 'timeline' && selectedChildId) {
-        return <ChildTimeline />;
+        return (
+            <div>
+                <NavigationBar />
+                <ChildTimeline />
+            </div>
+        );
     }
     if (currentView === 'childList') {
-        return <ChildList />;
+        return (
+            <div>
+                <NavigationBar />
+                <ChildList />
+            </div>
+        );
     }
 
     // --- Dashboard View ---
@@ -1309,39 +1369,42 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     ];
 
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {kpiCards.map((card) => (
-                    <div
-                        key={card.filter}
-                        onClick={() => handleCardClick(card.filter)}
-                        className={"bg-white rounded-lg shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border-l-4 " + card.borderColor}
-                    >
-                        <div className="text-3xl font-bold text-gray-900">{card.value}</div>
-                        <div className="text-sm text-gray-600 mt-1">{card.label}</div>
-                    </div>
-                ))}
-            </div>
-            <p className="text-sm text-gray-500 mt-4">
-                {kpis.totalVisits} total visits across {kpis.totalChildren} children
-                ({kpis.avgVisitsPerChild.toFixed(1)} visits/child avg)
-            </p>
-            {weeklyData.enrollment.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                    <div className="bg-white rounded-lg shadow-sm p-4">
-                        <h3 className="text-sm font-medium text-gray-700 mb-2">Enrollment Over Time</h3>
-                        <div style={{height: '200px'}}>
-                            <canvas ref={enrollmentChartRef}></canvas>
+        <div>
+            <NavigationBar />
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {kpiCards.map((card) => (
+                        <div
+                            key={card.filter}
+                            onClick={() => handleCardClick(card.filter)}
+                            className={"bg-white rounded-lg shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border-l-4 " + card.borderColor}
+                        >
+                            <div className="text-3xl font-bold text-gray-900">{card.value}</div>
+                            <div className="text-sm text-gray-600 mt-1">{card.label}</div>
                         </div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow-sm p-4">
-                        <h3 className="text-sm font-medium text-gray-700 mb-2">Visits Per Week</h3>
-                        <div style={{height: '200px'}}>
-                            <canvas ref={visitsChartRef}></canvas>
-                        </div>
-                    </div>
+                    ))}
                 </div>
-            )}
+                <p className="text-sm text-gray-500 mt-4">
+                    {kpis.totalVisits} total visits across {kpis.totalChildren} children
+                    ({kpis.avgVisitsPerChild.toFixed(1)} visits/child avg)
+                </p>
+                {weeklyData.enrollment.length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div className="bg-white rounded-lg shadow-sm p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Enrollment Over Time</h3>
+                            <div style={{height: '200px'}}>
+                                <canvas ref={enrollmentChartRef}></canvas>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg shadow-sm p-4">
+                            <h3 className="text-sm font-medium text-gray-700 mb-2">Visits Per Week</h3>
+                            <div style={{height: '200px'}}>
+                                <canvas ref={visitsChartRef}></canvas>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }"""
