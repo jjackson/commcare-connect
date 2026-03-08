@@ -63,16 +63,6 @@ PIPELINE_SCHEMAS = [
                     "filter_path": "form.danger_signs_checklist.danger_sign_positive",
                     "filter_value": "yes",
                 },
-                {
-                    "name": "discharge_date",
-                    "path": "form.hosp_lbl.date_hospital_discharge",
-                    "aggregation": "first",
-                },
-                {
-                    "name": "reg_date",
-                    "paths": ["form.reg_date", "form.grp_kmc_beneficiary.reg_date"],
-                    "aggregation": "first",
-                },
             ],
         },
     },
@@ -111,6 +101,18 @@ PIPELINE_SCHEMAS = [
                     "paths": ["form.grp_kmc_visit.visit_number"],
                     "aggregation": "first",
                     "transform": "int",
+                },
+                {
+                    "name": "reg_date",
+                    "paths": ["form.reg_date", "form.grp_kmc_beneficiary.reg_date"],
+                    "aggregation": "first",
+                    "transform": "date",
+                },
+                {
+                    "name": "discharge_date",
+                    "path": "form.hosp_lbl.date_hospital_discharge",
+                    "aggregation": "first",
+                    "transform": "date",
                 },
             ],
         },
@@ -257,6 +259,38 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
         };
     };
 
+    var computeEnrollmentMetrics = function(username, weightRows) {
+        var myRows = (weightRows || []).filter(function(r) { return r.username === username; });
+        if (myRows.length === 0) return { pctLateEnroll: null, casesWithDates: 0 };
+
+        var byCase = {};
+        myRows.forEach(function(r) {
+            var cid = r.beneficiary_case_id;
+            if (!cid) return;
+            if (!byCase[cid]) byCase[cid] = { reg_date: null, discharge_date: null };
+            if (r.reg_date && !byCase[cid].reg_date) byCase[cid].reg_date = r.reg_date;
+            if (r.discharge_date && !byCase[cid].discharge_date) byCase[cid].discharge_date = r.discharge_date;
+        });
+
+        var casesWithDates = 0;
+        var lateCases = 0;
+        Object.keys(byCase).forEach(function(cid) {
+            var c = byCase[cid];
+            if (c.reg_date && c.discharge_date) {
+                casesWithDates++;
+                var rd = new Date(c.reg_date);
+                var dd = new Date(c.discharge_date);
+                var daysDiff = (rd - dd) / (1000 * 60 * 60 * 24);
+                if (daysDiff > 8) lateCases++;
+            }
+        });
+
+        return {
+            pctLateEnroll: casesWithDates >= 10 ? lateCases / casesWithDates : null,
+            casesWithDates: casesWithDates
+        };
+    };
+
     // =========================================================================
     // Data processing
     // =========================================================================
@@ -278,19 +312,9 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             var mortRate = totalCases > 0 ? deaths / totalCases : null;
             var dangerRate = dangerVisitCount > 0 ? dangerPositiveCount / dangerVisitCount : null;
 
-            // Enrollment timing flag: days between reg and discharge
-            var regDate = row.reg_date;
-            var dischargeDate = row.discharge_date;
-            var enrollLate = null;
-            if (regDate && dischargeDate) {
-                var rd = new Date(regDate);
-                var dd = new Date(dischargeDate);
-                var daysDiff = (rd - dd) / (1000 * 60 * 60 * 24);
-                enrollLate = daysDiff > 8;  // registered more than 8 days after discharge
-            }
-
             // Weight metrics
             var wm = computeWeightMetrics(u, weightRows);
+            var em = computeEnrollmentMetrics(u, weightRows);
 
             // Compute flags
             var excluded = totalCases < MIN_CASES.exclude;
@@ -299,7 +323,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 flags.low_visits = closedCases >= MIN_CASES.visits && avgVisits !== null && avgVisits < THRESHOLDS.visits;
                 flags.high_mort = totalCases >= MIN_CASES.mort && mortRate !== null && mortRate > THRESHOLDS.mort_high;
                 flags.low_mort = totalCases >= MIN_CASES.mort && mortRate !== null && mortRate < THRESHOLDS.mort_low;
-                flags.late_enroll = closedCases >= MIN_CASES.enroll && enrollLate === true;
+                flags.late_enroll = em.casesWithDates >= MIN_CASES.enroll && em.pctLateEnroll !== null && em.pctLateEnroll > THRESHOLDS.enroll;
                 flags.high_danger = dangerVisitCount >= MIN_CASES.danger_high && dangerRate !== null && dangerRate > THRESHOLDS.danger_high;
                 flags.zero_danger = dangerVisitCount >= MIN_CASES.danger_zero && dangerRate !== null && dangerRate === THRESHOLDS.danger_zero;
                 flags.high_wt_loss = wm.weight_pairs >= MIN_CASES.weight && wm.pct_wt_loss !== null && wm.pct_wt_loss > THRESHOLDS.wt_loss;
@@ -315,7 +339,8 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 closedCases: closedCases,
                 avgVisits: avgVisits,
                 mortRate: mortRate,
-                enrollLate: enrollLate,
+                pctLateEnroll: em.pctLateEnroll,
+                casesWithDates: em.casesWithDates,
                 dangerRate: dangerRate,
                 pctWtLoss: wm.pct_wt_loss,
                 meanDailyGain: wm.mean_daily_gain,
@@ -356,7 +381,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 case 'cases': va = a.totalCases; vb = b.totalCases; break;
                 case 'avg_visits': va = a.avgVisits || 0; vb = b.avgVisits || 0; break;
                 case 'mort': va = a.mortRate || 0; vb = b.mortRate || 0; break;
-                case 'enroll': va = a.enrollLate ? 1 : 0; vb = b.enrollLate ? 1 : 0; break;
+                case 'enroll': va = a.pctLateEnroll || 0; vb = b.pctLateEnroll || 0; break;
                 case 'danger': va = a.dangerRate || 0; vb = b.dangerRate || 0; break;
                 case 'wt_loss': va = a.pctWtLoss || 0; vb = b.pctWtLoss || 0; break;
                 case 'wt_gain': va = a.meanDailyGain || 0; vb = b.meanDailyGain || 0; break;
@@ -816,7 +841,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                             {fmt(d.mortRate, 'pct')}
                                         </td>
                                         <td className={'px-3 py-3 text-sm text-center ' + flagBg('late_enroll')}>
-                                            {d.enrollLate === null ? 'NE' : d.enrollLate ? 'Yes' : 'No'}
+                                            {fmt(d.pctLateEnroll, 'pct')}
                                         </td>
                                         <td className={'px-3 py-3 text-sm text-center ' + (flagBg('high_danger') || flagBg('zero_danger'))}>
                                             {fmt(d.dangerRate, 'pct')}
