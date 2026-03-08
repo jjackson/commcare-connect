@@ -38,11 +38,15 @@ def _jsonb_path_to_sql(path: str, column: str = "form_json") -> str:
 
 
 def _paths_to_coalesce_sql(paths: list[str], column: str = "form_json") -> str:
-    """Convert multiple paths to a COALESCE expression."""
+    """Convert multiple paths to a COALESCE expression.
+
+    Wraps each path in NULLIF(..., '') so empty strings are treated as NULL
+    and COALESCE falls through to the next path.
+    """
     if not paths:
         return "NULL"
 
-    sql_paths = [_jsonb_path_to_sql(p, column) for p in paths]
+    sql_paths = [f"NULLIF({_jsonb_path_to_sql(p, column)}, '')" for p in paths]
     return f"COALESCE({', '.join(sql_paths)})"
 
 
