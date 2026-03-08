@@ -194,11 +194,38 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     // Helpers
     // =========================================================================
     var fmt = function(val, type) {
-        if (val === null || val === undefined) return 'NE';
+        if (val === null || val === undefined) return null;
         if (type === 'pct') return (val * 100).toFixed(1) + '%';
-        if (type === 'dec') return val.toFixed(2);
-        if (type === 'gain') return val.toFixed(1);
+        if (type === 'dec') return val.toFixed(1);
+        if (type === 'gain') return val.toFixed(1) + ' g/d';
         return String(val);
+    };
+
+    var FLAG_LABELS = {
+        low_visits: 'Low Visits/Case',
+        high_mort: 'High Mortality',
+        low_mort: 'Low Mortality',
+        late_enroll: 'Late Enrollment',
+        high_danger: 'High Danger Signs',
+        zero_danger: 'Zero Danger Signs',
+        high_wt_loss: 'High Weight Loss',
+        high_wt_gain: 'High Weight Gain',
+        high_wt_zero: 'Zero Weight Change'
+    };
+
+    var renderCell = function(val, type, flagKeys, flags) {
+        var formatted = fmt(val, type);
+        var flagged = false;
+        if (flagKeys) {
+            (Array.isArray(flagKeys) ? flagKeys : [flagKeys]).forEach(function(k) {
+                if (flags[k]) flagged = true;
+            });
+        }
+        var cellClass = 'px-3 py-3 text-sm text-center ' + (flagged ? 'bg-red-50 text-red-800 font-semibold' : '');
+        if (formatted === null) {
+            return <td className={cellClass} title="Not Eligible — insufficient data for this metric"><span className="text-gray-400 italic">NE</span></td>;
+        }
+        return <td className={cellClass}>{formatted}</td>;
     };
 
     // =========================================================================
@@ -777,34 +804,34 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                         className="rounded border-gray-300"
                                     />
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('name'); }}>
+                                <th className={thClass} onClick={function() { handleSort('name'); }} title="FLW username or display name">
                                     FLW{SortArrow('name')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('cases'); }}>
+                                <th className={thClass} onClick={function() { handleSort('cases'); }} title="Total distinct beneficiary cases">
                                     Cases{SortArrow('cases')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('avg_visits'); }}>
-                                    Avg Vis{SortArrow('avg_visits')}
+                                <th className={thClass} onClick={function() { handleSort('avg_visits'); }} title="Avg visits per closed non-mortality case. Flag: < 3.0">
+                                    Visits/Case{SortArrow('avg_visits')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('mort'); }}>
-                                    Mort%{SortArrow('mort')}
+                                <th className={thClass} onClick={function() { handleSort('mort'); }} title="Deaths as % of total cases. Flag: < 2% or > 20%">
+                                    Mortality{SortArrow('mort')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('enroll'); }}>
-                                    8+ Days{SortArrow('enroll')}
+                                <th className={thClass} onClick={function() { handleSort('enroll'); }} title="% of cases enrolled 8+ days after hospital discharge. Flag: > 35%">
+                                    Late Enroll{SortArrow('enroll')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('danger'); }}>
-                                    Danger{SortArrow('danger')}
+                                <th className={thClass} onClick={function() { handleSort('danger'); }} title="% of visits with danger sign positive. Flag: > 30% or 0% across 30+ visits">
+                                    Danger Signs{SortArrow('danger')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('wt_loss'); }}>
-                                    Wt Loss{SortArrow('wt_loss')}
+                                <th className={thClass} onClick={function() { handleSort('wt_loss'); }} title="% of successive visit weight pairs showing decrease. Flag: > 15%">
+                                    Wt Loss %{SortArrow('wt_loss')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('wt_gain'); }}>
-                                    Gain{SortArrow('wt_gain')}
+                                <th className={thClass} onClick={function() { handleSort('wt_gain'); }} title="Mean daily weight gain in grams/day. Flag: > 60 g/day">
+                                    Gain (g/d){SortArrow('wt_gain')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('wt_zero'); }}>
-                                    Wt Zero{SortArrow('wt_zero')}
+                                <th className={thClass} onClick={function() { handleSort('wt_zero'); }} title="% of visit pairs with exactly zero weight change. Flag: > 30%">
+                                    Wt Zero %{SortArrow('wt_zero')}
                                 </th>
-                                <th className={thClass} onClick={function() { handleSort('flags'); }}>
+                                <th className={thClass} onClick={function() { handleSort('flags'); }} title="Total number of flags triggered">
                                     Flags{SortArrow('flags')}
                                 </th>
                             </tr>
@@ -813,9 +840,6 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                             {filteredData.map(function(d) {
                                 var borderColor = d.flagCount >= 2 ? 'border-l-4 border-red-500' :
                                     d.flagCount === 1 ? 'border-l-4 border-orange-400' : '';
-                                var flagBg = function(flagKey) {
-                                    return d.flags[flagKey] ? 'bg-red-50 text-red-800 font-semibold' : '';
-                                };
                                 return (
                                     <tr key={d.username} className={(selectedWorkers[d.username] ? 'bg-blue-50 ' : 'hover:bg-gray-50 ') + borderColor}>
                                         <td className="px-3 py-3">
@@ -834,33 +858,22 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                             )}
                                         </td>
                                         <td className="px-3 py-3 text-sm text-center">{d.totalCases}</td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('low_visits')}>
-                                            {fmt(d.avgVisits, 'dec')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + (flagBg('high_mort') || flagBg('low_mort'))}>
-                                            {fmt(d.mortRate, 'pct')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('late_enroll')}>
-                                            {fmt(d.pctLateEnroll, 'pct')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + (flagBg('high_danger') || flagBg('zero_danger'))}>
-                                            {fmt(d.dangerRate, 'pct')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_loss')}>
-                                            {fmt(d.pctWtLoss, 'pct')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_gain')}>
-                                            {fmt(d.meanDailyGain, 'gain')}
-                                        </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_zero')}>
-                                            {fmt(d.pctWtZero, 'pct')}
-                                        </td>
+                                        {renderCell(d.avgVisits, 'dec', 'low_visits', d.flags)}
+                                        {renderCell(d.mortRate, 'pct', ['high_mort', 'low_mort'], d.flags)}
+                                        {renderCell(d.pctLateEnroll, 'pct', 'late_enroll', d.flags)}
+                                        {renderCell(d.dangerRate, 'pct', ['high_danger', 'zero_danger'], d.flags)}
+                                        {renderCell(d.pctWtLoss, 'pct', 'high_wt_loss', d.flags)}
+                                        {renderCell(d.meanDailyGain, 'gain', 'high_wt_gain', d.flags)}
+                                        {renderCell(d.pctWtZero, 'pct', 'high_wt_zero', d.flags)}
                                         <td className="px-3 py-3 text-sm text-center">
                                             {d.flagCount > 0 ? (
-                                                <span className={
-                                                    'inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold ' +
-                                                    (d.flagCount >= 2 ? 'bg-red-500' : 'bg-orange-400')
-                                                }>
+                                                <span
+                                                    className={
+                                                        'inline-flex items-center justify-center w-7 h-7 rounded-full text-white text-xs font-bold cursor-help ' +
+                                                        (d.flagCount >= 2 ? 'bg-red-500' : 'bg-orange-400')
+                                                    }
+                                                    title={Object.keys(d.flags).filter(function(k) { return d.flags[k]; }).map(function(k) { return FLAG_LABELS[k] || k; }).join(', ')}
+                                                >
                                                     {d.flagCount}
                                                 </span>
                                             ) : (
