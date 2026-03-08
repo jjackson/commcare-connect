@@ -243,7 +243,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 var d2 = new Date(curr.visit_date);
                 var days = (d2 - d1) / (1000 * 60 * 60 * 24);
                 if (days > 0) {
-                    totalDailyGain += (diff * 1000) / days;  // convert kg to g
+                    totalDailyGain += diff / days;  // weight already in grams
                     gainPairCount++;
                 }
             }
