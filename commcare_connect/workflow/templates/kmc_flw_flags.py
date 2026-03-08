@@ -27,13 +27,6 @@ PIPELINE_SCHEMAS = [
                     "aggregation": "count_distinct",
                 },
                 {
-                    "name": "closed_cases",
-                    "paths": ["form.kmc_beneficiary_case_id", "form.case.@case_id"],
-                    "aggregation": "count_distinct",
-                    "filter_path": "form.case_close_condition",
-                    "filter_value": "closed",
-                },
-                {
                     "name": "deaths",
                     "paths": ["form.kmc_beneficiary_case_id", "form.case.@case_id"],
                     "aggregation": "count_distinct",
@@ -113,6 +106,11 @@ PIPELINE_SCHEMAS = [
                     "path": "form.hosp_lbl.date_hospital_discharge",
                     "aggregation": "first",
                     "transform": "date",
+                },
+                {
+                    "name": "kmc_status",
+                    "paths": ["form.grp_kmc_beneficiary.kmc_status", "form.kmc_status"],
+                    "aggregation": "first",
                 },
             ],
         },
@@ -370,6 +368,40 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
         };
     };
 
+    var computeCaseMetrics = function(username, weightRows) {
+        var myRows = (weightRows || []).filter(function(r) { return r.username === username; });
+        if (myRows.length === 0) return { closedCases: 0, nonMortClosed: 0 };
+
+        // Group by case, get last kmc_status and check child_alive
+        var byCase = {};
+        myRows.forEach(function(r) {
+            var cid = r.beneficiary_case_id;
+            if (!cid) return;
+            if (!byCase[cid]) byCase[cid] = { kmc_status: null, visit_date: null };
+            // Keep latest status by visit date
+            if (!byCase[cid].visit_date || (r.visit_date && r.visit_date > byCase[cid].visit_date)) {
+                if (r.kmc_status) {
+                    byCase[cid].kmc_status = r.kmc_status;
+                    byCase[cid].visit_date = r.visit_date;
+                }
+            }
+        });
+
+        var closedCases = 0;
+        var nonMortClosed = 0;
+        Object.keys(byCase).forEach(function(cid) {
+            var status = byCase[cid].kmc_status;
+            if (status === 'discharged' || status === 'lost_to_followup' || status === 'deceased') {
+                closedCases++;
+                if (status !== 'deceased') {
+                    nonMortClosed++;
+                }
+            }
+        });
+
+        return { closedCases: closedCases, nonMortClosed: nonMortClosed };
+    };
+
     // =========================================================================
     // Data processing
     // =========================================================================
@@ -380,20 +412,21 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
         return flagRows.map(function(row) {
             var u = row.username;
             var totalCases = parseInt(row.total_cases) || 0;
-            var closedCases = parseInt(row.closed_cases) || 0;
             var deaths = parseInt(row.deaths) || 0;
             var totalVisits = parseInt(row.total_visits) || 0;
             var dangerVisitCount = parseInt(row.danger_visit_count) || 0;
             var dangerPositiveCount = parseInt(row.danger_positive_count) || 0;
 
-            var nonMortClosed = closedCases - deaths;
-            var avgVisits = nonMortClosed > 0 ? totalVisits / nonMortClosed : null;
-            var mortRate = totalCases > 0 ? deaths / totalCases : null;
-            var dangerRate = dangerVisitCount > 0 ? dangerPositiveCount / dangerVisitCount : null;
-
             // Weight metrics
             var wm = computeWeightMetrics(u, weightRows);
             var em = computeEnrollmentMetrics(u, weightRows);
+            var cm = computeCaseMetrics(u, weightRows);
+
+            var closedCases = cm.closedCases;
+            var nonMortClosed = cm.nonMortClosed;
+            var avgVisits = nonMortClosed > 0 ? totalVisits / nonMortClosed : null;
+            var mortRate = totalCases > 0 ? deaths / totalCases : null;
+            var dangerRate = dangerVisitCount > 0 ? dangerPositiveCount / dangerVisitCount : null;
 
             // Compute flags
             var excluded = totalCases < MIN_CASES.exclude;
@@ -411,9 +444,10 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             }
             var flagCount = Object.values(flags).filter(Boolean).length;
 
+            var workerInfo = (workers || []).find(function(w) { return w.username === u; });
             return {
                 username: u,
-                name: row.display_name || u,
+                name: (workerInfo && workerInfo.name) || row.display_name || u,
                 totalCases: totalCases,
                 closedCases: closedCases,
                 avgVisits: avgVisits,
@@ -430,7 +464,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 excluded: excluded
             };
         });
-    }, [flagRows, weightRows]);
+    }, [flagRows, weightRows, workers]);
 
     // Filter and sort
     var filteredData = React.useMemo(function() {
@@ -680,7 +714,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-24">
             {/* Header */}
             <div className="bg-white rounded-lg shadow-sm p-6">
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -900,7 +934,10 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                         {renderCell(d.avgVisits, 'dec', 'low_visits', d.flags)}
                                         {renderCell(d.mortRate, 'pct', ['high_mort', 'low_mort'], d.flags)}
                                         {renderCell(d.pctLateEnroll, 'pct', 'late_enroll', d.flags)}
-                                        {renderCell(d.dangerRate, 'pct', ['high_danger', 'zero_danger'], d.flags)}
+                                        <td className={'px-3 py-3 text-sm text-center ' + (d.flags.high_danger ? 'bg-red-50 text-red-800 font-semibold' : d.flags.zero_danger ? 'bg-amber-50 text-amber-800 font-semibold' : '')}>
+                                            {fmt(d.dangerRate, 'pct') === null ? <span className="text-gray-400 italic" title="Not Eligible — insufficient data for this metric">NE</span> : fmt(d.dangerRate, 'pct')}
+                                            {d.flags.zero_danger && !d.flags.high_danger && <span className="ml-1 text-xs" title="Zero danger signs across 30+ visits">&#9888;</span>}
+                                        </td>
                                         {renderCell(d.pctWtLoss, 'pct', 'high_wt_loss', d.flags)}
                                         {renderCell(d.meanDailyGain, 'gain', 'high_wt_gain', d.flags)}
                                         {renderCell(d.pctWtZero, 'pct', 'high_wt_zero', d.flags)}
