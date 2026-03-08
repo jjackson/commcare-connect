@@ -190,6 +190,58 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     var taskId = _taskId[0]; var setTaskId = _taskId[1];
     var cleanupRef = React.useRef(null);
 
+    var _showModal = React.useState(false);
+    var showModal = _showModal[0]; var setShowModal = _showModal[1];
+
+    // Date computation helpers
+    var computeDateRange = function(preset) {
+        var now = new Date();
+        var dayOfWeek = now.getDay();
+        var fmtDate = function(d) {
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        };
+        if (preset === 'last_week') {
+            var mon = new Date(now); mon.setDate(now.getDate() - dayOfWeek - 6);
+            var sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+            return { start: fmtDate(mon), end: fmtDate(sun) };
+        }
+        if (preset === 'last_2_weeks') {
+            var mon = new Date(now); mon.setDate(now.getDate() - dayOfWeek - 13);
+            var sun = new Date(now); sun.setDate(now.getDate() - dayOfWeek);
+            return { start: fmtDate(mon), end: fmtDate(sun) };
+        }
+        if (preset === 'last_month') {
+            var firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            var lastOfPrevMonth = new Date(firstOfThisMonth); lastOfPrevMonth.setDate(0);
+            var firstOfPrevMonth = new Date(lastOfPrevMonth.getFullYear(), lastOfPrevMonth.getMonth(), 1);
+            return { start: fmtDate(firstOfPrevMonth), end: fmtDate(lastOfPrevMonth) };
+        }
+        return { start: '', end: '' };
+    };
+
+    var _datePreset = React.useState('last_week');
+    var datePreset = _datePreset[0]; var setDatePreset = _datePreset[1];
+    var defaultDates = computeDateRange('last_week');
+    var _auditStartDate = React.useState(defaultDates.start);
+    var auditStartDate = _auditStartDate[0]; var setAuditStartDate = _auditStartDate[1];
+    var _auditEndDate = React.useState(defaultDates.end);
+    var auditEndDate = _auditEndDate[0]; var setAuditEndDate = _auditEndDate[1];
+    var _countPerFlw = React.useState(10);
+    var countPerFlw = _countPerFlw[0]; var setCountPerFlw = _countPerFlw[1];
+    var _aiAgent = React.useState('scale_validation');
+    var aiAgent = _aiAgent[0]; var setAiAgent = _aiAgent[1];
+    var _auditTitle = React.useState('');
+    var auditTitle = _auditTitle[0]; var setAuditTitle = _auditTitle[1];
+
+    var handlePresetChange = function(preset) {
+        setDatePreset(preset);
+        if (preset !== 'custom') {
+            var range = computeDateRange(preset);
+            setAuditStartDate(range.start);
+            setAuditEndDate(range.end);
+        }
+    };
+
     // =========================================================================
     // Helpers
     // =========================================================================
@@ -489,25 +541,9 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     // =========================================================================
     var handleCreateAudits = function() {
         if (isRunning || selectedCount === 0) return;
+        setShowModal(false);
         setIsRunning(true);
         setProgress({ status: 'starting', message: 'Preparing audit creation...' });
-
-        // Compute last week date range (Monday-Sunday)
-        var now = new Date();
-        var dayOfWeek = now.getDay();
-        var lastMonday = new Date(now);
-        lastMonday.setDate(now.getDate() - dayOfWeek - 6);
-        var lastSunday = new Date(lastMonday);
-        lastSunday.setDate(lastMonday.getDate() + 6);
-
-        var formatDate = function(d) {
-            return d.getFullYear() + '-' +
-                String(d.getMonth() + 1).padStart(2, '0') + '-' +
-                String(d.getDate()).padStart(2, '0');
-        };
-
-        var startDate = formatDate(lastMonday);
-        var endDate = formatDate(lastSunday);
 
         var selectedUsernames = Object.keys(selectedWorkers).filter(function(k) {
             return selectedWorkers[k];
@@ -530,12 +566,15 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             }
         ];
 
+        var title = auditTitle || ('FLW Flag Audit ' + auditStartDate + ' to ' + auditEndDate);
+
         var criteria = {
             audit_type: 'date_range',
             granularity: 'per_flw',
-            title: 'FLW Flag Audit ' + startDate + ' to ' + endDate,
-            start_date: startDate,
-            end_date: endDate,
+            title: title,
+            start_date: auditStartDate,
+            end_date: auditEndDate,
+            count_per_flw: countPerFlw,
             related_fields: relatedFields,
             selected_flw_user_ids: selectedUsernames
         };
@@ -544,7 +583,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             opportunities: [{ id: opportunityId, name: opportunityName || 'KMC' }],
             criteria: criteria,
             workflow_run_id: instance.id,
-            ai_agent_id: 'scale_validation'
+            ai_agent_id: aiAgent === 'none' ? undefined : aiAgent
         }).then(function(result) {
             if (result.success && result.task_id) {
                 setTaskId(result.task_id);
@@ -925,7 +964,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                         )}
                     </div>
                     <button
-                        onClick={handleCreateAudits}
+                        onClick={function() { setShowModal(true); }}
                         disabled={selectedCount === 0 || isRunning}
                         className={
                             'px-5 py-2.5 rounded-lg text-sm font-medium transition-colors ' +
@@ -948,6 +987,132 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                     </button>
                 </div>
             </div>
+
+            {/* Audit Configuration Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={function(e) { if (e.target === e.currentTarget) setShowModal(false); }}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-900">
+                                <i className="fa-solid fa-cog mr-2 text-gray-500"></i>
+                                Configure Audit
+                            </h3>
+                            <p className="text-sm text-gray-500 mt-1">
+                                Creating audits for {selectedCount} selected FLW{selectedCount !== 1 ? 's' : ''}
+                            </p>
+                        </div>
+                        <div className="px-6 py-5 space-y-5">
+                            {/* Date Range */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Date Range</label>
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    {[
+                                        { id: 'last_week', label: 'Last Week' },
+                                        { id: 'last_2_weeks', label: 'Last 2 Weeks' },
+                                        { id: 'last_month', label: 'Last Month' },
+                                        { id: 'custom', label: 'Custom' }
+                                    ].map(function(p) {
+                                        return (
+                                            <button
+                                                key={p.id}
+                                                onClick={function() { handlePresetChange(p.id); }}
+                                                className={
+                                                    'px-3 py-1.5 text-sm rounded-lg border transition-colors ' +
+                                                    (datePreset === p.id
+                                                        ? 'bg-blue-600 text-white border-blue-600'
+                                                        : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400')
+                                                }
+                                            >
+                                                {p.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-500 mb-1">Start</label>
+                                        <input
+                                            type="date"
+                                            value={auditStartDate}
+                                            onChange={function(e) { setAuditStartDate(e.target.value); setDatePreset('custom'); }}
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs text-gray-500 mb-1">End</label>
+                                        <input
+                                            type="date"
+                                            value={auditEndDate}
+                                            onChange={function(e) { setAuditEndDate(e.target.value); setDatePreset('custom'); }}
+                                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Visits per FLW */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Visits to Review per FLW</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    value={countPerFlw}
+                                    onChange={function(e) { setCountPerFlw(parseInt(e.target.value) || 10); }}
+                                    className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                />
+                                <span className="text-xs text-gray-500 ml-2">visits per FLW in the date range</span>
+                            </div>
+
+                            {/* AI Agent */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">AI Review Agent</label>
+                                <select
+                                    value={aiAgent}
+                                    onChange={function(e) { setAiAgent(e.target.value); }}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                >
+                                    <option value="scale_validation">Scale Validation (weight image review)</option>
+                                    <option value="none">No AI Review</option>
+                                </select>
+                            </div>
+
+                            {/* Title */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Audit Title (optional)</label>
+                                <input
+                                    type="text"
+                                    value={auditTitle}
+                                    onChange={function(e) { setAuditTitle(e.target.value); }}
+                                    placeholder={'FLW Flag Audit ' + auditStartDate + ' to ' + auditEndDate}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                                />
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end gap-3">
+                            <button
+                                onClick={function() { setShowModal(false); }}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateAudits}
+                                disabled={!auditStartDate || !auditEndDate}
+                                className={
+                                    'px-5 py-2 text-sm font-medium rounded-lg transition-colors ' +
+                                    (!auditStartDate || !auditEndDate
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-red-600 text-white hover:bg-red-700')
+                                }
+                            >
+                                <i className="fa-solid fa-plus mr-2"></i>
+                                Create Audits ({selectedCount})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }"""
