@@ -120,11 +120,14 @@ class TestKMCFLWFlagsWorkflow:
             # --- Verify filter bar ---
             expect(wf_root.get_by_text("All FLWs")).to_be_visible()
             expect(wf_root.get_by_text("Any Flag")).to_be_visible()
-            expect(wf_root.get_by_text("2+ Flags")).to_be_visible()
+            expect(wf_root.get_by_role("button", name=re.compile(r"2\+ Flags"))).to_be_visible()
 
             # --- Verify table headers ---
-            expect(wf_root.get_by_text("Avg Vis").first).to_be_visible()
+            expect(wf_root.get_by_text("Visits/Case").first).to_be_visible()
             expect(wf_root.get_by_text("Flags").first).to_be_visible()
+
+            # --- Screenshot for review ---
+            page.screenshot(path="e2e_flw_flags_ui.png", full_page=True)
 
             # --- Verify action bar ---
             expect(
