@@ -113,6 +113,8 @@ class FieldComputation:
     description: str = ""
     paths: list[str] | None = None
     extractor: Callable[[dict], Any] | None = None  # Custom extractor receives full visit dict
+    filter_path: str = ""  # Optional: path for FILTER (WHERE ...) clause
+    filter_value: str = ""  # Optional: value to compare against in filter
 
     def __post_init__(self):
         """Validate configuration."""
