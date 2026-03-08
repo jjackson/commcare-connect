@@ -484,7 +484,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             start_date: startDate,
             end_date: endDate,
             related_fields: relatedFields,
-            selected_usernames: selectedUsernames
+            selected_flw_user_ids: selectedUsernames
         };
 
         actions.createAudit({
