@@ -1,6 +1,7 @@
 """CommCare HQ API client for fetching application definitions.
 
-Auth: API key via env vars (COMMCARE_HQ_API_KEY format: "user@example.com:apikey123")
+Auth: Loaded automatically from the project's .env file.
+Uses COMMCARE_USERNAME + COMMCARE_API_KEY to build the ApiKey header.
 Caching: In-memory, keyed by (domain, app_id). Invalidated on server restart.
 """
 
@@ -8,13 +9,18 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
+# Load .env from the project root (two levels up from this file)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+
 HQ_URL = os.environ.get("COMMCARE_HQ_URL", "https://www.commcarehq.org")
-HQ_API_KEY = os.environ.get("COMMCARE_HQ_API_KEY", "")  # "user@email.com:apikey"
 HQ_DOMAIN = os.environ.get("COMMCARE_HQ_DOMAIN", "")
 HTTP_TIMEOUT = httpx.Timeout(connect=10, read=120, write=10, pool=10)
 
@@ -25,12 +31,15 @@ _app_list_cache: dict[str, list[dict]] = {}
 
 
 def _auth_header() -> dict[str, str]:
-    """Build Authorization header from env var."""
-    if not HQ_API_KEY:
+    """Build Authorization header from .env credentials."""
+    username = os.environ.get("COMMCARE_USERNAME", "")
+    api_key = os.environ.get("COMMCARE_API_KEY", "")
+    if not username or not api_key:
         raise ValueError(
-            "COMMCARE_HQ_API_KEY not set. Format: 'user@example.com:your-api-key'"
+            "COMMCARE_USERNAME and COMMCARE_API_KEY must be set in .env. "
+            f"Looked for .env at: {_PROJECT_ROOT / '.env'}"
         )
-    return {"Authorization": f"ApiKey {HQ_API_KEY}"}
+    return {"Authorization": f"ApiKey {username}:{api_key}"}
 
 
 async def list_apps(domain: str | None = None) -> list[dict]:
@@ -101,7 +110,7 @@ async def _fetch_all_apps(domain: str) -> list[dict]:
             if resp.status_code in (401, 403):
                 raise PermissionError(
                     f"CommCare HQ auth failed for domain {domain}: HTTP {resp.status_code}. "
-                    "Check COMMCARE_HQ_API_KEY."
+                    "Check COMMCARE_USERNAME and COMMCARE_API_KEY in .env."
                 )
             resp.raise_for_status()
             data = resp.json()

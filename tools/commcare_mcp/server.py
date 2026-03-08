@@ -4,13 +4,12 @@ Provides CommCare application structure context for Claude Code sessions.
 Tools let you explore app modules, form questions, and JSON field paths
 for building workflow pipeline schemas.
 
+Auth is automatic:
+- CommCare HQ: reads COMMCARE_USERNAME + COMMCARE_API_KEY from project .env
+- Connect API: reads CLI OAuth token from ~/.commcare-connect/token.json
+
 Usage (stdio, for Claude Code):
     python tools/commcare_mcp/server.py
-
-Configuration via env vars:
-    COMMCARE_HQ_DOMAIN     - Default CommCare domain
-    COMMCARE_HQ_API_KEY    - API key as "user@email.com:apikey"
-    COMMCARE_HQ_URL        - HQ base URL (default: https://www.commcarehq.org)
 """
 
 from __future__ import annotations
@@ -31,7 +30,10 @@ mcp = FastMCP(
         "CommCare HQ application structure server. Use these tools to understand "
         "CommCare app form structure, question types, and JSON field paths. "
         "This is especially useful when building or debugging workflow pipeline "
-        "schemas (PIPELINE_SCHEMAS) that map form fields to data extraction paths."
+        "schemas (PIPELINE_SCHEMAS) that map form fields to data extraction paths.\n\n"
+        "WORKFLOW: Start with get_opportunity_apps(opportunity_id) to discover the "
+        "domain and app IDs, then use get_app_structure, get_form_questions, or "
+        "get_form_json_paths to drill into specific forms."
     ),
 )
 
@@ -61,6 +63,26 @@ def data_patterns_resource() -> str:
 
 
 @mcp.tool()
+async def get_opportunity_apps(opportunity_id: int) -> dict:
+    """Get the CommCare domain and app IDs for a Connect opportunity.
+
+    This is the starting point — it resolves an opportunity ID to the CommCare
+    domain and learn/deliver app IDs needed by the other tools.
+
+    Returns the cc_domain and cc_app_id for both the learn and deliver apps.
+
+    Args:
+        opportunity_id: The Connect opportunity ID (e.g., 874)
+    """
+    from connect_client import get_opportunity_apps as _get_opp
+
+    try:
+        return await _get_opp(opportunity_id)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
 async def list_apps(domain: str = "") -> dict:
     """List all CommCare applications for a domain.
 
@@ -68,7 +90,7 @@ async def list_apps(domain: str = "") -> dict:
     Use this to find the app_id needed for other tools.
 
     Args:
-        domain: CommCare domain name (optional, uses COMMCARE_HQ_DOMAIN env var if not set)
+        domain: CommCare domain name (use get_opportunity_apps to find this)
     """
     from hq_client import list_apps as _list_apps
 
@@ -80,53 +102,94 @@ async def list_apps(domain: str = "") -> dict:
 
 
 @mcp.tool()
-async def get_app_structure(app_id: str, domain: str = "") -> dict:
+async def get_app_structure(
+    app_id: str = "",
+    domain: str = "",
+    opportunity_id: int = 0,
+    app_type: str = "deliver",
+) -> dict:
     """Get the module/form/case-type structure of a CommCare application.
 
     Shows the full app tree: modules → forms (with xmlns) → case types.
-    Use this to understand how an app is organized before drilling into specific forms.
+    Use this to understand how an app is organized before drilling into forms.
+
+    Provide EITHER (opportunity_id) OR (domain + app_id):
+    - opportunity_id: auto-resolves domain and app_id from Connect
+    - domain + app_id: direct CommCare HQ lookup
 
     Args:
-        app_id: The CommCare application ID (from list_apps)
-        domain: CommCare domain name (optional, uses env var default)
+        app_id: The CommCare application ID (from list_apps or get_opportunity_apps)
+        domain: CommCare domain name
+        opportunity_id: Connect opportunity ID (alternative to domain+app_id)
+        app_type: "deliver" or "learn" — which app to use when using opportunity_id
     """
+    from connect_client import resolve_domain_and_app
     from extractors import extract_app_structure
     from hq_client import get_app
 
     try:
-        app = await get_app(domain or None, app_id)
+        resolved_domain, resolved_app_id = await resolve_domain_and_app(
+            opportunity_id=opportunity_id or None,
+            domain=domain,
+            app_id=app_id,
+            app_type=app_type,
+        )
+        app = await get_app(resolved_domain, resolved_app_id)
         return extract_app_structure(app)
     except Exception as e:
         return {"error": str(e)}
 
 
 @mcp.tool()
-async def get_form_questions(app_id: str, xmlns: str, domain: str = "") -> dict:
+async def get_form_questions(
+    xmlns: str,
+    app_id: str = "",
+    domain: str = "",
+    opportunity_id: int = 0,
+    app_type: str = "deliver",
+) -> dict:
     """Get the full question tree for a specific form.
 
     Shows all questions with their types, labels, constraints, skip logic,
     and nesting (groups/repeats). Use this to understand what data a form collects.
 
+    Provide EITHER (opportunity_id) OR (domain + app_id).
+
     Args:
-        app_id: The CommCare application ID
         xmlns: The form's xmlns identifier (from get_app_structure)
-        domain: CommCare domain name (optional)
+        app_id: The CommCare application ID
+        domain: CommCare domain name
+        opportunity_id: Connect opportunity ID (alternative to domain+app_id)
+        app_type: "deliver" or "learn" — which app to use when using opportunity_id
     """
+    from connect_client import resolve_domain_and_app
     from extractors import extract_form_questions
     from hq_client import get_app
 
     try:
-        app = await get_app(domain or None, app_id)
+        resolved_domain, resolved_app_id = await resolve_domain_and_app(
+            opportunity_id=opportunity_id or None,
+            domain=domain,
+            app_id=app_id,
+            app_type=app_type,
+        )
+        app = await get_app(resolved_domain, resolved_app_id)
         result = extract_form_questions(app, xmlns)
         if result is None:
-            return {"error": f"Form with xmlns '{xmlns}' not found in app {app_id}"}
+            return {"error": f"Form with xmlns '{xmlns}' not found in app {resolved_app_id}"}
         return result
     except Exception as e:
         return {"error": str(e)}
 
 
 @mcp.tool()
-async def get_form_json_paths(app_id: str, xmlns: str, domain: str = "") -> dict:
+async def get_form_json_paths(
+    xmlns: str,
+    app_id: str = "",
+    domain: str = "",
+    opportunity_id: int = 0,
+    app_type: str = "deliver",
+) -> dict:
     """Map form questions to their JSON submission paths for pipeline schemas.
 
     THIS IS THE KEY TOOL for building PIPELINE_SCHEMAS. It shows exactly what
@@ -139,19 +202,30 @@ async def get_form_json_paths(app_id: str, xmlns: str, domain: str = "") -> dict
     Use the json_path values directly in PIPELINE_SCHEMAS field definitions:
         {"name": "weight", "path": "form.weight", "transform": "float"}
 
+    Provide EITHER (opportunity_id) OR (domain + app_id).
+
     Args:
-        app_id: The CommCare application ID
         xmlns: The form's xmlns identifier (from get_app_structure)
-        domain: CommCare domain name (optional)
+        app_id: The CommCare application ID
+        domain: CommCare domain name
+        opportunity_id: Connect opportunity ID (alternative to domain+app_id)
+        app_type: "deliver" or "learn" — which app to use when using opportunity_id
     """
+    from connect_client import resolve_domain_and_app
     from extractors import extract_form_json_paths
     from hq_client import get_app
 
     try:
-        app = await get_app(domain or None, app_id)
+        resolved_domain, resolved_app_id = await resolve_domain_and_app(
+            opportunity_id=opportunity_id or None,
+            domain=domain,
+            app_id=app_id,
+            app_type=app_type,
+        )
+        app = await get_app(resolved_domain, resolved_app_id)
         result = extract_form_json_paths(app, xmlns)
         if result is None:
-            return {"error": f"Form with xmlns '{xmlns}' not found in app {app_id}"}
+            return {"error": f"Form with xmlns '{xmlns}' not found in app {resolved_app_id}"}
         return result
     except Exception as e:
         return {"error": str(e)}
