@@ -460,8 +460,9 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             return selectedWorkers[k];
         });
 
-        var opportunityId = instance.state && instance.state.opportunity_id;
-        var opportunityName = instance.state && instance.state.opportunity_name;
+        var urlParams = new URLSearchParams(window.location.search);
+        var opportunityId = parseInt(urlParams.get('opportunity_id')) || (instance && instance.opportunity_id);
+        var opportunityName = (instance.state && instance.state.opportunity_name) || '';
 
         var relatedFields = [
             {

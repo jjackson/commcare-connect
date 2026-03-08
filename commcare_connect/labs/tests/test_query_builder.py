@@ -1,4 +1,8 @@
+import pytest
+
 from commcare_connect.labs.analysis.backends.sql.query_builder import _aggregation_to_sql, _jsonb_path_to_sql
+
+pytestmark = pytest.mark.django_db(databases=[])
 
 
 class TestAggregationToSQL:
