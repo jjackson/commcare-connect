@@ -222,6 +222,10 @@ def _xform_path_to_json_path(xform_path: str, prefix: str = "form") -> str:
 
     /data/weight → form.weight
     /data/group/question → form.group.question
+
+    When a non-default prefix is supplied (e.g. for children of groups/repeats),
+    only the last path segment is appended since the prefix already encodes the
+    parent path.
     """
     if not xform_path:
         return ""
@@ -233,6 +237,12 @@ def _xform_path_to_json_path(xform_path: str, prefix: str = "form") -> str:
 
     if not parts:
         return ""
+
+    # If we have a custom prefix (inside a group/repeat), the prefix already
+    # represents the parent path, so we only need the last segment (the
+    # question's own ID).
+    if prefix != "form":
+        return f"{prefix}.{parts[-1]}"
 
     return f"{prefix}.{'.'.join(parts)}"
 
