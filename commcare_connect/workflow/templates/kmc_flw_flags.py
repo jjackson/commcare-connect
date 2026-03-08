@@ -232,18 +232,18 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                 var curr = visits[i];
                 var w1 = parseFloat(prev.weight);
                 var w2 = parseFloat(curr.weight);
-                if (isNaN(w1) || isNaN(w2) || w1 <= 0) continue;
+                if (isNaN(w1) || isNaN(w2)) continue;
+                if (w1 < 500 || w1 > 5000 || w2 < 500 || w2 > 5000) continue;
+                var d1 = new Date(prev.visit_date);
+                var d2 = new Date(curr.visit_date);
+                var daysBetween = (d2 - d1) / (1000 * 60 * 60 * 24);
+                if (daysBetween < 1 || daysBetween > 30) continue;
                 totalPairs++;
                 var diff = w2 - w1;
                 if (diff < 0) lossPairs++;
                 if (Math.abs(diff) < 0.001) zeroPairs++;
-
-                // Daily gain in g/day
-                var d1 = new Date(prev.visit_date);
-                var d2 = new Date(curr.visit_date);
-                var days = (d2 - d1) / (1000 * 60 * 60 * 24);
-                if (days > 0) {
-                    totalDailyGain += diff / days;  // weight already in grams
+                if (daysBetween > 0) {
+                    totalDailyGain += diff / daysBetween;
                     gainPairCount++;
                 }
             }
@@ -273,8 +273,9 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             var dangerVisitCount = parseInt(row.danger_visit_count) || 0;
             var dangerPositiveCount = parseInt(row.danger_positive_count) || 0;
 
-            var avgVisits = closedCases > 0 ? totalVisits / closedCases : null;
-            var mortRate = closedCases > 0 ? deaths / closedCases : null;
+            var nonMortClosed = closedCases - deaths;
+            var avgVisits = nonMortClosed > 0 ? totalVisits / nonMortClosed : null;
+            var mortRate = totalCases > 0 ? deaths / totalCases : null;
             var dangerRate = dangerVisitCount > 0 ? dangerPositiveCount / dangerVisitCount : null;
 
             // Enrollment timing flag: days between reg and discharge
@@ -296,13 +297,13 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             var flags = {};
             if (!excluded) {
                 flags.low_visits = closedCases >= MIN_CASES.visits && avgVisits !== null && avgVisits < THRESHOLDS.visits;
-                flags.high_mort = closedCases >= MIN_CASES.mort && mortRate !== null && mortRate > THRESHOLDS.mort_high;
-                flags.low_mort = closedCases >= MIN_CASES.mort && mortRate !== null && mortRate < THRESHOLDS.mort_low;
+                flags.high_mort = totalCases >= MIN_CASES.mort && mortRate !== null && mortRate > THRESHOLDS.mort_high;
+                flags.low_mort = totalCases >= MIN_CASES.mort && mortRate !== null && mortRate < THRESHOLDS.mort_low;
                 flags.late_enroll = closedCases >= MIN_CASES.enroll && enrollLate === true;
                 flags.high_danger = dangerVisitCount >= MIN_CASES.danger_high && dangerRate !== null && dangerRate > THRESHOLDS.danger_high;
                 flags.zero_danger = dangerVisitCount >= MIN_CASES.danger_zero && dangerRate !== null && dangerRate === THRESHOLDS.danger_zero;
                 flags.high_wt_loss = wm.weight_pairs >= MIN_CASES.weight && wm.pct_wt_loss !== null && wm.pct_wt_loss > THRESHOLDS.wt_loss;
-                flags.low_wt_gain = wm.weight_pairs >= MIN_CASES.weight && wm.mean_daily_gain !== null && wm.mean_daily_gain < THRESHOLDS.wt_gain;
+                flags.high_wt_gain = wm.weight_pairs >= MIN_CASES.weight && wm.mean_daily_gain !== null && wm.mean_daily_gain > THRESHOLDS.wt_gain;
                 flags.high_wt_zero = wm.weight_pairs >= MIN_CASES.weight && wm.pct_wt_zero !== null && wm.pct_wt_zero > THRESHOLDS.wt_zero;
             }
             var flagCount = Object.values(flags).filter(Boolean).length;
@@ -823,7 +824,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                         <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_loss')}>
                                             {fmt(d.pctWtLoss, 'pct')}
                                         </td>
-                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('low_wt_gain')}>
+                                        <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_gain')}>
                                             {fmt(d.meanDailyGain, 'gain')}
                                         </td>
                                         <td className={'px-3 py-3 text-sm text-center ' + flagBg('high_wt_zero')}>
