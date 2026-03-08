@@ -186,6 +186,22 @@ def _aggregation_to_sql(agg: str, value_expr: str, field_name: str) -> str:
                 LIMIT 1
             ) sub
         )"""
+    elif agg == "count_distinct" or agg == "count_unique":
+        return f"COUNT(DISTINCT {value_expr})"
+    elif agg == "last":
+        # Use subquery to get value from row with latest visit_date
+        # Mirrors "first" but with DESC ordering
+        return f"""(
+            SELECT sub.val FROM (
+                SELECT {value_expr} as val, visit_date
+                FROM labs_raw_visit_cache sub
+                WHERE sub.opportunity_id = labs_raw_visit_cache.opportunity_id
+                  AND sub.username = labs_raw_visit_cache.username
+                  AND {value_expr} IS NOT NULL
+                ORDER BY visit_date DESC
+                LIMIT 1
+            ) sub
+        )"""
     elif agg == "list":
         # Aggregate as array, will be converted to Python list
         return f"ARRAY_AGG({value_expr}) FILTER (WHERE {value_expr} IS NOT NULL)"
