@@ -67,13 +67,7 @@ class TestKMCProjectMetricsWorkflow:
         page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
 
         # Wait for dynamic React content to render
-        page.wait_for_selector('[data-testid="kpi-card"], .kpi-card, text=/SVNs Enrolled/i', timeout=60_000)
-
-        # Verify KPI cards are visible
-        kpi_text = page.locator("body").inner_text()
-        assert re.search(
-            r"SVNs Enrolled|Total Enrolled", kpi_text, re.IGNORECASE
-        ), "KPI card 'SVNs Enrolled' not found in page text"
+        page.locator("text=/SVNs Enrolled/i").wait_for(timeout=60_000)
 
         # --- Step 4: Navigate to Outcomes & Outputs ---
         outcomes_tab = page.get_by_role("button", name=re.compile(r"Outcomes", re.IGNORECASE))
@@ -81,7 +75,7 @@ class TestKMCProjectMetricsWorkflow:
         outcomes_tab.click()
 
         # Verify outcomes content
-        page.wait_for_selector("text=/KMC Practice|KMC Hours/i", timeout=30_000)
+        page.locator("text=/KMC Practice/i").wait_for(timeout=30_000)
 
         # --- Step 5: Navigate to Indicators Table ---
         indicators_tab = page.get_by_role("button", name=re.compile(r"Indicators", re.IGNORECASE))
@@ -89,7 +83,7 @@ class TestKMCProjectMetricsWorkflow:
         indicators_tab.click()
 
         # Verify table renders
-        page.wait_for_selector("table, text=/Indicator|Level/i", timeout=30_000)
+        page.locator("table").wait_for(timeout=30_000)
 
         # --- Step 6: Navigate back to Overview ---
         overview_tab = page.get_by_role("button", name=re.compile(r"Overview", re.IGNORECASE))
