@@ -837,6 +837,8 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                             <td className="px-4 py-4 text-right">
                                                 <a
                                                     href={'/audit/' + session.id + '/bulk/?opportunity_id=' + session.opportunity_id}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
                                                     className={'inline-flex items-center px-3 py-1.5 text-sm ' +
                                                         'bg-blue-50 text-blue-700 rounded hover:bg-blue-100 ' +
                                                         'border border-blue-200 transition-colors'}
@@ -986,10 +988,26 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                     </span>
                                 )}
                                 {progress.status === 'completed' && (
-                                    <span className="text-green-600">
-                                        <i className="fa-solid fa-check mr-1"></i>
-                                        {progress.message || 'Audits created successfully'}
-                                    </span>
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <span className="text-green-600 flex items-center">
+                                            <i className="fa-solid fa-check mr-1"></i>
+                                            Audits created
+                                        </span>
+                                        {linkedSessions.map(function(session) {
+                                            return (
+                                                <a
+                                                    key={session.id}
+                                                    href={'/audit/' + session.id + '/bulk/?opportunity_id=' + session.opportunity_id}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 border border-blue-200 transition-colors"
+                                                >
+                                                    <i className="fa-solid fa-arrow-up-right-from-square mr-1.5 text-xs"></i>
+                                                    {session.flw_display_name || session.flw_username || 'Audit ' + session.id}
+                                                </a>
+                                            );
+                                        })}
+                                    </div>
                                 )}
                                 {progress.status === 'failed' && (
                                     <span className="text-red-600">
