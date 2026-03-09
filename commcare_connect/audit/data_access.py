@@ -749,6 +749,8 @@ class AuditDataAccess:
             meta = fetch_opportunity_metadata(self.access_token, opp_id)
             cc_domain = meta.get("cc_domain")
         except Exception as e:
+            # Intentionally broad: cc_domain is optional for URL construction; any failure
+            # (network, missing key, unexpected format) should degrade gracefully, not block audit.
             logger.debug(f"[ImageExtract] Could not fetch cc_domain for hq_url construction: {e}")
 
         # Enrich Connect blob images with xform_id and build hq_url
@@ -1195,7 +1197,7 @@ class AuditDataAccess:
         opportunities: list[dict],
     ) -> dict:
         """Create an audit creation job record for tracking async creation."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         data = {
             "task_id": task_id,
@@ -1213,8 +1215,8 @@ class AuditDataAccess:
             },
             "result": None,
             "error": None,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -1296,7 +1298,7 @@ class AuditDataAccess:
         error: str | None = None,
     ) -> dict | None:
         """Update an audit creation job record."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         from commcare_connect.labs.models import LocalLabsRecord
 
@@ -1326,7 +1328,7 @@ class AuditDataAccess:
             data["result"] = result
         if error is not None:
             data["error"] = error
-        data["updated_at"] = datetime.now().isoformat()
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # Save
         updated = self.labs_api.update_record(
