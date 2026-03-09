@@ -16,7 +16,10 @@ aggregation in React for project-wide metrics.
 
 DEFINITION = {
     "name": "KMC Project Metrics",
-    "description": "Program-level M&E dashboard showing enrollment, health outcomes, KMC practice, and visit quality indicators",
+    "description": (
+        "Program-level M&E dashboard showing enrollment,"
+        " health outcomes, KMC practice, and visit quality indicators"
+    ),
     "version": 1,
     "templateType": "kmc_project_metrics",
     "statuses": [
@@ -1267,7 +1270,10 @@ function WorkflowUI({ definition, instance, workers, pipelines, links, actions, 
 TEMPLATE = {
     "key": "kmc_project_metrics",
     "name": "KMC Project Metrics",
-    "description": "Program-level M&E dashboard showing enrollment, health outcomes, KMC practice, and visit quality indicators",
+    "description": (
+        "Program-level M&E dashboard showing enrollment,"
+        " health outcomes, KMC practice, and visit quality indicators"
+    ),
     "icon": "fa-chart-line",
     "color": "indigo",
     "definition": DEFINITION,
