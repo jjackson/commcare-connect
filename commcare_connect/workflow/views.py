@@ -295,9 +295,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
             # Get or create run based on mode
             if is_edit_mode:
                 # Edit mode: create temporary run (not persisted)
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
-                today = datetime.now().date()
+                today = datetime.now(timezone.utc).date()
                 week_start = today - timedelta(days=today.weekday())
                 week_end = week_start + timedelta(days=6)
 
@@ -331,9 +331,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 context["is_edit_mode"] = False
             else:
                 # Create new run (always creates a fresh run)
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
-                today = datetime.now().date()
+                today = datetime.now(timezone.utc).date()
                 week_start = today - timedelta(days=today.weekday())
                 week_end = week_start + timedelta(days=6)
 

@@ -687,12 +687,16 @@ class CommCareHQImageProxyView(LoginRequiredMixin, View):
         if not hq_url:
             return HttpResponse("Missing url parameter", status=400)
 
-        # Security: only proxy CommCareHQ URLs
+        # Security: only proxy CommCareHQ attachment URLs
         try:
             parsed = urlparse(hq_url)
             commcarehq_host = urlparse(settings.COMMCARE_HQ_URL).netloc
             if parsed.netloc not in (commcarehq_host, "www.commcarehq.org"):
                 return HttpResponse("Invalid URL host", status=400)
+            # Restrict to attachment paths only (e.g. /a/<domain>/api/form/attachment/...)
+            import re
+            if not re.match(r"^/a/[^/]+/api/form/attachment/", parsed.path):
+                return HttpResponse("Invalid URL path", status=400)
         except Exception:
             return HttpResponse("Invalid URL", status=400)
 

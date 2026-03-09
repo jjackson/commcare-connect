@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
                         ],
                         db_index=True,
                         default="geoboundaries",
-                        help_text="Data source (geoBoundaries, OpenStreetMap, GRID3, or HDX)",
+                        help_text="Data source (geoBoundaries, OpenStreetMap, GRID3, HDX, or GeoPoDe)",
                         max_length=20,
                     ),
                 ),
