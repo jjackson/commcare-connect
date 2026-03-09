@@ -114,7 +114,7 @@ class AuditCriteria:
             count_per_opp=data.get("count_per_opp") or data.get("countPerOpp", 10),
             count_across_all=data.get("count_across_all") or data.get("countAcrossAll", 100),
             sample_percentage=data.get("sample_percentage") or data.get("samplePercentage", 100),
-            selected_flw_user_ids=data.get("selected_flw_user_ids", []),
+            selected_flw_user_ids=data.get("selected_flw_user_ids") or data.get("selected_usernames", []),
             related_fields=related_fields or None,
         )
 

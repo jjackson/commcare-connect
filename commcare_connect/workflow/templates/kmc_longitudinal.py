@@ -45,19 +45,30 @@ PIPELINE_SCHEMAS = [
                 },
                 {
                     "name": "child_name",
-                    "paths": ["form.child_details.child_name", "form.svn_name"],
+                    "paths": [
+                        "form.grp_kmc_beneficiary.child_name",
+                        "form.grp_beneficiary_details.child_name",
+                        "form.svn_name",
+                        "form.mothers_details.child_name",
+                    ],
                     "aggregation": "first",
                 },
                 {
                     "name": "mother_name",
-                    "paths": ["form.mothers_details.mother_name", "form.kmc_beneficiary_name"],
+                    "paths": [
+                        "form.grp_beneficiary_details.mother_name",
+                        "form.mother_name",
+                        "form.kmc_beneficiary_name",
+                    ],
                     "aggregation": "first",
                 },
                 {
                     "name": "mother_phone",
                     "paths": [
-                        "form.mothers_details.mothers_phone_number",
+                        "form.grp_kmc_beneficiary.mothers_phone_number",
+                        "form.grp_beneficiary_details.mothers_phone_number",
                         "form.deduplication_block.mothers_phone_number",
+                        "form.mothers_phone_number",
                     ],
                     "aggregation": "first",
                 },
@@ -121,23 +132,27 @@ PIPELINE_SCHEMAS = [
                 },
                 {
                     "name": "village",
-                    "path": "form.mothers_details.village",
+                    "paths": [
+                        "form.grp_kmc_beneficiary.village",
+                        "form.address_change_grp.location.village",
+                        "form.village",
+                    ],
                     "aggregation": "first",
                 },
                 {
                     "name": "subcounty",
-                    "paths": ["form.mothers_details.subcounty", "form.subcounty"],
+                    "paths": ["form.sub_country", "form.subcounty"],
                     "aggregation": "first",
                 },
                 # --- KMC Practice ---
                 {
                     "name": "kmc_hours",
-                    "path": "form.KMC_24-Hour_Recall.kmc_hours",
+                    "path": "form.kmc_24-hour_recall.kmc_hours",
                     "aggregation": "first",
                 },
                 {
                     "name": "kmc_providers",
-                    "path": "form.KMC_24-Hour_Recall.kmc_providers",
+                    "path": "form.kmc_24-hour_recall.kmc_providers",
                     "aggregation": "first",
                 },
                 {
@@ -148,7 +163,7 @@ PIPELINE_SCHEMAS = [
                 # --- Feeding ---
                 {
                     "name": "feeding_provided",
-                    "path": "form.KMC_24-Hour_Recall.feeding_provided",
+                    "path": "form.kmc_24-hour_recall.feeding_provided",
                     "aggregation": "first",
                 },
                 {
@@ -181,7 +196,10 @@ PIPELINE_SCHEMAS = [
                 },
                 {
                     "name": "visit_location",
-                    "paths": ["form.visit_location", "form.reg_location"],
+                    "paths": [
+                        "form.visit_location",
+                        "form.reg_location_lbl.reg_location",
+                    ],
                     "aggregation": "first",
                 },
                 {
@@ -192,7 +210,10 @@ PIPELINE_SCHEMAS = [
                 # --- Demographics (header) ---
                 {
                     "name": "child_dob",
-                    "paths": ["form.child_DOB", "form.child_details.child_DOB"],
+                    "paths": [
+                        "form.mothers_details.child_DOB",
+                        "form.child_DOB",
+                    ],
                     "aggregation": "first",
                     "transform": "date",
                 },
@@ -208,7 +229,10 @@ PIPELINE_SCHEMAS = [
                 },
                 {
                     "name": "reg_date",
-                    "path": "form.reg_date",
+                    "paths": [
+                        "form.grp_kmc_beneficiary.reg_date",
+                        "form.reg_date",
+                    ],
                     "aggregation": "first",
                     "transform": "date",
                 },
