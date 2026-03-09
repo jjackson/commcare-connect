@@ -26,6 +26,14 @@ The repo also contains the full production CommCare Connect Django ORM codebase 
 
 **Cross-app connections:** Workflow can create audits and tasks. AI agents modify workflows and solicitations. Coverage is standalone.
 
+## Workflow Engine
+
+Templates are single Python files in `workflow/templates/` exporting DEFINITION (statuses, config), RENDER_CODE (React JSX string transpiled by Babel), and optionally PIPELINE_SCHEMAS (CommCare form field extraction). The registry auto-discovers them. Pipeline schemas map CommCare form JSON paths to extracted fields with aggregations and transforms. Render code receives `{definition, instance, workers, pipelines, links, actions, onUpdateState}` as props.
+
+Use the MCP server's `get_form_json_paths` tool to discover correct field paths when building pipeline schemas.
+
+**Full reference:** [WORKFLOW_REFERENCE.md](commcare_connect/workflow/WORKFLOW_REFERENCE.md)
+
 ## Key Commands
 
 ```bash
