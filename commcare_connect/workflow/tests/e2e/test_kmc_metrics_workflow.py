@@ -71,8 +71,9 @@ class TestKMCProjectMetricsWorkflow:
 
         # Verify KPI cards are visible
         kpi_text = page.locator("body").inner_text()
-        assert re.search(r"SVNs Enrolled|Total Enrolled", kpi_text, re.IGNORECASE), \
-            f"KPI card 'SVNs Enrolled' not found in page text"
+        assert re.search(
+            r"SVNs Enrolled|Total Enrolled", kpi_text, re.IGNORECASE
+        ), "KPI card 'SVNs Enrolled' not found in page text"
 
         # --- Step 4: Navigate to Outcomes & Outputs ---
         outcomes_tab = page.get_by_role("button", name=re.compile(r"Outcomes", re.IGNORECASE))
@@ -80,7 +81,7 @@ class TestKMCProjectMetricsWorkflow:
         outcomes_tab.click()
 
         # Verify outcomes content
-        page.wait_for_selector('text=/KMC Practice|KMC Hours/i', timeout=30_000)
+        page.wait_for_selector("text=/KMC Practice|KMC Hours/i", timeout=30_000)
 
         # --- Step 5: Navigate to Indicators Table ---
         indicators_tab = page.get_by_role("button", name=re.compile(r"Indicators", re.IGNORECASE))
@@ -88,7 +89,7 @@ class TestKMCProjectMetricsWorkflow:
         indicators_tab.click()
 
         # Verify table renders
-        page.wait_for_selector('table, text=/Indicator|Level/i', timeout=30_000)
+        page.wait_for_selector("table, text=/Indicator|Level/i", timeout=30_000)
 
         # --- Step 6: Navigate back to Overview ---
         overview_tab = page.get_by_role("button", name=re.compile(r"Overview", re.IGNORECASE))
