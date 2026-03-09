@@ -29,7 +29,6 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
-    Task,
     UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
@@ -129,34 +128,30 @@ def process_learn_modules(user: User, xform: XForm, app: CommCareApp, opportunit
 def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
     """Process task modules from a form received from CommCare HQ."""
     with transaction.atomic():
-        access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
+        try:
+            access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
+        except OpportunityAccess.DoesNotExist:
+            raise ProcessingError(f"User does not have access to opportunity {opportunity.name}")
         save_access = False
 
-        task_slugs = [task_data["@id"] for task_data in blocks if task_data.get("@id")]
-
-        tasks_by_slug = {task.slug: task for task in Task.objects.filter(app=app, slug__in=task_slugs)}
-
-        task_ids = [task.id for task in tasks_by_slug.values()]
-
-        completed_tasks_by_task_id = {
-            completed_task.task_id: completed_task
-            for completed_task in CompletedTask.objects.filter(
-                task_id__in=task_ids, opportunity_access=access, xform_id=None, status=CompletedTaskStatus.ASSIGNED
-            )
-        }
-
-        to_update = []
+        updated_tasks = False
 
         for task_data in blocks:
             task_slug = task_data.get("@id")
             if not task_slug:
                 continue
 
-            task = tasks_by_slug.get(task_slug)
-            if not task:
-                continue
-
-            completed_task = completed_tasks_by_task_id.get(task.id)
+            completed_task = (
+                CompletedTask.objects.select_for_update()
+                .filter(
+                    task__app=app,
+                    task__slug=task_slug,
+                    opportunity_access=access,
+                    xform_id=None,
+                    status=CompletedTaskStatus.ASSIGNED,
+                )
+                .first()
+            )
             if not completed_task:
                 continue
 
@@ -167,25 +162,23 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
             completed_task.app_build_version = xform.metadata.app_build_version
             completed_task.status = CompletedTaskStatus.COMPLETED
 
-            to_update.append(completed_task)
-            if not access.last_active or access.last_active < completed_task.date:
-                access.last_active = completed_task.date
-                save_access = True
-
-        if to_update:
-            CompletedTask.objects.bulk_update(
-                to_update,
-                [
+            completed_task.save(
+                update_fields=[
                     "xform_id",
                     "date",
                     "duration",
                     "app_build_id",
                     "app_build_version",
                     "status",
-                ],
+                ]
             )
-            if save_access:
-                access.save(update_fields=["last_active"])
+            updated_tasks = True
+            if not access.last_active or access.last_active < completed_task.date:
+                access.last_active = completed_task.date
+                save_access = True
+
+        if updated_tasks and save_access:
+            access.save(update_fields=["last_active"])
 
 
 def update_completed_learn_date(access, save_access=False):
