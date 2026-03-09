@@ -910,7 +910,7 @@ def test_receiver_deliver_form_with_work_area(
     stub = DeliverUnitStubFactory(id=deliver_unit.slug, work_area_id=work_area.case_id)
 
     form_json = get_form_json(
-        form_block={**stub.json, "case": {"@case_id": work_area.case_id}},
+        form_block={**stub.json},
         domain=deliver_unit.app.cc_domain,
         app_id=deliver_unit.app.cc_app_id,
     )
