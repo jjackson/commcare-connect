@@ -4,6 +4,8 @@ Configurable workflow engine with data-driven definitions, dynamic React UIs (re
 
 Workflows are defined as JSON definitions with associated React component code (render code) stored as LabsRecords. Pipelines provide data extraction from production CSV streams with configurable field mappings and aggregations.
 
+**Full authoring guide:** [WORKFLOW_REFERENCE.md](WORKFLOW_REFERENCE.md) — template anatomy, pipeline schemas, render code contract, actions API, common patterns, building from external specs.
+
 ## Key Files
 
 | File | Purpose |
@@ -36,7 +38,7 @@ Workflows are defined as JSON definitions with associated React component code (
 
 ## Key Patterns
 
-**Render Code:** React components stored as strings in LabsRecords, rendered dynamically in the workflow runner. Components receive `{definition, instance, workers, pipelines, links, actions, onUpdateState}` as props. See the [workflow-templates skill](../../.claude/skills/workflow-templates/SKILL.md) for the full prop API.
+**Render Code:** React components stored as strings in LabsRecords, rendered dynamically in the workflow runner. Components receive `{definition, instance, workers, pipelines, links, actions, onUpdateState}` as props. See [WORKFLOW_REFERENCE.md](WORKFLOW_REFERENCE.md) for the full prop API.
 
 **Pipeline Execution:** Schemas define field extraction from production CSV data. `PipelineDataAccess.execute_pipeline()` converts schema → `AnalysisPipelineConfig` → runs via `AnalysisPipeline` → returns `{rows, metadata}`.
 
