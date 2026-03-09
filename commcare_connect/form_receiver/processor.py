@@ -87,18 +87,6 @@ def get_or_create_learn_module(app, module_data):
     return module
 
 
-def get_or_create_task(app, task_data):
-    task, _ = Task.objects.get_or_create(
-        app=app,
-        slug=task_data["@id"],
-        defaults=dict(
-            name=task_data["name"],
-            description=task_data["description"],
-        ),
-    )
-    return task
-
-
 def process_learn_modules(user: User, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
     """Process learn modules from a form received from CommCare HQ.
 
@@ -138,28 +126,60 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
     """Process task modules from a form received from CommCare HQ."""
     with transaction.atomic():
         access = OpportunityAccess.objects.get(user=user, opportunity=opportunity)
-        completed_tasks = []
         save_access = False
 
-        for task_data in blocks:
-            task = get_or_create_task(app, task_data)
-            completed_task = CompletedTask(
-                task=task,
-                opportunity_access=access,
-                xform_id=xform.id,
-                date=xform.metadata.timeEnd,
-                duration=xform.metadata.duration,
-                app_build_id=xform.build_id,
-                app_build_version=xform.metadata.app_build_version,
-                status=CompletedTaskStatus.COMPLETED,
+        task_slugs = [task_data["@id"] for task_data in blocks if task_data.get("@id")]
+
+        tasks_by_slug = {task.slug: task for task in Task.objects.filter(app=app, slug__in=task_slugs)}
+
+        task_ids = [task.id for task in tasks_by_slug.values()]
+
+        completed_tasks_by_task_id = {
+            completed_task.task_id: completed_task
+            for completed_task in CompletedTask.objects.filter(
+                task_id__in=task_ids, opportunity_access=access, xform_id=None, status=CompletedTaskStatus.ASSIGNED
             )
-            completed_tasks.append(completed_task)
+        }
+
+        to_update = []
+
+        for task_data in blocks:
+            task_slug = task_data.get("@id")
+            if not task_slug:
+                continue
+
+            task = tasks_by_slug.get(task_slug)
+            if not task:
+                continue
+
+            completed_task = completed_tasks_by_task_id.get(task.id)
+            if not completed_task:
+                continue
+
+            completed_task.xform_id = xform.id
+            completed_task.date = xform.metadata.timeEnd
+            completed_task.duration = xform.metadata.duration
+            completed_task.app_build_id = xform.build_id
+            completed_task.app_build_version = xform.metadata.app_build_version
+            completed_task.status = CompletedTaskStatus.COMPLETED
+
+            to_update.append(completed_task)
             if not access.last_active or access.last_active < completed_task.date:
                 access.last_active = completed_task.date
                 save_access = True
 
-        if completed_tasks:
-            CompletedTask.objects.bulk_create(completed_tasks)
+        if to_update:
+            CompletedTask.objects.bulk_update(
+                to_update,
+                [
+                    "xform_id",
+                    "date",
+                    "duration",
+                    "app_build_id",
+                    "app_build_version",
+                    "status",
+                ],
+            )
             if save_access:
                 access.save(update_fields=["last_active"])
 
