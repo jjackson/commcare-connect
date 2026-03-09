@@ -38,7 +38,7 @@ Skip this phase if you already know the CommCare form paths and indicators.
 - **Templates directory**: `commcare_connect/workflow/templates/` — add new `.py` files here
 - **Registry**: `commcare_connect/workflow/templates/__init__.py` — auto-discovers templates
 - **Reference**: `commcare_connect/workflow/WORKFLOW_REFERENCE.md` — full authoring guide
-- **Types**: `commcare_connect/static/js/components/workflow/types.ts` — TypeScript interface definitions
+- **Types**: `components/workflow/types.ts` — TypeScript interface definitions
 - **Examples**: `performance_review.py` (simple), `kmc_longitudinal.py` (complex multi-pipeline)
 
 ## Checklist
