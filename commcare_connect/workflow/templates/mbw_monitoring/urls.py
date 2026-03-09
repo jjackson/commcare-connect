@@ -20,8 +20,9 @@ urlpatterns = [
     # Monitoring session endpoints
     path("api/session/save-flw-result/", views.MBWSaveFlwResultView.as_view(), name="save_flw_result"),
     path("api/session/complete/", views.MBWCompleteSessionView.as_view(), name="complete_session"),
-    # Dashboard snapshot retrieval
+    # Dashboard snapshot retrieval and saving
     path("api/snapshot/", views.MBWSnapshotView.as_view(), name="snapshot"),
+    path("api/save-snapshot/", views.MBWSaveSnapshotView.as_view(), name="save_snapshot"),
     # OAuth token status check
     path("api/oauth-status/", views.MBWOAuthStatusView.as_view(), name="oauth_status"),
     # FLW API for workflow template render_code

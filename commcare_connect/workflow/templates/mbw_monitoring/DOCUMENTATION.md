@@ -40,7 +40,7 @@ The dashboard runs within the **Workflow module** of Connect Labs. The UI is a R
 
 - **Render code pattern**: The entire dashboard UI (~1,860 lines of JSX) lives in a Python string (`RENDER_CODE`), transpiled by Babel in the browser. Only `React` is available as a global - no imports. All declarations use `var` (not `const`/`let`) for Babel compatibility.
 - **Single SSE connection**: All three tabs load data from one streaming endpoint, avoiding redundant API calls
-- **Client-side filtering**: Raw data is sent once; FLW and mother filtering happens entirely in the browser via React state
+- **Hybrid filtering**: Some filters (Visit Status, App Version) are server-side and trigger an SSE reload with updated pipeline data; others (FLW, Mother, Date) are client-side and operate on already-fetched data via React state. Server-side filters require clicking "Apply" and state is persisted in `sessionStorage` to survive OAuth redirects.
 - **Two-layer caching**: Pipeline-level cache (Redis) for visit form data + Django cache for CCHQ form/case data
 - **Tolerance-based cache validation**: Caches are accepted if they meet count, percentage, or time-based tolerance thresholds
 - **No database writes**: All data is fetched from external APIs (Connect Production + CommCare HQ) and cached transiently. Workflow state is persisted via the LabsRecord API.
@@ -70,7 +70,7 @@ User Browser
     |
     +-- SSE /custom_analysis/mbw_monitoring/stream/
     |   +-- MBWMonitoringStreamView (streams all dashboard data)
-    |       +-- Step 1: AnalysisPipeline -> Connect API (visit forms, 12 fields)
+    |       +-- Step 1: AnalysisPipeline -> Connect API (visit forms, 13 fields)
     |       +-- Step 2: Connect API -> FLW names
     |       +-- Step 3: GPS analysis (Haversine distances)
     |       +-- Step 4a: CCHQ Form API -> Registration forms (mother metadata)
@@ -86,6 +86,11 @@ User Browser
     |
     +-- GET /custom_analysis/mbw_monitoring/api/gps/<username>/
     |   +-- MBWGPSDetailView (JSON drill-down for GPS visits)
+    |   +-- Params: start_date, end_date (default: today-30 to today),
+    |   |          opportunity_id, app_version_op, app_version_val
+    |
+    +-- POST /custom_analysis/mbw_monitoring/api/save-snapshot/
+    |   +-- MBWSaveSnapshotView (save dashboard snapshot with GPS visits)
     |
     +-- GET /custom_analysis/mbw_monitoring/api/opportunity-flws/
     |   +-- OpportunityFLWListAPIView (FLW list with audit history)
@@ -214,7 +219,7 @@ interface WorkflowProps {
   workers: WorkerData[];           // FLW list from Connect API
   pipelines: Record<string, PipelineResult>;  // Pipeline data keyed by alias (not used by MBW)
   links: LinkHelpers;              // URL helpers: auditUrl(), taskUrl()
-  actions: ActionHandlers;         // 16 action methods (see Action Handler System section)
+  actions: ActionHandlers;         // 20 action methods (see Action Handler System section)
   onUpdateState: (newState: Record<string, unknown>) => Promise<void>;  // Persist state changes
 }
 ```
@@ -254,16 +259,29 @@ interface WorkflowProps {
 After the user selects FLWs and enters the dashboard step, the render code opens an SSE connection:
 
 ```javascript
-var eventSource = new EventSource(
-    '/custom_analysis/mbw_monitoring/stream/?' + params.toString()
-);
+var params = new URLSearchParams({
+    run_id: String(instance.id),
+    start_date: startStr,   // today - 30 days
+    end_date: endStr         // today
+});
+if (instance.opportunity_id) {
+    params.set('opportunity_id', String(instance.opportunity_id));
+}
+if (appliedAppVersionOp && appliedAppVersionVal) {
+    params.set('app_version_op', appliedAppVersionOp);
+    params.set('app_version_val', appliedAppVersionVal);
+}
+var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
+var es = new EventSource(url);
 ```
+
+**Note**: Including the `opportunity_id` parameter avoids 302 redirects from `LabsContextMiddleware`. If omitted, EventSource handles the redirect transparently, but the extra round-trip adds latency.
 
 The stream view executes 7 steps, yielding progress messages at each stage:
 
 | Step | Data Source | What It Fetches | Cache |
 |------|-----------|-----------------|-------|
-| 1 | Connect API via AnalysisPipeline | Visit form data (13 FieldComputations: GPS, case IDs, form names, dates, parity, etc.) | Pipeline cache (Redis, config-hash based) |
+| 1 | Connect API via AnalysisPipeline | Visit form data (13 FieldComputations: GPS, case IDs, form names, dates, parity, etc.). Filtered by `status_filter` param (default: approved only) via SQL `WHERE status IN (...)` | Pipeline cache (Redis, config-hash based; filter changes reuse cache) |
 | 2 | Connect API | Active FLW usernames + display names | In-memory |
 | 3 | In-memory | GPS metrics (Haversine distances, daily travel) | None (computed) |
 | 4a | CCHQ Form API v1 | Registration forms -> mother metadata (name, age, phone, eligibility, EDD, etc.) | Django cache (1hr) |
@@ -272,17 +290,58 @@ The stream view executes 7 steps, yielding progress messages at each stage:
 | 6 | In-memory | Overview metrics (merge follow-up rate, GS score, GPS, quality metrics) | None (computed) |
 | 7 | Connect API (audit sessions + workflow runs) | FLW Performance by assessment status (latest status per FLW + aggregated case metrics) | None (computed) |
 
-The final SSE event contains the combined payload for all four tabs, which is stored in React state via `setDashData()`.
+#### Sectioned SSE Streaming (OOM Prevention)
+
+Data is NOT sent as one large final payload. Instead, the backend sends 3 separate `data_section` SSE events to prevent OOM on large opportunities (50K+ visits):
+
+1. **GPS section** — `gps_data` (FLW summaries without visits, date range, flag threshold, all_coordinates for aggregate map)
+2. **Follow-up section** — `followup_data` (per-FLW/per-mother metrics, visit status distribution)
+3. **Overview + Performance section** — `overview_data`, `performance`, monitoring session metadata
+
+Each section is freed from server memory immediately after sending (`del` + `gc.collect()`). The frontend accumulates sections in `sseSectionsRef.current` and merges them when the final `"Complete!"` event arrives:
+
+```javascript
+es.onmessage = function(event) {
+    var parsed = JSON.parse(event.data);
+    if (parsed.data_section) {
+        Object.assign(sseSectionsRef.current, parsed.data_section);
+    }
+    if (parsed.message === 'Complete!' && parsed.data) {
+        var fullData = Object.assign({}, sseSectionsRef.current, parsed.data);
+        sseSectionsRef.current = {};
+        setDashData(fullData);
+    }
+};
+```
+
+#### Additional OOM Optimizations
+
+- **Stream-parse-and-store**: CSV downloads go to a temp file (0 bytes in Python), parsed in 1000-row chunks, stored to DB immediately. Peak memory: ~50 MB instead of ~2 GB.
+- **Intermediate structure freeing**: `del` statements release large dicts after each SSE section is sent.
+- **`skip_raw_store=True`**: Prevents slim dicts (no form_json) from overwriting full form_json already stored to DB during streaming.
+- **GPS visits excluded from SSE**: `serialize_flw_summary()` does NOT include a `visits` key. GPS visit details are lazy-loaded via `/api/gps/<username>/` when the user drills down.
 
 ### Dashboard Data Snapshotting
 
-After the first successful SSE data load, the backend saves a snapshot of all computed dashboard data to the workflow run record at `run.data["snapshot"]`. On subsequent opens, the frontend checks for a snapshot first via `GET /api/snapshot/?run_id=X` and renders immediately if found, skipping SSE streaming entirely.
+On subsequent page opens, the frontend checks for a snapshot first via `GET /api/snapshot/?run_id=X&opportunity_id=Y` and renders immediately if found, skipping SSE streaming entirely.
+
+**Saving snapshots:**
+- **Manual**: A "Save Snapshot" button in the tab bar triggers `POST /api/save-snapshot/`. The backend calls `_rebuild_gps_with_visits()` to embed GPS visit details from `ComputedVisitCache` (local SQL, not a pipeline re-run), then saves to `run.data["snapshot"]`.
+- **Auto on Complete**: When the user clicks "Complete Audit", a snapshot is auto-saved before marking the run complete.
+
+**`_rebuild_gps_with_visits()` (views.py):** Queries the `ComputedVisitCache` via `SQLCacheManager` to re-read GPS visits from the local SQL computed cache. This is a fast local DB query (~20s) instead of a full pipeline re-download (~8 min). If the computed cache is cold/expired, it skips visit embedding — the frontend falls back to API lazy-loading on drill-down.
 
 **Lifecycle-based size management:**
 - **In-progress runs**: Full snapshot including `followup_data.flw_drilldown` (~2.2MB for 100 FLWs). Assessors need drill-down access while working.
 - **Completed runs**: On completion, `flw_drilldown` is stripped from the snapshot (~200KB). Historical reference only needs summary tables.
 
-**Refresh**: A "Refresh Data" button in the tab bar forces a new SSE connection, re-computes all metrics, and saves a new snapshot.
+**Data freshness indicator:** The tab bar always shows "Data from: \<timestamp\>" with a colored badge:
+- **(live)** in green — data came from the SSE stream (fresh)
+- **(snapshot)** in amber — data loaded from or saved as a snapshot
+
+**Completed audit behavior:**
+- "Save Snapshot" and "Refresh Data" buttons are hidden when `isCompleted` (i.e., `instance.status === 'completed'`)
+- "Complete Audit" button is replaced with a "Completed" badge
 
 **Storage**: Snapshot is stored at `run.data["snapshot"]`, a sibling to `run.data["state"]`, so `update_run_state()` shallow-merge won't interfere.
 
@@ -321,7 +380,8 @@ The final SSE payload (`data.data`) contains:
     "total_flagged": 12,
     "date_range_start": "2025-01-01",
     "date_range_end": "2025-01-31",
-    "flw_summaries": [...]
+    "flw_summaries": [...],  // Each summary includes cases_with_revisits and median_meters_per_visit
+    "all_coordinates": [...]  // Array of {lat, lng, username, entity, date, flagged} for aggregate map
   },
   "followup_data": {
     "total_cases": 300,
@@ -380,7 +440,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 - Interactive legend below the chart: click categories to toggle visibility on/off (dimmed + strike-through when hidden)
 - Bar heights proportional to count (tallest bar = full height, others scaled)
 
-**FLW Table Columns** (13 columns, toggleable via Column Selector):
+**FLW Table Columns** (14 columns, toggleable via Column Selector):
 
 | Column | Data Source | Description |
 |--------|-----------|-------------|
@@ -390,9 +450,10 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | Post-Test | TBD | Post-test attempts (placeholder, shows "--") |
 | Follow-up Rate | Follow-up analysis | % of visits due 5+ days ago that are completed, among eligible mothers |
 | Eligible 5+ | Drill-down data | Eligible mothers still on track (5+ completed OR <=1 missed). Color: green >=70%, yellow 50-69%, red <50% |
-| Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother |
+| Revisit Dist. | GPS analysis | Median haversine distance (km) between revisits to the same mother, with "(N)" denominator showing cases with 2+ GPS visits |
 | Meter/Visit | GPS analysis | Median meters traveled per visit (configurable app version filter via Filter bar) |
 | Minute/Visit | GPS analysis | Median minutes per visit |
+| Dist. Ratio | GPS analysis | Revisit distance x 1000 / meter per visit. Higher values may indicate suspicious patterns |
 | Phone Dup % | Quality metrics | % of mothers sharing duplicate phone numbers |
 | ANC = PNC | Quality metrics | Count of mothers where ANC and PNC completion dates match |
 | Parity | Quality metrics | Parity value concentration (% duplicate + mode) |
@@ -401,7 +462,7 @@ Provides a bird's-eye view of each FLW's performance by merging data from all so
 | % EBF | Pipeline (bf_status) | % of FLW's postnatal visits reporting exclusive breastfeeding. Color: green 50-85%, yellow 31-49% or 86-95%, red 0-30% or 96-100%. Red flag in OCS prompt when in red zone. |
 | Actions | Action handlers | Assessment buttons, notes, filter, task creation (locked, always visible) |
 
-**Column Selector**: Dropdown next to "FLW Overview" title showing N/16 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
+**Column Selector**: Dropdown next to "FLW Overview" title showing N/17 visible columns. Toggle individual columns, "Show All", or "Minimal" presets.
 
 **Actions per FLW** (Overview tab only - other tabs have Filter only):
 
@@ -418,7 +479,7 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 
 **Summary Cards**: Total Visits, Flagged Visits, Date Range, Flag Threshold (5 km)
 
-**FLW Table Columns**:
+**FLW Table Columns** (all columns are sortable):
 
 | Column | Description |
 |--------|-------------|
@@ -427,13 +488,17 @@ Identifies potential fraud or GPS anomalies by analyzing distances between conse
 | With GPS | Count + percentage |
 | Flagged | Visits exceeding 5km threshold (highlighted red) |
 | Unique Cases | Distinct mother_case_id count |
-| Avg Case Dist | Average distance between visits to same case (km) |
-| Max Case Dist | Maximum distance (red if >5km) |
+| Revisit Dist. | Median haversine distance (km) between revisits to the same mother, with "(N)" denominator showing cases with 2+ GPS visits |
+| Max Revisit Dist. | Maximum revisit distance (red if >5km) |
+| Meter/Visit | Median haversine distance (m) between consecutive visits to different mothers on the same day. Color-coded: green >=1000m, yellow >=100m, red <100m |
+| Dist. Ratio | Revisit distance x 1000 / meter per visit. Higher values may indicate suspicious patterns (close revisits but far daily travel, or vice versa) |
 | Trailing 7 Days | Sparkline bar chart of daily travel distance |
+
+**Aggregate Map**: A collapsible map at the top of the GPS tab showing all FLW visits with color-coded pins (HSL hue rotation per FLW). Uses MarkerCluster for performance with large datasets. Each popup shows FLW name, entity, date, and flagged status. Collapsed by default — click to expand. A legend below the map shows the FLW-to-color mapping.
 
 **Actions per FLW**: Filter button, Details drill-down button (no assessment or task buttons)
 
-**Drill-Down**: Clicking "Details" on a FLW row expands an inline panel showing individual visit records with date, form name, entity, GPS coordinates, distance from previous visit, and flagged status.
+**Drill-Down**: Clicking "Details" on a FLW row expands an inline panel showing individual visit records with date, form name, entity, GPS coordinates, revisit distance (haversine distance from previous visit to the same mother), and flagged status.
 
 ### Follow-Up Rate Tab
 
@@ -473,11 +538,11 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 | Total Cases | Total registered mothers across all FLWs in the group |
 | Eligible at Reg | Mothers marked eligible for full intervention bonus at registration |
 | Still Eligible | Mothers with 5+ completed visits OR <=1 missed visits |
-| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=70%, yellow 50-69%, red <50%) |
-| % <=1 Missed | Cases with 0 or 1 missed visits / all cases |
-| % 4 Visits On Track | Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
-| % 5 Visits Complete | Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
-| % 6 Visits Complete | Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
+| % Still Eligible | Still Eligible / Eligible at Reg (color: green >=85%, yellow 50-84%, red <50%) |
+| % <=1 Missed | Eligible cases with 0 or 1 missed visits / eligible cases |
+| % 4 Visits On Track | Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer) |
+| % 5 Visits Complete | Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer) |
+| % 6 Visits Complete | Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer) |
 
 **Totals Row**: Aggregated totals across all status groups.
 
@@ -491,7 +556,7 @@ Aggregated case metrics grouped by each FLW's latest known assessment status. Co
 
 Used for: Visit form data, FLW names, opportunity metadata
 
-- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 12 fields per visit using FieldComputations (3 use `extractor`, 9 use `path`).
+- **Visit forms**: Fetched via `AnalysisPipeline` using `MBW_GPS_PIPELINE_CONFIG` from `pipeline_config.py`. Extracts 13 fields per visit using FieldComputations (all path-based; `gps_location` uses a two-path COALESCE for dict/string handling).
 - **FLW names**: `fetch_flw_names()` from `labs/analysis/data_access.py`
 - **Opportunity metadata**: `GET /export/opportunity/{id}/` -> extracts `cc_domain` and `cc_app_id` from `deliver_app` or `learn_app`
 
@@ -526,7 +591,7 @@ Used for: Dynamic xmlns discovery
 Pipeline Visit Forms (Connect API)
     |
     +-- username ----------> FLW Names (Connect API)
-    +-- GPS coordinates --> GPS Analysis (Haversine, meter/visit, min/visit)
+    +-- GPS coordinates --> GPS Analysis (Haversine, meter/visit, min/visit, dist. ratio, aggregate map)
     +-- form_name ---------> Visit type normalization (FORM_NAME_TO_VISIT_TYPE)
     +-- mother_case_id ----> Mother-to-FLW mapping
     +-- parity ------------> Quality metrics (from ANC Visit rows)
@@ -555,21 +620,21 @@ The `MBW_GPS_PIPELINE_CONFIG` in `pipeline_config.py` defines 13 FieldComputatio
 
 | Name | Type | Path / Extractor | Notes |
 |------|------|-----------------|-------|
-| `gps_location` | extractor | `extract_gps_location(visit_data)` | Reads `form_json.form.meta.location` |
+| `gps_location` | paths | `form.meta.location.#text`, `form.meta.location` | COALESCE: dict `#text` key or string fallback |
 | `case_id` | path | `form.case.@case_id` | |
 | `mother_case_id` | path | `form.parents.parent.case.@case_id` | |
 | `form_name` | path | `form.@name` | Has trailing space variant ("ANC Visit ") |
-| `visit_datetime` | extractor | `extract_visit_datetime(visit_data)` | Reads `form_json.form.meta.timeEnd` |
+| `visit_datetime` | path | `form.meta.timeEnd` | ISO datetime string |
 | `entity_id_deliver` | paths | `form.mbw_visit.deliver.entity_id` (+ alt) | |
 | `entity_name` | paths | `form.mbw_visit.deliver.entity_name` (+ alt) | |
 | `parity` | path | `form.confirm_visit_information.parity__of_...` | From ANC forms only |
 | `anc_completion_date` | path | `form.visit_completion.anc_completion_date` | From ANC forms only |
 | `pnc_completion_date` | path | `form.pnc_completion_date` | From PNC forms only |
 | `baby_dob` | path | `form.capture_the_following_birth_details.baby_dob` | From PNC forms only |
-| `app_build_version` | extractor | `extract_app_build_version(visit_data)` | Integer from `form_json.form.meta.app_build_version` |
+| `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | Integer; SQL: regex-guarded `::INTEGER` cast |
 | `bf_status` | paths | `form.feeding_history.{pnc,oneweek,onemonth,threemonth,sixmonth}_current_bf_status` | Multi-choice, space-separated; "ebf" = exclusive breastfeeding. From postnatal forms only (not ANC). |
 
-**Important**: Three fields (`gps_location`, `visit_datetime`, `app_build_version`) use the `extractor` parameter instead of `path+transform`. This is required because the PythonRedis backend cannot pass the full visit dict to transform functions - it only passes the extracted path value. The `extractor` parameter receives the full `visit._data` dict directly.
+**Important**: `gps_location` uses a two-path COALESCE (`form.meta.location.#text`, `form.meta.location`) because CommCare's XML-to-JSON conversion produces either a dict (`{"#text": "lat lon alt acc", ...}`) or a plain string for `form.meta.location`. The COALESCE extracts `#text` from the dict case, falling back to the string case — all in SQL, no Python post-processing. All 13 fields are now path-based; no extractors remain.
 
 ---
 
@@ -831,7 +896,12 @@ Note: "Suspended" is a **label only** - it does NOT trigger any action on Connec
 | GS Forms | CCHQ Gold Standard forms | `mbw_gs_forms:{domain}` | 1hr | Per domain |
 | Metadata Cache | Opportunity metadata | `mbw_opp_metadata:{opp_id}` | 1hr | Per opportunity_id |
 | HQ Case Cache | Visit + mother cases | `mbw_visit_cases:{domain}` | 1hr prod / 24hr dev | Per domain |
+| Computed Visit Cache | Visit-level computed fields (GPS, case IDs, dates, etc.) | `opportunity_id` + `config_hash` | Configurable TTL | Keyed by opportunity_id + config_hash; username as secondary index for filtered queries |
 | Dashboard Snapshot | Computed dashboard metrics | `run.data["snapshot"]` | Permanent (updated on refresh) | Per run |
+
+### Filter-Aware Caching
+
+The pipeline config hash **excludes filters** (via `get_config_hash()` in `utils.py`), so one cached dataset serves multiple filtered queries. When a config has filters (e.g., `status_filter`), the cache tolerance check uses `expected_count=0`, accepting any non-expired cache. This means filter changes reuse existing cached data instantly — only the SQL `WHERE` clause changes. The `expires_at` TTL still guards against stale data. Force refresh (`?refresh=1`) bypasses the cache entirely regardless of filters.
 
 ### Tolerance-Based Cache Validation
 
@@ -902,9 +972,22 @@ Since the render code is a string transpiled by Babel in the browser:
 6. **Inline styles for dynamic values** - Tailwind classes work but dynamic CSS needs `style={{}}`
 7. **No TypeScript** - plain JavaScript only
 
-### Client-Side Filtering
+### Filtering
 
-All filtering happens in the browser without additional API calls:
+The dashboard uses two types of filters:
+
+#### Server-Side Filters (trigger SSE reload)
+
+These filters modify the SSE stream URL and cause a new server-side query:
+
+- **Visit Status filter**: Filters by Connect visit approval status (Approved, Pending, Rejected, Over Limit). Default: Approved only. Applied server-side via pipeline SQL `WHERE status IN (...)`. Changing this filter triggers a new SSE stream but reuses the cached pipeline data (no re-download from Connect). State persisted in `sessionStorage` to survive OAuth redirects.
+- **App Version filter** (GPS only): Operator (>, >=, =, <=, <) + version number. Default: > 14. Applied server-side to GPS visit data.
+
+Both require clicking "Apply" to take effect. "Reset" restores defaults (Approved only, > 14).
+
+#### Client-Side Filters (no API calls)
+
+These filters happen entirely in the browser:
 
 - **FLW filter**: Multi-select listbox. Filters all three tabs by `username` set membership
 - **Mother filter**: Multi-select listbox (populated from drilldown data). Filters follow-up tab
@@ -987,21 +1070,26 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | SSE streaming with progress | All | Real-time loading messages during data loading |
 | FLW filter (multi-select) | All | Filter by FLW name across all tabs |
 | Mother filter (multi-select) | Follow-Up | Filter by mother name |
-| Column selector | Overview | Toggle 16 columns with Show All / Minimal presets |
-| Column sorting | All | Click column headers to sort asc/desc |
+| Column selector | Overview | Toggle 17 columns with Show All / Minimal presets |
+| Column sorting | All | Click column headers to sort asc/desc (all GPS tab columns are now sortable) |
 | Horizontal table scrolling | Overview | Scroll wrapper with `width: 0; minWidth: 100%` pattern |
-| GPS drill-down | GPS | Individual visit GPS details |
+| GPS drill-down | GPS | Click "Details" sets `expandedGps` state; `useEffect([expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal])` checks for embedded visits (snapshot) first, then lazy-loads from `/api/gps/<username>/` |
 | Follow-up drill-down | Follow-Up | Per-mother visit details with metadata |
 | Visit status distribution | Overview | Per-visit-type stacked bar chart (6 bars) with toggleable legend and "Not Due Yet" category |
 | Per-visit-type breakdown | Follow-Up | ANC through Month 6 mini columns |
 | Trailing 7-day sparkline | GPS | Daily travel distance bar chart |
 | GPS flag threshold (5km) | GPS | Red highlighting for suspicious distances |
+| Aggregate GPS map | GPS | Collapsible map at top of tab showing all FLW visits with color-coded pins (HSL hue rotation), MarkerCluster for performance, FLW legend below map |
+| Meter/Visit column | GPS, Overview | Median haversine distance (m) between consecutive visits to different mothers on same day. Color-coded: green >=1000m, yellow >=100m, red <100m |
+| Dist. Ratio column | GPS, Overview | Revisit distance x 1000 / meter per visit — higher values may indicate suspicious patterns |
+| Revisit denominator | GPS, Overview | Revisit Dist. now shows "(N)" where N = cases with 2+ GPS visits |
 | Follow-up rate (business def) | Follow-Up | Eligibility + grace period filtered rate |
 | GS Score from CCHQ | Overview | First Gold Standard score from supervisor app |
 | Quality/fraud metrics | Overview | Phone dup, parity/age concentration, ANC=PNC, age=reg |
 | 3-option FLW assessment | Overview | Eligible for Renewal / Probation / Suspended with progress |
 | Task creation | Overview | Create task for FLW with OCS integration |
 | Inline task management | Overview | Expand FLW row to view AI conversation, update status, close task with outcome |
+| Visit Status filter | Filter Bar | Server-side filter by Connect approval status (Approved, Pending, Rejected, Over Limit); default Approved only; reuses cached pipeline data on filter change; state persisted in `sessionStorage` to survive OAuth redirects |
 | App version filter (GPS) | Filter Bar | User-configurable operator (>, >=, =, <=, <) + version number for GPS data filtering; default > 14; persisted in run state |
 | Template sync | - | Sync render code from template.py to DB via `?sync=true` |
 | Template registry | - | Auto-discovery of workflow templates |
@@ -1009,7 +1097,11 @@ Django uses `CompressedManifestStaticFilesStorage` (whitenoise). The `{% static 
 | Cross-app xmlns discovery | Backend | GS form xmlns found by searching all apps in domain |
 | Tolerance-based caching | Backend | 3-tier cache validation (count, percentage, time) |
 | In-page OCS Task + AI modal | Overview | Auto-creates task with pre-filled fields, opens AI bot config with auto-populated prompt based on FLW performance data and red flag indicators |
-| Dashboard data snapshotting | All | Saves computed metrics after first load; instant reopen from snapshot; "Refresh Data" button for current data |
+| Dashboard data snapshotting | All | "Save Snapshot" button saves metrics + GPS visits (from ComputedVisitCache); instant reopen from snapshot; "Refresh Data" forces new SSE stream |
+| Data freshness indicator | All | "Data from: \<time\> (live/snapshot)" in tab bar — green for SSE, amber for snapshot |
+| Completed audit UX | All | Save Snapshot and Refresh Data buttons hidden on completed audits |
+| Sectioned SSE streaming | Backend | Data sent in 3 separate `data_section` events to prevent OOM; each freed after sending |
+| Stream-parse-and-store | Backend | CSV downloads go to temp file, parsed in 1000-row chunks, stored to DB immediately; peak ~50 MB |
 | GS App ID configuration | FLW Selection | Configurable Gold Standard app ID with default value; removed download-all-forms fallback |
 | Connect ID column | FLW Selection | Shows worker Connect ID in the FLW selection table |
 | Clickable selection rows | FLW Selection | Entire row toggles checkbox, not just the small checkbox |
@@ -1078,7 +1170,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 |------|---------|
 | `template.py` | DEFINITION dict + RENDER_CODE JSX string (~1,860 lines) + TEMPLATE export |
 | `__init__.py` | Registers template in workflow template registry |
-| `views.py` | SSE streaming endpoint + MBW API views (GPS detail, FLW results, session) |
+| `views.py` | SSE streaming endpoint + MBW API views (GPS detail, snapshot save/load, FLW results, session). Key functions: `_rebuild_gps_with_visits()` (ComputedVisitCache query for snapshot fidelity) |
 | `data_fetchers.py` | CCHQ form fetching (registration + GS), case fetching, caching |
 | `followup_analysis.py` | Visit status calculation, per-FLW/per-mother aggregation, quality metrics |
 | `gps_analysis.py` | GPS metrics computation (Haversine, flagging, daily travel) |
@@ -1149,13 +1241,13 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 | GS Score | `form.checklist_percentage` | 0-100 integer |
 | Visit datetime | `form.meta.timeEnd` | For oldest-first sorting |
 
-### Pipeline FieldComputation Extractors
+### Pipeline FieldComputation — Special Extraction
 
-| Field | Source in `visit._data` | Notes |
-|-------|------------------------|-------|
-| `gps_location` | `form_json.form.meta.location.#text` or string | |
-| `visit_datetime` | `form_json.form.meta.timeEnd` | ISO datetime |
-| `app_build_version` | `form_json.form.meta.app_build_version` | Parsed to integer |
+| Field | Mode | Source | Notes |
+|-------|------|--------|-------|
+| `gps_location` | paths | `form.meta.location.#text`, `form.meta.location` | COALESCE: dict `#text` key or string fallback |
+| `visit_datetime` | path | `form.meta.timeEnd` | Direct JSONB extraction |
+| `app_build_version` | path+transform | `form.meta.app_build_version` via `_safe_parse_int` | SQL: regex-guarded `::INTEGER` cast |
 
 ---
 
@@ -1163,7 +1255,7 @@ All files under `commcare_connect/workflow/templates/mbw_monitoring/`:
 
 ### Action Buttons Not Working (Missing Action Handlers)
 
-**Symptom**: Clicking assessment/task/complete buttons does nothing. Console shows fewer than 16 action keys.
+**Symptom**: Clicking assessment/task/complete buttons does nothing. Console shows fewer than 20 action keys.
 
 **Cause**: After `npm run dev`, `collectstatic` was not run. Django's manifest still points to the old bundle.
 
@@ -1209,3 +1301,28 @@ Also apply `min-w-0` on React flex items in `workflow-runner.tsx` and `overflow-
 **Cause**: The SSE endpoint at `/custom_analysis/mbw_monitoring/stream/` requires both Connect OAuth and CommCare OAuth tokens.
 
 **Fix**: Ensure both OAuth tokens are valid in the session. Check server logs for 401/403 errors.
+
+### OOM / "Connection Lost" on Large Opportunities
+
+**Symptom**: Dashboard crashes mid-load on opportunities with 40K+ visits. Server logs show the SSE stream starts but never completes. Container may restart (OOM kill).
+
+**Cause**: Without the streaming optimizations, loading 50K+ visits (~700 MB CSV) causes Python memory to spike above container limits (~1 GB).
+
+**Mitigations** (already implemented):
+1. **Stream-parse-and-store**: CSV goes to temp file, parsed in 1000-row chunks. See `labs/analysis/backends/sql/backend.py:_parse_and_store_streaming()`.
+2. **Sectioned SSE**: Data sent in 3 separate sections, each freed after sending. See `views.py` SSE streaming logic.
+3. **Intermediate `del` statements**: Large dicts freed with `del` + `gc.collect()` between pipeline stages.
+4. **GPS visits excluded from SSE**: `serialize_flw_summary()` omits `visits` key; drill-down lazy-loads from API.
+
+**Debug**: Check RSS logging in server output — lines like `[MBW Dashboard] RSS at after pipeline download: 991.0 MB`. If RSS exceeds container memory, the OOM kill is the cause.
+
+### GPS Drill-Down Not Working
+
+**Symptom**: Clicking "Details" on GPS tab shows spinner that never resolves, or shows a render error.
+
+**Cause**: The GPS drill-down uses a `React.useEffect([expandedGps])` that fetches from `/api/gps/<username>/`. Common issues:
+- Missing `opportunity_id` in the URL → 302 redirect from `LabsContextMiddleware` → fetch fails silently
+- Undefined variables in the `useEffect` callback → `ReferenceError` stops execution
+- Computed cache cold/expired → API returns empty results
+
+**Fix**: Check browser Network tab for the `/api/gps/` request. Check server logs for the GPS detail endpoint. Verify `opportunity_id` is in the fetch URL params.

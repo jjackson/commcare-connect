@@ -1736,6 +1736,8 @@ class PipelineDataAccess(BaseDataAccess):
                     transform=get_transform(field_def.get("transform")),
                     description=field_def.get("description", ""),
                     default=field_def.get("default"),
+                    filter_path=field_def.get("filter_path", ""),
+                    filter_value=field_def.get("filter_value", ""),
                 )
             )
 

@@ -545,6 +545,16 @@ function createActionHandlers(csrfToken: string): ActionHandlers {
       }
     },
 
+    getAISessions: async (taskId: number): Promise<Record<string, unknown>> => {
+      try {
+        const response = await fetch(`/tasks/${taskId}/ai/sessions/`);
+        const data = await response.json();
+        return data;
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : 'Failed to fetch AI sessions' };
+      }
+    },
+
     updateTask: async (taskId: number, data: Record<string, unknown>): Promise<Record<string, unknown>> => {
       try {
         const response = await fetch(`/tasks/api/${taskId}/update/`, {
@@ -724,6 +734,12 @@ function WorkflowRunner({
         'opportunity_id',
         String(initialData.opportunity_id),
       );
+    }
+    // Forward tolerance param from page URL to pipeline stream
+    const pageParams = new URLSearchParams(window.location.search);
+    const tolerance = pageParams.get('tolerance');
+    if (tolerance) {
+      url.searchParams.set('tolerance', tolerance);
     }
 
     const eventSource = new EventSource(url.toString());

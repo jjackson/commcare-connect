@@ -38,11 +38,15 @@ def _jsonb_path_to_sql(path: str, column: str = "form_json") -> str:
 
 
 def _paths_to_coalesce_sql(paths: list[str], column: str = "form_json") -> str:
-    """Convert multiple paths to a COALESCE expression."""
+    """Convert multiple paths to a COALESCE expression.
+
+    Wraps each path in NULLIF(..., '') so empty strings are treated as NULL
+    and COALESCE falls through to the next path.
+    """
     if not paths:
         return "NULL"
 
-    sql_paths = [_jsonb_path_to_sql(p, column) for p in paths]
+    sql_paths = [f"NULLIF({_jsonb_path_to_sql(p, column)}, '')" for p in paths]
     return f"COALESCE({', '.join(sql_paths)})"
 
 
@@ -160,17 +164,27 @@ def _transform_to_sql(field: FieldComputation | HistogramComputation, value_expr
         return value_expr
 
 
-def _aggregation_to_sql(agg: str, value_expr: str, field_name: str) -> str:
-    """Convert aggregation type to SQL aggregate function."""
+def _aggregation_to_sql(
+    agg: str, value_expr: str, field_name: str, filter_path: str = "", filter_value: str = ""
+) -> str:
+    """Convert aggregation type to SQL aggregate function.
+
+    Args:
+        agg: Aggregation type (count, sum, avg, first, last, list, count_distinct, etc.)
+        value_expr: SQL expression for the value being aggregated
+        filter_path: Optional dot-notation path for a FILTER (WHERE ...) clause
+        filter_value: Optional value to compare against in the filter clause
+    """
     if agg == "count":
-        return f"COUNT({value_expr})"
+        base = f"COUNT({value_expr})"
     elif agg == "sum":
-        return f"SUM({value_expr})"
+        base = f"SUM({value_expr})"
     elif agg == "avg":
-        return f"AVG({value_expr})"
+        base = f"AVG({value_expr})"
     elif agg == "first":
         # Use subquery to get value from row with earliest visit_date
         # This properly implements "first" semantics
+        # Note: FILTER not supported for subquery-based aggregations
         return f"""(
             SELECT sub.val FROM (
                 SELECT {value_expr} as val, visit_date
@@ -182,11 +196,36 @@ def _aggregation_to_sql(agg: str, value_expr: str, field_name: str) -> str:
                 LIMIT 1
             ) sub
         )"""
+    elif agg == "count_distinct" or agg == "count_unique":
+        base = f"COUNT(DISTINCT {value_expr})"
+    elif agg == "last":
+        # Use subquery to get value from row with latest visit_date
+        # Mirrors "first" but with DESC ordering
+        # Note: FILTER not supported for subquery-based aggregations
+        return f"""(
+            SELECT sub.val FROM (
+                SELECT {value_expr} as val, visit_date
+                FROM labs_raw_visit_cache sub
+                WHERE sub.opportunity_id = labs_raw_visit_cache.opportunity_id
+                  AND sub.username = labs_raw_visit_cache.username
+                  AND {value_expr} IS NOT NULL
+                ORDER BY visit_date DESC
+                LIMIT 1
+            ) sub
+        )"""
     elif agg == "list":
         # Aggregate as array, will be converted to Python list
+        # Note: list already has its own FILTER clause, skip per-field filter
         return f"ARRAY_AGG({value_expr}) FILTER (WHERE {value_expr} IS NOT NULL)"
     else:
-        return f"MIN({value_expr})"
+        base = f"MIN({value_expr})"
+
+    # Apply per-field FILTER clause if both filter_path and filter_value are provided
+    if filter_path and filter_value:
+        filter_sql = _jsonb_path_to_sql(filter_path)
+        base = f"{base} FILTER (WHERE {filter_sql} = '{filter_value}')"
+
+    return base
 
 
 def _build_histogram_fields(hist: HistogramComputation, opportunity_id: int) -> list[tuple[str, str]]:
@@ -276,7 +315,13 @@ def build_flw_aggregation_query(
             agg_expr = f"ARRAY_AGG({transformed_expr}) FILTER (WHERE {transformed_expr} IS NOT NULL)"
             select_parts.append(f"{agg_expr} as {field.name}")
         else:
-            agg_expr = _aggregation_to_sql(field.aggregation, transformed_expr, field.name)
+            agg_expr = _aggregation_to_sql(
+                field.aggregation,
+                transformed_expr,
+                field.name,
+                filter_path=field.filter_path,
+                filter_value=field.filter_value,
+            )
             select_parts.append(f"{agg_expr} as {field.name}")
 
     # Add histogram fields
@@ -360,6 +405,9 @@ def build_visit_extraction_query(
     # Check if any field needs full visit context (form_json, images)
     needs_full_context = False
     for field in config.fields:
+        if field.extractor and callable(field.extractor):
+            needs_full_context = True
+            break
         if field.transform and callable(field.transform):
             import inspect
 
@@ -378,6 +426,12 @@ def build_visit_extraction_query(
 
     # Add computed fields from config (no aggregation, just extraction + transform)
     for field in config.fields:
+        # Handle extractor fields — need post-processing with full visit context
+        if field.extractor and callable(field.extractor):
+            select_parts.append(f"NULL as {field.name}")
+            computed_field_names.append(field.name)
+            continue
+
         # Skip fields that will be computed from full visit context (special markers like __images__)
         if field.transform and callable(field.transform):
             import inspect

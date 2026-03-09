@@ -16,7 +16,7 @@ Follow the standard CommCare Connect setup in the main [README.md](../../README.
 
         $ ./manage.py runserver
 
-    **Important**: Use `config.settings.local` (the default), NOT `config.settings.labs`. This is confusing, but `config.settings.labs` is designed for the AWS deployment at labs.connect.dimagi.com. The `local.py` settings already have `IS_LABS_ENVIRONMENT = True` and all labs middleware configured.
+    **Important**: Use `config.settings.local` (the default), NOT `config.settings.labs_aws`. The `labs_aws` settings are only for the AWS deployment at `labs.connect.dimagi.com`. The `local.py` settings already have `IS_LABS_ENVIRONMENT = True` and all labs middleware configured.
 
 3.  **Get a CLI OAuth token** (for scripts and management commands):
 
@@ -243,7 +243,7 @@ has_profile = manager.has_user_profile()
 **Required Settings:**
 
 ```python
-# config/settings/labs.py or local.py
+# config/settings/labs_aws.py or local.py
 CONNECT_PRODUCTION_URL = "https://connect.dimagi.com"
 CONNECT_OAUTH_CLIENT_ID = "your_web_client_id"
 CONNECT_OAUTH_CLIENT_SECRET = "your_web_client_secret"

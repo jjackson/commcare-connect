@@ -420,6 +420,7 @@ export interface ActionHandlers {
     sessionId?: string,
     refresh?: boolean,
   ): Promise<Record<string, unknown>>;
+  getAISessions(taskId: number): Promise<Record<string, unknown>>;
   updateTask(
     taskId: number,
     data: Record<string, unknown>,

@@ -296,7 +296,9 @@ function labsContextSelector() {
       '/labs/overview': ['orgs', 'programs', 'opps'],
       '/labs/workflow/': ['opps'],
       '/labs/pipelines/': ['opps'],
+      '/labs/scout/': ['opps'],
       '/solicitations/': ['orgs', 'programs'],
+      '/solicitations_new/': ['programs'],
       '/explorer/': ['orgs', 'programs', 'opps'],
       '/audit/': ['programs', 'opps'],
       '/tasks/': ['programs', 'opps'],
@@ -428,6 +430,12 @@ function labsContextSelector() {
 
         const newUrl = url.toString();
         const currentUrl = window.location.href;
+
+        // On the Scout page, tell the embedded widget to switch tenant
+        // so the iframe updates without waiting for the full reload.
+        if (this.currentPath.includes('/labs/scout/') && this.selectedOpp && window._scoutWidget) {
+          window._scoutWidget.setTenant(this.selectedOpp.id);
+        }
 
         // Force a full page reload with the new URL
         // If URL is the same, force reload; otherwise navigate to new URL

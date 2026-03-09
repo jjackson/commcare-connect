@@ -259,10 +259,12 @@ class LabsContextMiddleware(MiddlewareMixin):
                 "/audit/",
                 "/tasks/",
                 "/solicitations/",
+                "/solicitations_new/",
                 "/ai/",
                 "/labs/explorer/",
                 "/labs/workflow/",
                 "/labs/pipelines/",
+                "/labs/scout/",
                 "/coverage/",
                 "/custom_analysis/",
             ]

@@ -29,7 +29,9 @@ ENV DEBUG=0
 RUN apt-get update \
   # psycopg2, gettext etc dependencies
   # gdal-bin provides GDAL runtime libraries for GeoDjango spatial features
+  # libpango*, libpangocairo*, libharfbuzz* are runtime dependencies for WeasyPrint (PDF generation)
   && apt-get install -y libpq-dev gettext curl gdal-bin \
+     libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 libharfbuzz-subset0 \
   # cleaning up unused files
   && apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false \
   && rm -rf /var/lib/apt/lists/*
@@ -37,7 +39,7 @@ RUN apt-get update \
 RUN addgroup --system django \
     && adduser --system --ingroup django django
 
-ENV DJANGO_SETTINGS_MODULE=config.settings.labs
+ENV DJANGO_SETTINGS_MODULE=config.settings.labs_aws
 
 COPY --from=build-node /app/commcare_connect/static/bundles /app/commcare_connect/static/bundles
 COPY --from=build-python /wheels /wheels

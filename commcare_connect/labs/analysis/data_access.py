@@ -18,7 +18,12 @@ from commcare_connect.labs.analysis.utils import DJANGO_CACHE_TTL
 logger = logging.getLogger(__name__)
 
 
-def fetch_flw_names(access_token: str, opportunity_id: int, use_cache: bool = True) -> dict[str, str]:
+def fetch_flw_names(
+    access_token: str,
+    opportunity_id: int,
+    use_cache: bool = True,
+    last_active_out: dict | None = None,
+) -> dict[str, str]:
     """
     Fetch FLW display names for an opportunity from Connect API.
 
@@ -29,6 +34,9 @@ def fetch_flw_names(access_token: str, opportunity_id: int, use_cache: bool = Tr
         access_token: OAuth Bearer token for Connect API
         opportunity_id: Opportunity ID to fetch FLW names for
         use_cache: Whether to use Django cache (default True)
+        last_active_out: Optional dict to populate with {username: last_active_str}.
+            When provided, last_active data is written directly into this dict,
+            avoiding reliance on Django cache for in-process data sharing.
 
     Returns:
         Dictionary mapping username to display name.
@@ -44,8 +52,16 @@ def fetch_flw_names(access_token: str, opportunity_id: int, use_cache: bool = Tr
         try:
             cached = cache.get(cache_key)
             if cached is not None:
-                logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
-                return cached
+                # If last_active was requested, only use cache if la data is also cached
+                if last_active_out is not None:
+                    la_cached = cache.get(f"flw_last_active_{opportunity_id}")
+                    if la_cached is not None:
+                        last_active_out.update(la_cached)
+                    else:
+                        cached = None  # Force fresh fetch to populate last_active
+                if cached is not None:
+                    logger.debug(f"FLW names loaded from cache for opp {opportunity_id}")
+                    return cached
         except Exception as e:
             logger.warning(f"Cache get failed for {cache_key}: {e}")
 
@@ -69,20 +85,30 @@ def fetch_flw_names(access_token: str, opportunity_id: int, use_cache: bool = Tr
 
     # Parse CSV response
     df = pd.read_csv(StringIO(response.text))
-    logger.info(f"Fetched {len(df)} FLWs from Connect")
+    logger.info(f"Fetched {len(df)} FLWs from Connect. CSV columns: {list(df.columns)}")
 
     # Build mapping: username -> name (fallback to username if name is empty)
+    # Also extract last_active for the "Last Active" dashboard column
     flw_names = {}
+    flw_last_active = {}
     for _, row in df.iterrows():
         username = row.get("username")
         name = row.get("name")
         if username:
             flw_names[username] = name if name else username
+            last_active = row.get("last_active")
+            if pd.notna(last_active):
+                flw_last_active[username] = str(last_active)
 
-    # Cache the result
+    # Populate caller's dict directly (avoids cache dependency)
+    if last_active_out is not None:
+        last_active_out.update(flw_last_active)
+
+    # Cache the results
     if use_cache:
         try:
             cache.set(cache_key, flw_names, DJANGO_CACHE_TTL)
+            cache.set(f"flw_last_active_{opportunity_id}", flw_last_active, DJANGO_CACHE_TTL)
             logger.debug(f"FLW names cached for opp {opportunity_id}")
         except Exception as e:
             logger.warning(f"Cache set failed for {cache_key}: {e}")

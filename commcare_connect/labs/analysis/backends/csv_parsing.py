@@ -9,6 +9,7 @@ import ast
 import io
 import json
 import logging
+from collections.abc import Generator
 
 import pandas as pd
 
@@ -216,3 +217,33 @@ def parse_csv_bytes(
         logger.info(f"Parsed {len(visits)} visits (full mode)")
 
     return visits
+
+
+def parse_csv_file_chunks(
+    csv_path: str,
+    opportunity_id: int,
+    chunksize: int = 1000,
+) -> Generator[list[dict], None, None]:
+    """
+    Parse CSV from file path in chunks. Memory-efficient: no BytesIO copy.
+
+    Reads directly from a file path using pandas C parser, avoiding the
+    BytesIO copy that doubles memory usage with parse_csv_bytes().
+
+    Args:
+        csv_path: Path to CSV file on disk
+        opportunity_id: Opportunity ID (fallback if not in CSV)
+        chunksize: Number of rows per chunk (default 1000)
+
+    Yields:
+        Lists of visit dicts (with form_json), one list per chunk
+    """
+    total_parsed = 0
+    for chunk in pd.read_csv(csv_path, chunksize=chunksize, on_bad_lines="warn"):
+        batch = []
+        for _, row in chunk.iterrows():
+            batch.append(_row_to_visit_dict(row, opportunity_id, include_form_json=True))
+        total_parsed += len(batch)
+        yield batch
+
+    logger.info(f"Parsed {total_parsed} visits from file (chunked)")

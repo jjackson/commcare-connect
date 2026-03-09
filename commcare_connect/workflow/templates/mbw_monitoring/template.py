@@ -59,11 +59,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [sseError, setSseError] = React.useState(null);
     var [sseAuthorizeUrl, setSseAuthorizeUrl] = React.useState(null);
     var [sseComplete, setSseComplete] = React.useState(false);
-    var [fromSnapshot, setFromSnapshot] = React.useState(false);
+    var [sseAuthRequired, setSseAuthRequired] = React.useState(null);
+    var sseSectionsRef = React.useRef({});
+    var [dataSource, setDataSource] = React.useState('live');  // 'live' | 'saved' | 'snapshot'
     var [snapshotTimestamp, setSnapshotTimestamp] = React.useState(null);
     var [refreshTrigger, setRefreshTrigger] = React.useState(0);
+    var bustCacheRef = React.useRef(false);
     var [oauthStatus, setOauthStatus] = React.useState(null);
     var [activeTab, setActiveTab] = React.useState('overview');
+    var [guideSection, setGuideSection] = React.useState({});
     var [overviewSearch, setOverviewSearch] = React.useState('');
     var [overviewSort, setOverviewSort] = React.useState({ col: 'display_name', dir: 'asc' });
     var [gpsSort, setGpsSort] = React.useState({ col: 'username', dir: 'asc' });
@@ -71,10 +75,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [expandedGps, setExpandedGps] = React.useState(null);
     var [gpsDetail, setGpsDetail] = React.useState(null);
     var [gpsDetailLoading, setGpsDetailLoading] = React.useState(false);
+    var [gpsDetailSort, setGpsDetailSort] = React.useState({ col: 'visit_date', dir: 'asc' });
     var [expandedFu, setExpandedFu] = React.useState(null);
     var [showCompleteModal, setShowCompleteModal] = React.useState(false);
     var [completeNotes, setCompleteNotes] = React.useState('');
     var [completing, setCompleting] = React.useState(false);
+    var [snapshotSaving, setSnapshotSaving] = React.useState(false);
+    var snapshotSaveInFlightRef = React.useRef(null);
     var [workerResults, setWorkerResults] = React.useState(savedResults);
     var [savingResult, setSavingResult] = React.useState(null);
 
@@ -94,7 +101,60 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [appVersionVal, setAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
     var [appliedAppVersionOp, setAppliedAppVersionOp] = React.useState(instance.state?.app_version_op || 'gt');
     var [appliedAppVersionVal, setAppliedAppVersionVal] = React.useState(instance.state?.app_version_val || '14');
+    var ALLOWED_STATUS_FILTERS = ['approved', 'pending', 'rejected', 'over_limit'];
+    var _statusFilterKey = 'mbw_pending_filters:' + (instance.id || 'default');
+    var _hydrateStatusFilter = function() {
+        try {
+            var raw = sessionStorage.getItem(_statusFilterKey);
+            if (raw) {
+                var parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                    var filtered = parsed.filter(function(v) {
+                        return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+                    });
+                    if (filtered.length > 0) return filtered;
+                }
+            }
+        } catch(e) {}
+        return null;
+    };
+    var _normalizeStatusFilter = function(val) {
+        if (Array.isArray(val)) {
+            var filtered = val.filter(function(v) {
+                return typeof v === 'string' && v && ALLOWED_STATUS_FILTERS.indexOf(v) !== -1;
+            });
+            return filtered.length > 0 ? filtered : null;
+        }
+        if (val != null && typeof val === 'string' && val && ALLOWED_STATUS_FILTERS.indexOf(val) !== -1) return [val];
+        return null;
+    };
+    var [statusFilter, setStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    var [appliedStatusFilter, setAppliedStatusFilter] = React.useState(function() {
+        return _hydrateStatusFilter()
+            || _normalizeStatusFilter(instance.state?.status_filter)
+            || ['approved'];
+    });
+    React.useEffect(function() {
+        sessionStorage.removeItem(_statusFilterKey);
+    }, []);
     var [hiddenCategories, setHiddenCategories] = React.useState({});
+
+    // GPS Map state (per-FLW drill-down)
+    var [leafletReady, setLeafletReady] = React.useState(false);
+    var [showMapVisits, setShowMapVisits] = React.useState(true);
+    var [showMapMothers, setShowMapMothers] = React.useState(true);
+    var [selectedMother, setSelectedMother] = React.useState(null);
+    var mapInstanceRef = React.useRef(null);
+    var markersRef = React.useRef(null);
+
+    // Aggregate GPS Map state (all FLWs)
+    var [showAggregateMap, setShowAggregateMap] = React.useState(false);
+    var aggregateMapRef = React.useRef(null);
+    var aggregateMarkersRef = React.useRef(null);
 
     // OCS Task Modal state
     var [showOcsModal, setShowOcsModal] = React.useState(false);
@@ -119,10 +179,13 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var [showCloseForm, setShowCloseForm] = React.useState(false);
     var [closeAction, setCloseAction] = React.useState('none');
     var [closeNote, setCloseNote] = React.useState('');
+    var [monthlyViewPct, setMonthlyViewPct] = React.useState(false);
+    var [monthlyCountMode, setMonthlyCountMode] = React.useState('ratio'); // 'ratio' | 'completed' | 'scheduled'
 
     // Column selector for Overview table
     var OVERVIEW_COLUMNS = [
         { id: 'flw_name', label: 'FLW Name', locked: true },
+        { id: 'last_active', label: 'Last Active' },
         { id: 'mothers', label: '# Mothers' },
         { id: 'gs_score', label: 'GS Score' },
         { id: 'post_test', label: 'Post-Test' },
@@ -131,6 +194,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         { id: 'ebf_pct', label: '% EBF' },
         { id: 'revisit_dist', label: 'Revisit Dist.' },
         { id: 'meter_visit', label: 'Meter/Visit' },
+        { id: 'dist_ratio', label: 'Dist. Ratio' },
         { id: 'minute_visit', label: 'Minute/Visit' },
         { id: 'phone_dup', label: 'Phone Dup %' },
         { id: 'anc_pnc', label: 'ANC = PNC' },
@@ -152,6 +216,14 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         });
     };
 
+    // Centralized color thresholds for Eligible 5+ / % Still Eligible
+    var ELIGIBLE_THRESHOLDS = { green: 85, yellow: 50 };
+    var getEligibleColor = function(pct) {
+        if (pct >= ELIGIBLE_THRESHOLDS.green) return 'green';
+        if (pct >= ELIGIBLE_THRESHOLDS.yellow) return 'yellow';
+        return 'red';
+    };
+
     // CSRF helper
     var getCSRF = React.useCallback(function() {
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value
@@ -163,6 +235,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // =========================================================================
     React.useEffect(function() {
         if (!instance.opportunity_id) return;
+        // Skip FLW history fetch when reopening a saved run — dashboard loads from snapshot
+        var existingWorkers = instance.state?.selected_workers || instance.state?.selected_flws || [];
+        if (existingWorkers.length > 0) return;
         setHistoryLoading(true);
         fetch('/custom_analysis/mbw_monitoring/api/opportunity-flws/', {
             method: 'POST',
@@ -191,14 +266,17 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         var flws = instance.state?.selected_workers || instance.state?.selected_flws || [];
         if (flws.length === 0) return;
 
+        var cancelled = false;  // Guard against stale async callbacks (React StrictMode double-mount)
+
         setSseComplete(false);
         setSseError(null);
         setSseAuthorizeUrl(null);
         setSseMessages([]);
-        setFromSnapshot(false);
+        setDataSource('live');
         setSnapshotTimestamp(null);
 
         function startSSEStream(bustCache) {
+            if (cancelled) return;
             var end = new Date();
             var start = new Date();
             start.setDate(end.getDate() - 30);
@@ -213,17 +291,25 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             if (bustCache) {
                 params.set('bust_cache', '1');
             }
+            if (instance.opportunity_id) {
+                params.set('opportunity_id', String(instance.opportunity_id));
+            }
             if (appliedAppVersionOp && appliedAppVersionVal) {
                 params.set('app_version_op', appliedAppVersionOp);
                 params.set('app_version_val', appliedAppVersionVal);
             }
+            if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+                params.set('status_filter', appliedStatusFilter.join(','));
+            }
             var url = '/custom_analysis/mbw_monitoring/stream/?' + params.toString();
+            sseSectionsRef.current = {};
             var es = new EventSource(url);
 
             es.onmessage = function(event) {
                 try {
                     var parsed = JSON.parse(event.data);
                     if (parsed.error) {
+                        sseSectionsRef.current = {};
                         setSseError(parsed.error);
                         if (parsed.authorize_url) {
                             setSseAuthorizeUrl(parsed.authorize_url);
@@ -231,13 +317,33 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         es.close();
                         return;
                     }
+                    // Mid-stream auth prompt (stream is alive — don't close!)
+                    if (parsed.auth_required) {
+                        setSseAuthRequired({
+                            message: parsed.message,
+                            authorize_url: parsed.authorize_url
+                        });
+                        return;
+                    }
+                    // Auto-dismiss modal when stream resumes
+                    setSseAuthRequired(null);
+                    // Accumulate data sections (sent before Complete! to reduce memory)
+                    if (parsed.message === 'data_section' && parsed.data && parsed.data.section) {
+                        var sectionData = Object.assign({}, parsed.data);
+                        delete sectionData.section;
+                        Object.assign(sseSectionsRef.current, sectionData);
+                        return;
+                    }
                     if (parsed.message === 'Complete!' && parsed.data) {
-                        setDashData(parsed.data);
+                        // Merge accumulated sections with final metadata
+                        var fullData = Object.assign({}, sseSectionsRef.current, parsed.data);
+                        sseSectionsRef.current = {};
+                        setDashData(fullData);
                         setSseComplete(true);
-                        setFromSnapshot(false);
-                        setSnapshotTimestamp(null);
-                        if (parsed.data.monitoring_session?.flw_results) {
-                            setWorkerResults(parsed.data.monitoring_session.flw_results);
+                        setDataSource('live');
+                        setSnapshotTimestamp(new Date().toISOString());
+                        if (fullData.monitoring_session?.flw_results) {
+                            setWorkerResults(fullData.monitoring_session.flw_results);
                         }
                         es.close();
                     } else if (parsed.message) {
@@ -249,22 +355,25 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             };
 
             es.onerror = function() {
+                sseSectionsRef.current = {};
                 if (!sseComplete) {
                     setSseError('Connection lost. Please refresh the page.');
                 }
                 es.close();
             };
 
-            sseCleanupRef.current = function() { es.close(); };
+            sseCleanupRef.current = function() { sseSectionsRef.current = {}; es.close(); };
         }
 
         // Check OAuth status before starting SSE stream
         function checkOAuthAndStream(bustCache) {
+            if (cancelled) return;
             setOauthStatus(null);
             setSseMessages(['Checking authentication...']);
             fetch('/custom_analysis/mbw_monitoring/api/oauth-status/?next=' + encodeURIComponent(window.location.pathname + window.location.search))
             .then(function(r) { return r.json(); })
             .then(function(status) {
+                if (cancelled) return;
                 var expired = [];
                 if (!status.connect?.active) expired.push('connect');
                 if (!status.commcare?.active) expired.push('commcare');
@@ -279,21 +388,26 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 startSSEStream(bustCache);
             })
             .catch(function() {
+                if (cancelled) return;
                 // Network error checking OAuth — proceed anyway, SSE will fail with its own error
                 startSSEStream(bustCache);
             });
         }
 
         // refreshTrigger=0 means initial load → try snapshot first
-        // refreshTrigger>0 means user clicked Refresh Data → SSE with bust_cache
+        // refreshTrigger>0 means user clicked Refresh Data or Apply
+        // bustCacheRef distinguishes Refresh Data (bust=true) from Apply (bust=false)
+        var shouldBustCache = bustCacheRef.current;
+        bustCacheRef.current = false;
         if (refreshTrigger === 0 && instance.id) {
             fetch('/custom_analysis/mbw_monitoring/api/snapshot/?run_id=' + instance.id)
             .then(function(r) { return r.json(); })
             .then(function(data) {
+                if (cancelled) return;
                 if (data.has_snapshot && data.success) {
                     setDashData(data);
                     setSseComplete(true);
-                    setFromSnapshot(true);
+                    setDataSource('snapshot');
                     setSnapshotTimestamp(data.snapshot_timestamp);
                     if (data.monitoring_session?.flw_results) {
                         setWorkerResults(data.monitoring_session.flw_results);
@@ -304,10 +418,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             })
             .catch(function() { checkOAuthAndStream(false); });
         } else {
-            checkOAuthAndStream(refreshTrigger > 0);
+            checkOAuthAndStream(shouldBustCache);
         }
 
         return function() {
+            cancelled = true;  // Prevent stale callbacks from firing
             if (sseCleanupRef.current) sseCleanupRef.current();
         };
     }, [step, instance.id, refreshTrigger]);
@@ -389,11 +504,224 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 d.thead.style.boxShadow = '';
             });
         };
-    }, [activeTab, sseComplete]);
+    }, [activeTab, sseComplete, showAggregateMap, expandedGps]);
+
+    // Load Leaflet + MarkerCluster from CDN for GPS map
+    React.useEffect(function() {
+        if (window.L && window.L.markerClusterGroup) { setLeafletReady(true); return; }
+        ['https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+         'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
+         'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css'
+        ].forEach(function(href) {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet'; link.href = href;
+            document.head.appendChild(link);
+        });
+        var s1 = document.createElement('script');
+        s1.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+        s1.onload = function() {
+            var s2 = document.createElement('script');
+            s2.src = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js';
+            s2.onload = function() { setLeafletReady(true); };
+            document.head.appendChild(s2);
+        };
+        document.head.appendChild(s1);
+    }, []);
+
+    // GPS Map initialization and marker update
+    React.useEffect(function() {
+        if (!leafletReady || !expandedGps || !gpsDetail) {
+            if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; }
+            return;
+        }
+        var mapDiv = document.getElementById('gps-map-' + expandedGps);
+        if (!mapDiv) return;
+
+        // Create map if not exists
+        if (!mapInstanceRef.current) {
+            mapInstanceRef.current = L.map(mapDiv, { scrollWheelZoom: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '\u00a9 OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(mapInstanceRef.current);
+        }
+        var map = mapInstanceRef.current;
+
+        // Remove old markers
+        if (markersRef.current) { map.removeLayer(markersRef.current); }
+
+        var allVisits = (gpsDetail.visits || []).filter(function(v) { return v.gps; });
+        var visitsToShow = selectedMother
+            ? allVisits.filter(function(v) { return v.mother_case_id === selectedMother; })
+            : allVisits;
+
+        if (visitsToShow.length === 0) {
+            markersRef.current = null;
+            map.setView([0, 0], 2);
+            return;
+        }
+
+        var cluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 16 });
+        var hasMarkers = false;
+
+        // Mothers layer (orange markers)
+        if (showMapMothers) {
+            var motherMap = {};
+            visitsToShow.forEach(function(v) {
+                var mid = v.mother_case_id || v.case_id;
+                if (!mid) return;
+                if (!motherMap[mid] || (v.visit_date || '') > (motherMap[mid].latest || '')) {
+                    motherMap[mid] = motherMap[mid] || { visits: [] };
+                    motherMap[mid].lat = v.gps.latitude;
+                    motherMap[mid].lng = v.gps.longitude;
+                    motherMap[mid].name = v.entity_name || mid;
+                    motherMap[mid].latest = v.visit_date;
+                }
+                motherMap[mid].visits.push(v);
+            });
+            Object.keys(motherMap).forEach(function(mid) {
+                var m = motherMap[mid];
+                var marker = L.circleMarker([m.lat, m.lng], {
+                    radius: 9, fillColor: '#f97316', color: '#ea580c', weight: 1.5, fillOpacity: 0.7
+                });
+                marker.bindPopup(
+                    '<strong>' + escapeHtml(m.name) + '</strong><br/>' +
+                    'Visits: ' + m.visits.length + '<br/>' +
+                    'Last: ' + escapeHtml(m.latest || '-')
+                );
+                marker.on('click', function() { setSelectedMother(mid); });
+                cluster.addLayer(marker);
+                hasMarkers = true;
+            });
+        }
+
+        // Visits layer (blue/red markers)
+        if (showMapVisits) {
+            visitsToShow.forEach(function(v) {
+                var color = v.is_flagged ? '#dc2626' : '#3b82f6';
+                var borderColor = v.is_flagged ? '#991b1b' : '#1d4ed8';
+                var radius = v.is_flagged ? 7 : 6;
+                var marker = L.circleMarker([v.gps.latitude, v.gps.longitude], {
+                    radius: radius, fillColor: color, color: borderColor, weight: 1.5, fillOpacity: 0.7
+                });
+                marker.bindPopup(
+                    '<strong>' + escapeHtml(v.entity_name || '-') + '</strong><br/>' +
+                    'Date: ' + escapeHtml(v.visit_date || '-') + '<br/>' +
+                    'Form: ' + escapeHtml(v.form_name || '-') +
+                    (v.distance_from_prev_km != null ? '<br/>Dist: ' + v.distance_from_prev_km + ' km' : '') +
+                    (v.is_flagged ? '<br/><span style="color:#dc2626;font-weight:bold">Flagged</span>' : '')
+                );
+                marker.on('click', function() { setSelectedMother(v.mother_case_id || v.case_id); });
+                cluster.addLayer(marker);
+                hasMarkers = true;
+            });
+        }
+
+        map.addLayer(cluster);
+        markersRef.current = cluster;
+        if (hasMarkers) {
+            map.fitBounds(cluster.getBounds(), { padding: [30, 30] });
+        }
+
+        return function() {
+            if (markersRef.current && map) { map.removeLayer(markersRef.current); markersRef.current = null; }
+        };
+    }, [leafletReady, expandedGps, gpsDetail, showMapVisits, showMapMothers, selectedMother]);
+
+    // Aggregate GPS Map — all FLW visits with color-coded pins
+    React.useEffect(function() {
+        function teardown() {
+            if (aggregateMarkersRef.current && aggregateMapRef.current) {
+                aggregateMapRef.current.removeLayer(aggregateMarkersRef.current);
+                aggregateMarkersRef.current = null;
+            }
+            if (aggregateMapRef.current) {
+                aggregateMapRef.current.remove();
+                aggregateMapRef.current = null;
+            }
+        }
+        if (!leafletReady || !showAggregateMap) {
+            teardown();
+            return;
+        }
+        var coords = (gpsData && gpsData.all_coordinates) || [];
+        if (coords.length === 0) { teardown(); return; }
+
+        var mapDiv = document.getElementById('aggregate-gps-map');
+        if (!mapDiv) { teardown(); return; }
+
+        // Create map if not exists
+        if (!aggregateMapRef.current) {
+            aggregateMapRef.current = L.map(mapDiv, { scrollWheelZoom: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '\u00a9 OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(aggregateMapRef.current);
+        }
+        var map = aggregateMapRef.current;
+
+        // Remove old markers
+        if (aggregateMarkersRef.current) { map.removeLayer(aggregateMarkersRef.current); }
+
+        // Build color palette: unique hue per FLW
+        var usernames = {};
+        coords.forEach(function(c) { usernames[c.u] = true; });
+        var sortedUsers = Object.keys(usernames).sort();
+        var flwColorMap = {};
+        sortedUsers.forEach(function(u, i) {
+            var hue = Math.round(i * 360 / sortedUsers.length);
+            flwColorMap[u] = 'hsl(' + hue + ', 70%, 45%)';
+        });
+
+        // Filter by active FLW filter if any
+        var activeCoords = filterFlws.length > 0
+            ? coords.filter(function(c) { return filterFlws.indexOf(c.u) >= 0; })
+            : coords;
+
+        var cluster = L.markerClusterGroup({ maxClusterRadius: 40, disableClusteringAtZoom: 16 });
+
+        activeCoords.forEach(function(c) {
+            var color = c.f ? '#dc2626' : (flwColorMap[c.u] || '#3b82f6');
+            var borderColor = c.f ? '#991b1b' : '#374151';
+            var radius = c.f ? 7 : 5;
+            var flwName = '';
+            for (var gi = 0; gi < gpsFlws.length; gi++) {
+                if (gpsFlws[gi].username === c.u) { flwName = gpsFlws[gi].display_name || c.u; break; }
+            }
+            if (!flwName) flwName = c.u;
+            var marker = L.circleMarker([c.lat, c.lng], {
+                radius: radius, fillColor: color, color: borderColor, weight: 1, fillOpacity: 0.7
+            });
+            marker.bindPopup(
+                '<strong>' + escapeHtml(flwName) + '</strong>' +
+                (c.e ? '<br/>' + escapeHtml(c.e) : '') +
+                (c.d ? '<br/>Date: ' + escapeHtml(c.d) : '') +
+                (c.f ? '<br/><span style="color:#dc2626;font-weight:bold">Flagged</span>' : '')
+            );
+            cluster.addLayer(marker);
+        });
+
+        map.addLayer(cluster);
+        aggregateMarkersRef.current = cluster;
+        if (activeCoords.length > 0) {
+            map.fitBounds(cluster.getBounds(), { padding: [30, 30] });
+        }
+
+        return function() {
+            if (aggregateMarkersRef.current && aggregateMapRef.current) {
+                aggregateMapRef.current.removeLayer(aggregateMarkersRef.current);
+                aggregateMarkersRef.current = null;
+            }
+        };
+    }, [leafletReady, showAggregateMap, gpsData, filterFlws, activeTab]);
 
     // =========================================================================
     // Helpers
     // =========================================================================
+    var escapeHtml = function(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    };
     var toggleFlw = function(username) {
         setSelectedFlws(function(prev) {
             var next = Object.assign({}, prev);
@@ -421,6 +749,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             gs_app_id: gsAppId,
             app_version_op: appVersionOp,
             app_version_val: appVersionVal,
+            status_filter: statusFilter,
             worker_results: {},
             flw_results: {},
         }).then(function() {
@@ -524,14 +853,60 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
     };
 
-    // Complete session
+    // Save snapshot — reused by manual button and auto-save on Complete
+    var saveSnapshot = function() {
+        if (!instance.id || !dashData) return Promise.resolve(false);
+        if (snapshotSaveInFlightRef.current) return snapshotSaveInFlightRef.current;
+        setSnapshotSaving(true);
+        var snapshotUrl = '/custom_analysis/mbw_monitoring/api/save-snapshot/';
+        if (instance.opportunity_id) {
+            snapshotUrl += '?opportunity_id=' + encodeURIComponent(instance.opportunity_id);
+        }
+        var req = fetch(snapshotUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRF() },
+            body: JSON.stringify({ run_id: instance.id, opportunity_id: instance.opportunity_id, snapshot_data: dashData })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                showToast('Snapshot saved');
+                setDataSource('saved');
+                setSnapshotTimestamp(data.timestamp || new Date().toISOString());
+                return true;
+            } else {
+                showToast('Failed to save snapshot: ' + (data.error || 'Unknown error'));
+                return false;
+            }
+        })
+        .catch(function(err) {
+            console.error('Snapshot save failed:', err);
+            showToast('Failed to save snapshot');
+            return false;
+        })
+        .finally(function() {
+            setSnapshotSaving(false);
+            snapshotSaveInFlightRef.current = null;
+        });
+
+        snapshotSaveInFlightRef.current = req;
+        return req;
+    };
+
+    // Complete session — auto-saves snapshot first (best-effort)
     var handleComplete = function() {
         if (!actions || !actions.completeRun) {
             showToast('Complete not available — please hard-refresh (Cmd+Shift+R)');
             return;
         }
         setCompleting(true);
-        actions.completeRun(instance.id, { overall_result: 'completed', notes: completeNotes })
+        // Save snapshot first, then complete the run
+        (dashData ? saveSnapshot() : Promise.resolve(false))
+            .catch(function() { return false; })
+            .then(function() {
+                return actions.completeRun(instance.id, { overall_result: 'completed', notes: completeNotes });
+            })
             .then(function(resp) {
                 if (resp && resp.success !== false) {
                     setShowCompleteModal(false);
@@ -549,11 +924,33 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             });
     };
 
-    // GPS detail fetch
+    // GPS detail — toggle which FLW is expanded; the useEffect below handles fetching
     var fetchGpsDetail = function(username) {
         if (expandedGps === username) { setExpandedGps(null); return; }
         setExpandedGps(username);
+        setSelectedMother(null);
+    };
+
+    // Fetch GPS visits when expandedGps changes (useEffect runs after render commit,
+    // avoiding the inline-fetch-in-click-handler issue that silently failed to fire)
+    React.useEffect(function() {
+        if (!expandedGps) {
+            setGpsDetail(null);
+            setGpsDetailLoading(false);
+            return;
+        }
+        // Check embedded visits first (available when loaded from snapshot)
+        var currentGpsFlws = (dashData && dashData.gps_data && dashData.gps_data.flw_summaries) || [];
+        var flw = currentGpsFlws.find(function(f) { return f.username === expandedGps; });
+        if (flw && flw.visits && flw.visits.length > 0) {
+            setGpsDetail({ success: true, visits: flw.visits });
+            setGpsDetailLoading(false);
+            return;
+        }
+        // Fetch from API (SSE data doesn't embed visits to save memory)
         setGpsDetailLoading(true);
+        setGpsDetail(null);
+        var cancelled = false;
         var end = new Date();
         var start = new Date();
         start.setDate(end.getDate() - 30);
@@ -561,14 +958,31 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             start_date: start.toISOString().split('T')[0],
             end_date: end.toISOString().split('T')[0]
         });
-        fetch('/custom_analysis/mbw_monitoring/api/gps/' + username + '/?' + params.toString())
+        if (instance.opportunity_id) {
+            params.set('opportunity_id', String(instance.opportunity_id));
+        }
+        if (appliedAppVersionOp && appliedAppVersionVal) {
+            params.set('app_version_op', appliedAppVersionOp);
+            params.set('app_version_val', appliedAppVersionVal);
+        }
+        if (appliedStatusFilter && appliedStatusFilter.length > 0) {
+            params.set('status_filter', appliedStatusFilter.join(','));
+        }
+        var url = '/custom_analysis/mbw_monitoring/api/gps/'
+            + encodeURIComponent(expandedGps) + '/?' + params.toString();
+        fetch(url, { credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                if (data.success) setGpsDetail(data);
-                setGpsDetailLoading(false);
+                if (!cancelled) { setGpsDetail(data); setGpsDetailLoading(false); }
             })
-            .catch(function() { setGpsDetailLoading(false); });
-    };
+            .catch(function() {
+                if (!cancelled) {
+                    setGpsDetail({ success: false, visits: [] });
+                    setGpsDetailLoading(false);
+                }
+            });
+        return function() { cancelled = true; };
+    }, [expandedGps, dashData, instance.opportunity_id, appliedAppVersionOp, appliedAppVersionVal, appliedStatusFilter]);
 
     // Toast helper
     var showToast = function(msg) {
@@ -589,12 +1003,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var resetFilters = function() {
         setFilterFlws([]);
         setFilterMothers([]);
+        try { sessionStorage.removeItem(_statusFilterKey); } catch(e) {}
         var needsRefresh = appliedAppVersionOp !== 'gt' || appliedAppVersionVal !== '14';
+        var statusNeedsRefresh = JSON.stringify(appliedStatusFilter.slice().sort()) !== JSON.stringify(['approved']);
         setAppVersionOp('gt');
         setAppVersionVal('14');
         setAppliedAppVersionOp('gt');
         setAppliedAppVersionVal('14');
-        if (needsRefresh) {
+        setStatusFilter(['approved']);
+        setAppliedStatusFilter(['approved']);
+        if (needsRefresh || statusNeedsRefresh) {
             setRefreshTrigger(function(n) { return n + 1; });
             setDashData(null);
             setSseComplete(false);
@@ -889,6 +1307,34 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         })}
                     </div>
                 </div>
+                {sseAuthRequired && (
+                    <div role="dialog" aria-modal="true" tabIndex="-1"
+                         onKeyDown={function(e) { if (e.key === 'Escape') setSseAuthRequired(null); }}
+                         style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+                            <div className="flex items-center gap-2 text-amber-800 mb-3">
+                                <i className="fa-solid fa-link-slash text-lg"></i>
+                                <h3 className="font-bold text-lg m-0">Re-authorization Required</h3>
+                            </div>
+                            <p className="text-gray-700 mb-4">{sseAuthRequired.message}</p>
+                            <div className="flex items-center gap-3">
+                                <a href={sseAuthRequired.authorize_url} target="_blank" rel="noopener noreferrer"
+                                   className="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 inline-block no-underline">
+                                    <i className="fa-solid fa-arrow-right-to-bracket mr-1"></i>
+                                    Authorize CommCare
+                                </a>
+                                <button onClick={function() { setSseAuthRequired(null); }}
+                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300">
+                                    Dismiss
+                                </button>
+                            </div>
+                            <p className="text-sm text-gray-500 mt-3 mb-0">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                Authorize in the new tab, then return here. The stream will resume automatically.
+                            </p>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -951,6 +1397,48 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         return (motherNamesMap[a] || a).localeCompare(motherNamesMap[b] || b);
     });
 
+    // ---- Build monthly visit schedule data ----
+    var MONTHLY_VISIT_MONTHS = [
+        '2025-09', '2025-10', '2025-11', '2025-12',
+        '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07'
+    ];
+    var MONTHLY_VISIT_TYPES = ['ANC', 'Postnatal', 'Week 1', 'Month 1', 'Month 3', 'Month 6'];
+    var MONTHLY_VISIT_LABELS = {
+        '2025-09': 'Sep 25', '2025-10': 'Oct 25', '2025-11': 'Nov 25', '2025-12': 'Dec 25',
+        '2026-01': 'Jan 26', '2026-02': 'Feb 26', '2026-03': 'Mar 26',
+        '2026-04': 'Apr 26', '2026-05': 'May 26', '2026-06': 'Jun 26', '2026-07': 'Jul 26'
+    };
+    var monthlyVisitData = {};
+    MONTHLY_VISIT_TYPES.forEach(function(vt) {
+        monthlyVisitData[vt] = {};
+        MONTHLY_VISIT_MONTHS.forEach(function(m) {
+            monthlyVisitData[vt][m] = { completed: 0, total: 0 };
+        });
+    });
+    Object.keys(fuDrilldown).forEach(function(username) {
+        if (filterFlws.length > 0 && filterFlws.indexOf(username) < 0) return;
+        (fuDrilldown[username] || []).forEach(function(mother) {
+            (mother.visits || []).forEach(function(v) {
+                var sched = v.visit_date_scheduled;
+                if (!sched || !v.visit_type) return;
+                var monthKey = sched.substring(0, 7);
+                if (!monthlyVisitData[v.visit_type] || !monthlyVisitData[v.visit_type][monthKey]) return;
+                monthlyVisitData[v.visit_type][monthKey].total += 1;
+                if (v.status && v.status.indexOf('Completed') === 0) {
+                    monthlyVisitData[v.visit_type][monthKey].completed += 1;
+                }
+            });
+        });
+    });
+
+    var fmtVisitCell = function(completed, total) {
+        if (total === 0) return null;
+        if (monthlyViewPct) return Math.round(completed / total * 100) + '%';
+        if (monthlyCountMode === 'completed') return String(completed);
+        if (monthlyCountMode === 'scheduled') return String(total);
+        return completed + ' / ' + total;
+    };
+
     // ---- Build FLW prompt for OCS AI Assistant ----
     var buildFLWPrompt = function(username) {
         var ov = overviewFlws.find(function(f) { return f.username === username; }) || {};
@@ -975,6 +1463,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         var lines = [];
         lines.push('FLW Name: ' + (ov.display_name || username));
         lines.push('Username: ' + username);
+        lines.push('Last Active: ' + (ov.last_active_days != null ? ov.last_active_days + ' days ago (' + ov.last_active_date + ')' : '\u2014'));
         lines.push('');
         lines.push('Behavior Being Investigated: ' + behavior);
         lines.push('');
@@ -985,12 +1474,21 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         lines.push('- Follow-up Rate: ' + (ov.followup_rate != null ? ov.followup_rate + '%' : '\u2014'));
         lines.push('- Cases still eligible (5+): ' + (ov.cases_still_eligible && ov.cases_still_eligible.pct != null ? ov.cases_still_eligible.pct + '% (' + ov.cases_still_eligible.eligible + '/' + ov.cases_still_eligible.total + ')' : '\u2014'));
         lines.push('- % EBF (Exclusive Breastfeeding): ' + (ov.ebf_pct != null ? ov.ebf_pct + '%' : '\u2014'));
+        lines.push('- Revisit Dist. (avg same-mother): ' + (ov.revisit_distance_km != null ? ov.revisit_distance_km + ' km' : '\u2014'));
+        lines.push('- Meter/Visit (median inter-visit): ' + (ov.median_meters_per_visit != null ? ov.median_meters_per_visit + ' m' : '\u2014'));
+        lines.push('- Minute/Visit (median inter-visit): ' + (ov.median_minutes_per_visit != null ? ov.median_minutes_per_visit + ' min' : '\u2014'));
+        lines.push('- Phone Dup %: ' + (ov.phone_dup_pct != null ? ov.phone_dup_pct + '%' : '\u2014'));
+        lines.push('- ANC = PNC (same-date count): ' + (ov.anc_pnc_same_date_count != null ? ov.anc_pnc_same_date_count : '\u2014'));
+        lines.push('- Parity concentration: ' + (ov.parity_concentration && ov.parity_concentration.pct_duplicate != null ? ov.parity_concentration.pct_duplicate + '% duplicate (mode: ' + ov.parity_concentration.mode_value + ', ' + ov.parity_concentration.mode_pct + '%)' : '\u2014'));
+        lines.push('- Age concentration: ' + (ov.age_concentration && ov.age_concentration.pct_duplicate != null ? ov.age_concentration.pct_duplicate + '% duplicate (mode: ' + ov.age_concentration.mode_value + ', ' + ov.age_concentration.mode_pct + '%)' : '\u2014'));
+        lines.push('- Age = Reg date: ' + (ov.age_equals_reg_pct != null ? ov.age_equals_reg_pct + '%' : '\u2014'));
         lines.push('');
         lines.push('Visit Overview:');
         var completionPct = fu.total_visits > 0 ? Math.round(fu.completed_total / fu.total_visits * 100) : 0;
         lines.push('- Total visits: ' + (fu.total_visits || 0));
-        lines.push('- Completed: ' + (fu.completed_total || 0) + ' (' + completionPct + '% completion rate)');
-        lines.push('- Currently due (late): ' + (fu.due_late || 0));
+        lines.push('- Completed: ' + (fu.completed_total || 0) + ' (' + completionPct + '% completion rate) \u2014 on time: ' + (fu.completed_on_time || 0) + ', late: ' + (fu.completed_late || 0));
+        lines.push('- Due (on time): ' + (fu.due_on_time || 0));
+        lines.push('- Due (late): ' + (fu.due_late || 0));
         lines.push('- Missed: ' + (fu.missed_total || 0));
         lines.push('');
         lines.push('Breakdown by visit type:');
@@ -1057,6 +1555,29 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 setShowOcsModal(false);
                 setCreatedTaskUsernames(function(prev) { return prev.concat([f.username]); });
                 showToast('Task created' + (result.ocs && result.ocs.success ? ' and AI session initiated' : '') + ' for ' + (f.display_name || f.username));
+                // Poll to link OCS session_id right after creation
+                if (result.task_id && result.ocs && result.ocs.success) {
+                    var pollTaskId = result.task_id;
+                    var pollAttempt = 0;
+                    var maxAttempts = 5;
+                    var pollInterval = 2000;
+                    var doPoll = function() {
+                        pollAttempt++;
+                        actions.getAISessions(pollTaskId).then(function(sessResult) {
+                            if (sessResult && sessResult.sessions) {
+                                var latest = sessResult.sessions[sessResult.sessions.length - 1];
+                                if (latest && latest.session_id) {
+                                    console.log('OCS session linked:', latest.session_id);
+                                    return;
+                                }
+                            }
+                            if (pollAttempt < maxAttempts) {
+                                setTimeout(doPoll, pollInterval);
+                            }
+                        });
+                    };
+                    setTimeout(doPoll, pollInterval);
+                }
             } else {
                 setOcsError(result.error || 'Failed to create task');
             }
@@ -1094,7 +1615,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 setTaskDetail(result.task);
                 setTaskStatus(result.task.status || 'investigating');
                 setTaskOriginalStatus(result.task.status || 'investigating');
-                return actions.getAITranscript(taskInfo.task_id);
+                return actions.getAISessions(taskInfo.task_id).then(function() {
+                    if (requestId !== taskRequestIdRef.current) return;
+                    return actions.getAITranscript(taskInfo.task_id);
+                });
             } else {
                 setTaskLoading(false);
                 showToast('Failed to load task: ' + (result.error || 'Unknown error'));
@@ -1210,6 +1734,22 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var filteredGpsFlws = gpsFlws.filter(function(f) {
         if (flwFilterSet && flwFilterSet.indexOf(f.username) < 0) return false;
         return true;
+    });
+
+    // Compute dist_ratio for GPS and Overview (revisit_distance_km * 1000 / median_meters_per_visit)
+    filteredGpsFlws = filteredGpsFlws.map(function(g) {
+        return Object.assign({}, g, {
+            dist_ratio: (g.avg_case_distance_km != null && g.median_meters_per_visit != null && g.median_meters_per_visit > 0)
+                ? Math.round(g.avg_case_distance_km * 1000 / g.median_meters_per_visit * 10) / 10
+                : null
+        });
+    });
+    filteredOverview = filteredOverview.map(function(f) {
+        return Object.assign({}, f, {
+            dist_ratio: (f.revisit_distance_km != null && f.median_meters_per_visit != null && f.median_meters_per_visit > 0)
+                ? Math.round(f.revisit_distance_km * 1000 / f.median_meters_per_visit * 10) / 10
+                : null
+        });
     });
 
     var filteredFuFlws = fuFlws.filter(function(f) {
@@ -1537,7 +2077,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             </span>
                         ) : (
                             <button onClick={function() { setShowCompleteModal(true); }}
-                                    className="inline-flex items-center px-3 py-1.5 text-sm text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+                                    disabled={snapshotSaving}
+                                    className={"inline-flex items-center px-3 py-1.5 text-sm text-white rounded-md " + (snapshotSaving ? "bg-indigo-300 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700")}>
                                 <i className="fa-solid fa-check mr-1"></i> Complete Audit
                             </button>
                         )}
@@ -1561,6 +2102,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         { id: 'gps', label: 'GPS Analysis', icon: 'fa-location-dot' },
                         { id: 'followup', label: 'Follow-Up Rate', icon: 'fa-clipboard-check' },
                         { id: 'performance', label: 'FLW Performance', icon: 'fa-ranking-star' },
+                        { id: 'guide', label: 'Guide', icon: 'fa-book' },
                     ].map(function(t) {
                         var active = activeTab === t.id;
                         return (
@@ -1575,23 +2117,36 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     })}
                 </nav>
                 <div className="flex items-center gap-3 ml-auto">
-                    {fromSnapshot && snapshotTimestamp && (
+                    {snapshotTimestamp && (
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                             <span>Data from: {new Date(snapshotTimestamp).toLocaleString()}</span>
-                            <span className="text-amber-600 text-xs font-medium">(snapshot)</span>
+                            <span className={dataSource === 'snapshot' ? 'text-amber-600 text-xs font-medium' : dataSource === 'saved' ? 'text-blue-600 text-xs font-medium' : 'text-green-600 text-xs font-medium'}>{dataSource === 'snapshot' ? '(snapshot)' : dataSource === 'saved' ? '(saved)' : '(live)'}</span>
                         </div>
                     )}
+                    {!isCompleted && sseComplete && dashData && (
+                        <button onClick={saveSnapshot} disabled={snapshotSaving}
+                                className={'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ' +
+                                    (snapshotSaving
+                                        ? 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed'
+                                        : 'text-green-700 bg-green-50 border-green-200 hover:bg-green-100')}>
+                            <i className={'fa-solid ' + (snapshotSaving ? 'fa-spinner fa-spin' : 'fa-camera')}></i>
+                            {snapshotSaving ? 'Saving...' : 'Save Snapshot'}
+                        </button>
+                    )}
+                    {!isCompleted && (
                     <button onClick={function() {
+                        bustCacheRef.current = true;
                         setRefreshTrigger(function(n) { return n + 1; });
                         setDashData(null);
                         setSseComplete(false);
-                    }} disabled={!sseComplete}
+                    }} disabled={!sseComplete || snapshotSaving}
                     className={'inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-md border transition-colors ' +
-                        (sseComplete
+                        (sseComplete && !snapshotSaving
                             ? 'text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100'
                             : 'text-gray-400 bg-gray-50 border-gray-200 cursor-not-allowed')}>
                         {'\u21BB'} Refresh Data
                     </button>
+                    )}
                 </div>
             </div>
 
@@ -1628,6 +2183,36 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                    placeholder="#"
                                    disabled={!appVersionOp}
                                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:ring-blue-500 focus:border-blue-500 w-16" />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Visit Status</label>
+                        <div className="flex gap-1 flex-wrap">
+                            {[
+                                {value: 'approved', label: 'Approved'},
+                                {value: 'pending', label: 'Pending'},
+                                {value: 'rejected', label: 'Rejected'},
+                                {value: 'over_limit', label: 'Over Limit'}
+                            ].map(function(opt) {
+                                var isActive = statusFilter.indexOf(opt.value) !== -1;
+                                return <button key={opt.value}
+                                    type="button"
+                                    aria-pressed={isActive}
+                                    onClick={function() {
+                                        setStatusFilter(function(prev) {
+                                            if (prev.indexOf(opt.value) !== -1) {
+                                                var next = prev.filter(function(v) { return v !== opt.value; });
+                                                return next.length > 0 ? next : prev;
+                                            }
+                                            return prev.concat([opt.value]);
+                                        });
+                                    }}
+                                    className={'px-2.5 py-1 text-xs font-medium rounded-full border transition-colors cursor-pointer ' +
+                                        (isActive
+                                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                            : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50')
+                                    }>{opt.label}</button>;
+                            })}
                         </div>
                     </div>
                     <div className="flex-1 min-w-[180px]">
@@ -1669,9 +2254,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     <button onClick={function() {
                                 var opChanged = appVersionOp !== appliedAppVersionOp;
                                 var valChanged = appVersionVal !== appliedAppVersionVal;
-                                if (opChanged || valChanged) {
+                                var statusChanged = JSON.stringify(statusFilter.slice().sort()) !== JSON.stringify(appliedStatusFilter.slice().sort());
+                                if (opChanged || valChanged || statusChanged) {
+                                    try { sessionStorage.setItem(_statusFilterKey, JSON.stringify(statusFilter)); } catch(e) {}
                                     setAppliedAppVersionOp(appVersionOp);
                                     setAppliedAppVersionVal(appVersionVal);
+                                    setAppliedStatusFilter(statusFilter);
                                     setRefreshTrigger(function(n) { return n + 1; });
                                     setDashData(null);
                                     setSseComplete(false);
@@ -1752,6 +2340,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         {isColVisible('flw_name') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'display_name'); }}
                                             sortIndicator={sortIcon(overviewSort, 'display_name')}
                                             tooltip="Frontline worker name and ID">FLW Name</Th>}
+                                        {isColVisible('last_active') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'last_active_days'); }}
+                                            sortIndicator={sortIcon(overviewSort, 'last_active_days')}
+                                            tooltip="Days since FLW was last active on Connect">Last Active</Th>}
                                         {isColVisible('mothers') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'cases_registered'); }}
                                             sortIndicator={sortIcon(overviewSort, 'cases_registered')}
                                             tooltip="Unique mothers from CCHQ registration forms. Eligible count in parentheses."># Mothers</Th>}
@@ -1774,6 +2365,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         {isColVisible('meter_visit') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'median_meters_per_visit'); }}
                                             sortIndicator={sortIcon(overviewSort, 'median_meters_per_visit')}
                                             tooltip="Median haversine distance (m) between consecutive visits">Meter/Visit</Th>}
+                                        {isColVisible('dist_ratio') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'dist_ratio'); }}
+                                            sortIndicator={sortIcon(overviewSort, 'dist_ratio')}
+                                            tooltip="Revisit distance / meter per visit. Higher values may indicate suspicious patterns.">Dist. Ratio</Th>}
                                         {isColVisible('minute_visit') && <Th onClick={function() { toggleSort(setOverviewSort, overviewSort, 'median_minutes_per_visit'); }}
                                             sortIndicator={sortIcon(overviewSort, 'median_minutes_per_visit')}
                                             tooltip="Median time gap (min) between consecutive form submissions">Minute/Visit</Th>}
@@ -1819,6 +2413,20 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                     </div>
                                                 </td>
                                                 )}
+                                                {/* Last Active */}
+                                                {isColVisible('last_active') && (
+                                                <td className="px-4 py-3 text-sm" title={f.last_active_date || ''}>
+                                                    {f.last_active_days != null ? (
+                                                        <span className={
+                                                            f.last_active_days <= 7 ? 'text-green-600 font-medium' :
+                                                            f.last_active_days <= 15 ? 'text-yellow-600' :
+                                                            'text-red-600'
+                                                        }>
+                                                            {f.last_active_days + 'd ago'}
+                                                        </span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                )}
                                                 {/* # Mothers */}
                                                 {isColVisible('mothers') && (
                                                 <td className="px-4 py-3 text-sm text-gray-900">
@@ -1860,7 +2468,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 {isColVisible('eligible_5') && (
                                                 <td className="px-4 py-3 text-sm">
                                                     {cse.total > 0 ? (
-                                                        <span className={cse.pct >= 70 ? 'text-green-600 font-medium' : cse.pct >= 50 ? 'text-yellow-600' : 'text-red-600'}>
+                                                        <span className={getEligibleColor(cse.pct) === 'green' ? 'text-green-600 font-medium' : getEligibleColor(cse.pct) === 'yellow' ? 'text-yellow-600' : 'text-red-600'}>
                                                             {cse.eligible}/{cse.total} ({cse.pct}%)
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
@@ -1883,7 +2491,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 {/* Revisit Dist */}
                                                 {isColVisible('revisit_dist') && (
                                                 <td className="px-4 py-3 text-sm text-gray-900">
-                                                    {f.revisit_distance_km != null ? f.revisit_distance_km + ' km' : <span className="text-gray-400">{'\u2014'}</span>}
+                                                    {f.revisit_distance_km != null ? (
+                                                        <span>{f.revisit_distance_km + ' km'} <span className="text-gray-500">({f.cases_with_revisits || 0})</span></span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 )}
                                                 {/* Meter/Visit */}
@@ -1894,6 +2504,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             {f.median_meters_per_visit + ' m'}
                                                         </span>
                                                     ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                )}
+                                                {/* Dist. Ratio */}
+                                                {isColVisible('dist_ratio') && (
+                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                    {f.dist_ratio != null ? f.dist_ratio : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 )}
                                                 {/* Minute/Visit */}
@@ -2248,6 +2864,52 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                         </div>
                     </div>
 
+                    {/* Aggregate GPS Map — all FLW visits */}
+                    {leafletReady && (gpsData.all_coordinates || []).length > 0 && (
+                        <div className="bg-white border border-gray-200 rounded-lg shadow-sm mb-4">
+                            <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                                <h2 className="text-sm font-semibold text-gray-700">
+                                    <i className="fa-solid fa-map text-blue-600 mr-2"></i>
+                                    All Visits Map
+                                    <span className="text-xs text-gray-500 font-normal ml-2">({(gpsData.all_coordinates || []).length} GPS points)</span>
+                                </h2>
+                                <button onClick={function() { setShowAggregateMap(function(p) { return !p; }); }}
+                                        className={'px-3 py-1.5 text-xs font-medium border rounded ' +
+                                            (showAggregateMap ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50')}>
+                                    <i className={'fa-solid mr-1 ' + (showAggregateMap ? 'fa-chevron-up' : 'fa-chevron-down')}></i>
+                                    {showAggregateMap ? 'Hide Map' : 'Show Map'}
+                                </button>
+                            </div>
+                            {showAggregateMap && (
+                                <div className="p-4">
+                                    <div id="aggregate-gps-map" style={{height: '450px', width: '100%', borderRadius: '0.375rem', border: '1px solid #e5e7eb'}}></div>
+                                    {/* FLW Color Legend */}
+                                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 max-h-24 overflow-y-auto">
+                                        {(function() {
+                                            var usernames = {};
+                                            (gpsData.all_coordinates || []).forEach(function(c) { usernames[c.u] = true; });
+                                            var sortedUsers = Object.keys(usernames).sort();
+                                            return sortedUsers.map(function(u, i) {
+                                                var hue = Math.round(i * 360 / sortedUsers.length);
+                                                var color = 'hsl(' + hue + ', 70%, 45%)';
+                                                var name = u;
+                                                for (var gi = 0; gi < gpsFlws.length; gi++) {
+                                                    if (gpsFlws[gi].username === u) { name = gpsFlws[gi].display_name || u; break; }
+                                                }
+                                                return (
+                                                    <span key={u} className="inline-flex items-center">
+                                                        <span className="inline-block w-3 h-3 rounded-full mr-1" style={{backgroundColor: color}}></span>
+                                                        {name}
+                                                    </span>
+                                                );
+                                            });
+                                        })()}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* GPS FLW Table */}
                     <div className="bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
                         <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
@@ -2265,15 +2927,27 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'total_visits'); }}
                                             sortIndicator={sortIcon(gpsSort, 'total_visits')}
                                             tooltip="Total form submissions within the selected date range.">Total Visits</Th>
-                                        <ThStatic tooltip="Visits with parseable GPS coordinates (lat, lon).">With GPS</ThStatic>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'visits_with_gps'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'visits_with_gps')}
+                                            tooltip="Visits with parseable GPS coordinates (lat, lon).">With GPS</Th>
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'flagged_visits'); }}
                                             sortIndicator={sortIcon(gpsSort, 'flagged_visits')}
                                             tooltip="Visits flagged for anomalous GPS">Flagged</Th>
-                                        <ThStatic tooltip="Count of distinct mother case IDs visited by this FLW.">Unique Cases</ThStatic>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'unique_cases'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'unique_cases')}
+                                            tooltip="Count of distinct mother case IDs visited by this FLW.">Unique Cases</Th>
                                         <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'avg_case_distance_km'); }}
                                             sortIndicator={sortIcon(gpsSort, 'avg_case_distance_km')}
-                                            tooltip="Average haversine distance (km) between GPS coordinates">Avg Case Dist</Th>
-                                        <ThStatic tooltip="Largest haversine distance (km) observed">Max Case Dist</ThStatic>
+                                            tooltip="Avg haversine distance (km) between successive visits to same case. (N) = cases with 2+ visits.">Revisit Dist.</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'median_meters_per_visit'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'median_meters_per_visit')}
+                                            tooltip="Median haversine distance (m) between consecutive visits to different mothers in same day.">Meter/Visit</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'dist_ratio'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'dist_ratio')}
+                                            tooltip="Revisit distance / meter per visit. Higher values may indicate suspicious patterns.">Dist. Ratio</Th>
+                                        <Th onClick={function() { toggleSort(setGpsSort, gpsSort, 'max_case_distance_km'); }}
+                                            sortIndicator={sortIcon(gpsSort, 'max_case_distance_km')}
+                                            tooltip="Largest haversine distance (km) between visits to same case">Max Revisit Dist.</Th>
                                         <ThStatic tooltip="Daily visit count sparkline for the last 7 days">Trailing 7 Days</ThStatic>
                                         <ThStatic className="text-right">Actions</ThStatic>
                                     </tr>
@@ -2314,17 +2988,31 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 </td>
                                                 {/* Unique Cases */}
                                                 <td className="px-4 py-3 text-sm text-gray-900">{g.unique_cases || 0}</td>
-                                                {/* Avg Case Dist */}
+                                                {/* Revisit Dist. */}
                                                 <td className="px-4 py-3 text-sm text-gray-900">
-                                                    {g.avg_case_distance_km != null ? g.avg_case_distance_km + ' km' : <span className="text-gray-400">-</span>}
+                                                    {g.avg_case_distance_km != null ? (
+                                                        <span>{g.avg_case_distance_km + ' km'} <span className="text-gray-500">({g.cases_with_revisits || 0})</span></span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
-                                                {/* Max Case Dist */}
+                                                {/* Meter/Visit */}
+                                                <td className="px-4 py-3 text-sm">
+                                                    {g.median_meters_per_visit != null ? (
+                                                        <span className={g.median_meters_per_visit >= 1000 ? 'text-green-600 font-medium' : g.median_meters_per_visit >= 100 ? 'text-yellow-600' : 'text-red-600'}>
+                                                            {g.median_meters_per_visit + ' m'}
+                                                        </span>
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                {/* Dist. Ratio */}
+                                                <td className="px-4 py-3 text-sm text-gray-900">
+                                                    {g.dist_ratio != null ? g.dist_ratio : <span className="text-gray-400">{'\u2014'}</span>}
+                                                </td>
+                                                {/* Max Revisit Dist. */}
                                                 <td className="px-4 py-3 text-sm">
                                                     {g.max_case_distance_km != null ? (
                                                         <span className={g.max_case_distance_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'}>
                                                             {g.max_case_distance_km} km
                                                         </span>
-                                                    ) : <span className="text-gray-400">-</span>}
+                                                    ) : <span className="text-gray-400">{'\u2014'}</span>}
                                                 </td>
                                                 {/* Trailing 7 Days - BAR CHART */}
                                                 <td className="px-4 py-3 text-sm">
@@ -2361,82 +3049,146 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                     </div>
                                                 </td>
                                             </tr>,
-                                            /* GPS Drill-Down Panel - rendered as a separate panel below the table */
+                                            isExpanded && gpsDetailLoading && (
+                                                <tr key={g.username + '_loading'}>
+                                                    <td colSpan={11} className="p-0 border-b-2 border-blue-200">
+                                                        <div className="bg-blue-50 px-6 py-4 border-t border-blue-200 text-center">
+                                                            <i className="fa-solid fa-spinner fa-spin text-blue-600 mr-2"></i>
+                                                            <span className="text-sm text-gray-600">Loading visit details...</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ),
+                                            isExpanded && gpsDetail && (function() {
+                                                var displayVisits = selectedMother
+                                                    ? (gpsDetail.visits || []).filter(function(v) { return v.mother_case_id === selectedMother || v.case_id === selectedMother; })
+                                                    : (gpsDetail.visits || []);
+                                                displayVisits = sortRows(displayVisits, gpsDetailSort);
+                                                return (
+                                                <tr key={g.username + '_detail'}>
+                                                    <td colSpan={11} className="p-0 border-b-2 border-blue-200">
+                                                        <div className="bg-blue-50 px-6 py-3 border-t border-blue-200">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <h4 className="text-sm font-semibold text-gray-900">
+                                                                    <i className="fa-solid fa-location-dot text-blue-600 mr-1"></i>
+                                                                    Visit Details ({displayVisits.length} visits{selectedMother ? ' — filtered' : ''})
+                                                                </h4>
+                                                                <div className="flex items-center gap-2">
+                                                                    <button onClick={function() { setExpandedGps(null); }} className="text-gray-500 hover:text-gray-700 text-xs">
+                                                                        <i className="fa-solid fa-times mr-1"></i> Close
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* GPS Map */}
+                                                            {leafletReady && (
+                                                                <div className="mb-3">
+                                                                    <div className="flex items-center gap-3 mb-2">
+                                                                        <span className="text-xs font-semibold text-gray-700">
+                                                                            <i className="fa-solid fa-map text-blue-600 mr-1"></i> Map
+                                                                        </span>
+                                                                        <div className="inline-flex items-center gap-1">
+                                                                            <button onClick={function() { setShowMapVisits(function(p) { return !p; }); }}
+                                                                                    className={'px-3 py-1 text-xs font-medium border rounded ' +
+                                                                                        (showMapVisits ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-400 border-gray-300 hover:bg-gray-50')}>
+                                                                                <i className={'fa-solid fa-circle mr-1'} style={{color: showMapVisits ? '#93c5fd' : '#d1d5db', fontSize: '8px'}}></i>
+                                                                                Visits
+                                                                            </button>
+                                                                            <button onClick={function() { setShowMapMothers(function(p) { return !p; }); }}
+                                                                                    className="px-3 py-1 text-xs font-medium border rounded"
+                                                                                    style={showMapMothers ? {backgroundColor: '#f97316', color: '#fff', borderColor: '#f97316'} : {backgroundColor: '#fff', color: '#9ca3af', borderColor: '#d1d5db'}}>
+                                                                                <i className={'fa-solid fa-circle mr-1'} style={{color: showMapMothers ? '#fdba74' : '#d1d5db', fontSize: '8px'}}></i>
+                                                                                Mothers
+                                                                            </button>
+                                                                        </div>
+                                                                        {selectedMother && (
+                                                                            <div className="inline-flex items-center px-2 py-1 rounded text-xs" style={{backgroundColor: '#dbeafe', color: '#1e40af'}}>
+                                                                                <i className="fa-solid fa-filter mr-1"></i>
+                                                                                {(gpsDetail.visits.find(function(v) { return v.mother_case_id === selectedMother; }) || {}).entity_name || 'Selected mother'}
+                                                                                <button onClick={function() { setSelectedMother(null); }} className="ml-1 hover:opacity-70" style={{color: '#2563eb'}}>
+                                                                                    <i className="fa-solid fa-times"></i>
+                                                                                </button>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div id={'gps-map-' + g.username} style={{height: '350px', width: '100%', borderRadius: '0.375rem', border: '1px solid #e5e7eb'}}></div>
+                                                                </div>
+                                                            )}
+
+                                                            {/* Visits Table */}
+                                                            {displayVisits.length > 0 ? (
+                                                                <div className="overflow-x-auto bg-white rounded border border-gray-200" style={{maxHeight: '400px', overflowY: 'auto'}}>
+                                                                    <table className="min-w-full divide-y divide-gray-200">
+                                                                        <thead className="bg-gray-50 sticky top-0">
+                                                                            <tr>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'visit_date'); }}>
+                                                                                    Date{sortIcon(gpsDetailSort, 'visit_date')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'form_name'); }}>
+                                                                                    Form{sortIcon(gpsDetailSort, 'form_name')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'entity_name'); }}>
+                                                                                    Entity{sortIcon(gpsDetailSort, 'entity_name')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">GPS</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'distance_from_prev_km'); }}>
+                                                                                    Revisit Dist.{sortIcon(gpsDetailSort, 'distance_from_prev_km')}</th>
+                                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700 select-none"
+                                                                                    onClick={function() { toggleSort(setGpsDetailSort, gpsDetailSort, 'is_flagged'); }}>
+                                                                                    Status{sortIcon(gpsDetailSort, 'is_flagged')}</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody className="bg-white divide-y divide-gray-200">
+                                                                            {displayVisits.map(function(v, vi) {
+                                                                                return (
+                                                                                    <tr key={vi} className={v.is_flagged ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                                                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.visit_date || '-'}</td>
+                                                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.form_name || '-'}</td>
+                                                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.entity_name || '-'}</td>
+                                                                                        <td className="px-4 py-2 text-sm text-gray-500">
+                                                                                            {v.gps ? (
+                                                                                                <span>{v.gps.latitude.toFixed(4)}, {v.gps.longitude.toFixed(4)}</span>
+                                                                                            ) : <span className="text-gray-400">No GPS</span>}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-2 text-sm">
+                                                                                            {v.distance_from_prev_km != null ? (
+                                                                                                <span className={v.distance_from_prev_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'}>
+                                                                                                    {v.distance_from_prev_km} km
+                                                                                                </span>
+                                                                                            ) : <span className="text-gray-400">-</span>}
+                                                                                        </td>
+                                                                                        <td className="px-4 py-2 text-sm">
+                                                                                            {v.is_flagged ? (
+                                                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                                                                    <i className="fa-solid fa-flag mr-1"></i> Flagged
+                                                                                                </span>
+                                                                                            ) : <span className="text-green-600"><i className="fa-solid fa-check"></i></span>}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                );
+                                                                            })}
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center text-sm text-gray-500 py-3">No visits found for this FLW.</div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                );
+                                            })()
                                         );
                                     })}
                                     {sortedGps.length === 0 && (
-                                        <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-gray-500">No GPS data available</td></tr>
+                                        <tr><td colSpan={11} className="px-4 py-8 text-center text-sm text-gray-500">No GPS data available</td></tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    {/* GPS Drill-Down Panel (below table) */}
-                    {expandedGps && (
-                        <div className="mt-4 bg-white border border-gray-200 rounded-lg shadow-sm" style={{overflow: 'clip'}}>
-                            <div className="px-6 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                                <h3 className="text-lg font-semibold text-gray-900">
-                                    Visit Details for {(gpsFlws.find(function(f) { return f.username === expandedGps; }) || {}).display_name || expandedGps}
-                                </h3>
-                                <button onClick={function() { setExpandedGps(null); }} className="text-gray-500 hover:text-gray-700">
-                                    <i className="fa-solid fa-times"></i>
-                                </button>
-                            </div>
-                            {gpsDetailLoading ? (
-                                <div className="p-6 text-center">
-                                    <i className="fa-solid fa-spinner fa-spin text-blue-600 mr-2"></i> Loading visit details...
-                                </div>
-                            ) : gpsDetail ? (
-                                <div className="overflow-x-auto">
-                                    <table data-sticky-header className="min-w-full divide-y divide-gray-200">
-                                        <thead className="bg-gray-50">
-                                            <tr>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Form</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Entity</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">GPS</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Dist from Prev</th>
-                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-gray-200">
-                                            {(gpsDetail.visits || []).map(function(v, vi) {
-                                                return (
-                                                    <tr key={vi} className={v.is_flagged ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.visit_date || '-'}</td>
-                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.form_name || '-'}</td>
-                                                        <td className="px-4 py-2 text-sm text-gray-900">{v.entity_name || '-'}</td>
-                                                        <td className="px-4 py-2 text-sm text-gray-500">
-                                                            {v.gps ? (
-                                                                <span>{v.gps.latitude.toFixed(4)}, {v.gps.longitude.toFixed(4)}</span>
-                                                            ) : <span className="text-gray-400">No GPS</span>}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-sm">
-                                                            {v.distance_from_prev_km != null ? (
-                                                                <span className={v.distance_from_prev_km > 5 ? 'text-red-600 font-bold' : 'text-gray-900'}>
-                                                                    {v.distance_from_prev_km} km
-                                                                </span>
-                                                            ) : <span className="text-gray-400">-</span>}
-                                                        </td>
-                                                        <td className="px-4 py-2 text-sm">
-                                                            {v.is_flagged ? (
-                                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                                                    <i className="fa-solid fa-flag mr-1"></i> Flagged
-                                                                </span>
-                                                            ) : <span className="text-green-600"><i className="fa-solid fa-check"></i></span>}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <div className="p-6 text-center text-gray-500">No visits found for this FLW in the selected date range.</div>
-                            )}
-                        </div>
-                    )}
                 </div>
             )}
 
@@ -2774,7 +3526,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                             </div>
                                                         ) : (
                                                             <div className="p-6 text-center text-gray-500">
-                                                                {fromSnapshot ? 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.' : 'No due visits found for this FLW.'}
+                                                                {dataSource === 'snapshot' ? (isCompleted ? 'Drill-down data not available in snapshot.' : 'Drill-down data not available in snapshot. Click "Refresh Data" to load details.') : 'No due visits found for this FLW.'}
                                                             </div>
                                                         )}
                                                     </td>
@@ -2816,10 +3568,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Eligible at Reg</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Still Eligible</th>
                                         <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">% Still Eligible</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 0 or 1 missed visits / all cases">% &le;1 Missed</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
-                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 0 or 1 missed visits / eligible cases">% &le;1 Missed</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 3+ completed visits among those whose Month 1 visit is due (5-day buffer)">% 4 Visits On Track</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 4+ completed visits among those whose Month 3 visit is due (5-day buffer)">% 5 Visits Complete</th>
+                                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider" title="Eligible cases with 5+ completed visits among those whose Month 6 visit is due (5-day buffer)">% 6 Visits Complete</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -2843,7 +3595,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_eligible_at_registration}</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.total_cases_still_eligible}</td>
-                                                <td className="px-3 py-2 text-right font-medium" style={{color: row.pct_still_eligible >= 80 ? '#22c55e' : row.pct_still_eligible >= 60 ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
+                                                <td className="px-3 py-2 text-right font-medium" style={{color: getEligibleColor(row.pct_still_eligible) === 'green' ? '#22c55e' : getEligibleColor(row.pct_still_eligible) === 'yellow' ? '#eab308' : '#ef4444'}}>{row.pct_still_eligible}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_missed_1_or_less_visits}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_4_visits_on_track}%</td>
                                                 <td className="px-3 py-2 text-right text-gray-700">{row.pct_5_visits_complete}%</td>
@@ -2874,9 +3626,9 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                         var total5Num = 0; var total5Den = 0;
                                         var total6Num = 0; var total6Den = 0;
                                         perf.forEach(function(r) {
-                                            totalMissedNum += Math.round(r.pct_missed_1_or_less_visits * r.total_cases / 100);
+                                            totalMissedNum += r.pct_missed_1_or_less_visits * r.total_cases_eligible_at_registration / 100;
                                         });
-                                        var pctMissed = totals.total_cases > 0 ? Math.round(totalMissedNum / totals.total_cases * 100) : 0;
+                                        var pctMissed = totals.total_cases_eligible_at_registration > 0 ? Math.round(totalMissedNum / totals.total_cases_eligible_at_registration * 100) : 0;
                                         return (
                                             <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
                                                 <td className="px-3 py-2 text-gray-900">Total</td>
@@ -2900,6 +3652,809 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 No performance data available. Data will appear after the dashboard finishes loading.
                             </div>
                         )}
+                    </div>
+
+                    {/* Monthly Visit Schedule Table */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 mt-4" style={{overflow: 'clip'}}>
+                        <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-start justify-between">
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-700">
+                                    <i className="fa-solid fa-calendar-check mr-1"></i> Monthly Visit Schedule
+                                </h3>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    {monthlyViewPct ? 'Completion rate (%) by type and month' : monthlyCountMode === 'completed' ? 'Completed visits by type and month' : monthlyCountMode === 'scheduled' ? 'Total scheduled visits by type and month' : 'Completed vs total scheduled visits by type and month'} (Sep 2025 &ndash; Jul 2026).
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 ml-3 mt-0.5">
+                                {!monthlyViewPct && (
+                                    <span className="inline-flex rounded border border-gray-300 overflow-hidden">
+                                        {[
+                                            { key: 'ratio', label: 'X / Y' },
+                                            { key: 'completed', label: 'Completed' },
+                                            { key: 'scheduled', label: 'Scheduled' },
+                                        ].map(function(opt) {
+                                            var active = monthlyCountMode === opt.key;
+                                            return (
+                                                <button
+                                                    key={opt.key}
+                                                    onClick={function() { setMonthlyCountMode(opt.key); }}
+                                                    className={'px-2 py-1 text-xs font-medium whitespace-nowrap ' + (active ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100')}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            );
+                                        })}
+                                    </span>
+                                )}
+                                <button
+                                    onClick={function() { setMonthlyViewPct(!monthlyViewPct); }}
+                                    className="px-2.5 py-1 text-xs font-medium rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-100 whitespace-nowrap"
+                                    title={monthlyViewPct ? 'Switch to counts' : 'Switch to percentages'}
+                                >
+                                    {monthlyViewPct ? <span><i className="fa-solid fa-hashtag mr-1"></i>Counts</span> : <span><i className="fa-solid fa-percent mr-1"></i>Percent</span>}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table data-sticky-header className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10">Visit Type</th>
+                                        {MONTHLY_VISIT_MONTHS.map(function(m) {
+                                            return <th key={m} className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">{MONTHLY_VISIT_LABELS[m]}</th>;
+                                        })}
+                                        <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {MONTHLY_VISIT_TYPES.map(function(vt) {
+                                        var rowData = monthlyVisitData[vt] || {};
+                                        var totalCompleted = 0;
+                                        var totalAll = 0;
+                                        MONTHLY_VISIT_MONTHS.forEach(function(m) {
+                                            totalCompleted += (rowData[m] || {}).completed || 0;
+                                            totalAll += (rowData[m] || {}).total || 0;
+                                        });
+                                        return (
+                                            <tr key={vt} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2 whitespace-nowrap font-medium text-gray-900 sticky left-0 bg-white z-10">{vt}</td>
+                                                {MONTHLY_VISIT_MONTHS.map(function(m) {
+                                                    var cell = rowData[m] || { completed: 0, total: 0 };
+                                                    var display = fmtVisitCell(cell.completed, cell.total);
+                                                    return (
+                                                        <td key={m} className="px-3 py-2 text-center whitespace-nowrap text-gray-700">
+                                                            {display === null ? <span className="text-gray-300">&ndash;</span> : display}
+                                                        </td>
+                                                    );
+                                                })}
+                                                <td className="px-3 py-2 text-center font-semibold whitespace-nowrap text-gray-900">
+                                                    {fmtVisitCell(totalCompleted, totalAll) || <span className="text-gray-300">&ndash;</span>}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                    {/* Totals row */}
+                                    <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                                        <td className="px-3 py-2 text-gray-900 sticky left-0 bg-gray-50 z-10">Total</td>
+                                        {MONTHLY_VISIT_MONTHS.map(function(m) {
+                                            var colCompleted = 0;
+                                            var colTotal = 0;
+                                            MONTHLY_VISIT_TYPES.forEach(function(vt) {
+                                                var cell = (monthlyVisitData[vt] || {})[m] || { completed: 0, total: 0 };
+                                                colCompleted += cell.completed;
+                                                colTotal += cell.total;
+                                            });
+                                            return (
+                                                <td key={m} className="px-3 py-2 text-center whitespace-nowrap text-gray-900">
+                                                    {fmtVisitCell(colCompleted, colTotal) || <span className="text-gray-300">&ndash;</span>}
+                                                </td>
+                                            );
+                                        })}
+                                        {(function() {
+                                            var grandCompleted = 0;
+                                            var grandTotal = 0;
+                                            MONTHLY_VISIT_TYPES.forEach(function(vt) {
+                                                MONTHLY_VISIT_MONTHS.forEach(function(m) {
+                                                    var cell = (monthlyVisitData[vt] || {})[m] || { completed: 0, total: 0 };
+                                                    grandCompleted += cell.completed;
+                                                    grandTotal += cell.total;
+                                                });
+                                            });
+                                            return (
+                                                <td className="px-3 py-2 text-center whitespace-nowrap text-gray-900">
+                                                    {fmtVisitCell(grandCompleted, grandTotal) || <span className="text-gray-300">&ndash;</span>}
+                                                </td>
+                                            );
+                                        })()}
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        {Object.keys(fuDrilldown).length === 0 && (
+                            <div className="px-4 py-8 text-center text-sm text-gray-500">
+                                No visit data available. Data will appear after the dashboard finishes loading.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* ========== GUIDE TAB ========== */}
+            {activeTab === 'guide' && (
+                <div className="space-y-3">
+                    {/* Header */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5">
+                        <h2 className="text-lg font-bold text-gray-800">
+                            <i className="fa-solid fa-book mr-2 text-blue-500"></i>
+                            MBW Monitoring Dashboard &mdash; Indicators &amp; Columns Guide
+                        </h2>
+                        <p className="text-sm text-gray-600 mt-2">
+                            This guide explains every column and indicator shown in the dashboard.
+                        </p>
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div className="bg-blue-50 rounded px-3 py-2 text-blue-700 font-medium">
+                                <i className="fa-solid fa-chart-line mr-1"></i> Overview &mdash; 16 columns
+                            </div>
+                            <div className="bg-green-50 rounded px-3 py-2 text-green-700 font-medium">
+                                <i className="fa-solid fa-location-dot mr-1"></i> GPS Analysis &mdash; 9 columns + map
+                            </div>
+                            <div className="bg-amber-50 rounded px-3 py-2 text-amber-700 font-medium">
+                                <i className="fa-solid fa-clipboard-check mr-1"></i> Follow-Up Rate &mdash; 6+ columns
+                            </div>
+                            <div className="bg-purple-50 rounded px-3 py-2 text-purple-700 font-medium">
+                                <i className="fa-solid fa-ranking-star mr-1"></i> FLW Performance &mdash; 10 columns
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ---- SECTION: Filter Bar ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-filter mr-2 text-blue-500"></i> Filter Bar
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The filter bar above the tabs controls which data is displayed across all tabs.</p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Filter</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Default</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Description</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Visit Status</td><td className="px-3 py-1.5">Approved only</td><td className="px-3 py-1.5">Filters all tabs by Connect visit approval status: <strong>Approved</strong>, <strong>Pending</strong>, <strong>Rejected</strong>, <strong>Over Limit</strong>. Select one or more. Applied server-side &mdash; reuses cached data, no re-download.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">App Version <span className="text-gray-400">(GPS only)</span></td><td className="px-3 py-1.5">&gt; 14</td><td className="px-3 py-1.5">Filters GPS visits by app build version. Configurable operator (&gt;, &ge;, =, &le;, &lt;) and version number.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">FLW filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list to show only specific FLWs across all tabs. Client-side &mdash; no reload needed.</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Mother filter</td><td className="px-3 py-1.5">All</td><td className="px-3 py-1.5">Multi-select list for Follow-Up tab mother drill-down. Client-side.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p><strong>Apply</strong> sends Visit Status and App Version changes to the server. <strong>Reset</strong> restores defaults (Approved only, &gt; 14). Changing Visit Status does <em>not</em> re-download from Connect &mdash; it reuses cached data and applies the filter via SQL, so it completes in seconds.</p>
+                        </div>
+                    </div>
+
+                    {/* ---- SECTION: Tab 1 Overview ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-chart-line mr-2 text-blue-500"></i> Tab 1: Overview
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The Overview tab provides a single table with one row per FLW. Each column summarizes a different dimension of performance.</p>
+
+                                {/* # Mothers */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800"># Mothers</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Total unique mothers registered by this FLW, with eligible count in parentheses.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> Counts unique mother case IDs from &quot;Register Mother&quot; forms. Parenthesized count = mothers with <code className="bg-gray-100 px-1 rounded text-xs">eligible_full_intervention_bonus = &quot;1&quot;</code>.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Mother count: unique <code>form.var_visit_1..6.mother_case_id</code> per FLW</div>
+                                        <div>Eligible: <code>form.eligible_full_intervention_bonus</code> = &quot;1&quot;</div>
+                                    </div>
+                                </div>
+
+                                {/* Last Active */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Last Active</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Number of days since the FLW was last active on the Connect platform.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> Uses the <code className="bg-gray-100 px-1 rounded text-xs">last_active</code> field from Connect user data &mdash; the date of the FLW&apos;s most recent form submission or module completion. Displayed as &quot;Xd ago&quot;.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data source:</strong></div>
+                                        <div>Connect user export: <code>last_active</code> (DateTimeField on OpportunityAccess)</div>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 text-xs">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&le;7 days Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">8&ndash;15 days Yellow</span>
+                                        <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&gt;15 days Red</span>
+                                    </div>
+                                </div>
+
+                                {/* GS Score */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">GS Score</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> The FLW&apos;s Gold Standard Visit Checklist score (%).</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> A supervisor completes a checklist form while observing the FLW. The dashboard shows the <strong>first (oldest)</strong> GS score on record.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Score: <code>form.checklist_percentage</code> (0&ndash;100)</div>
+                                        <div>FLW identity: <code>form.load_flw_connect_id</code></div>
+                                        <div>Ordering: <code>form.meta.timeEnd</code> (oldest first)</div>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 text-xs">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;70% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;69% Yellow</span>
+                                        <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
+                                    </div>
+                                </div>
+
+                                {/* Follow-up Rate */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Follow-up Rate</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Percentage of scheduled visits completed, considering only eligible mothers with a 5-day grace period.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> (completed visits / total visits due 5+ days ago for eligible mothers) &times; 100.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Scheduled dates: <code>form.var_visit_1..6.visit_date_scheduled</code></div>
+                                        <div>Expiry dates: <code>form.var_visit_1..6.visit_expiry_date</code></div>
+                                        <div>Visit type: <code>form.var_visit_1..6.visit_type</code></div>
+                                        <div>Eligibility: <code>form.eligible_full_intervention_bonus</code> = &quot;1&quot;</div>
+                                        <div>Completion: <code>form.@name</code> mapped via completion flags</div>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 text-xs">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;80% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">60&ndash;79% Yellow</span>
+                                        <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;60% Red</span>
+                                    </div>
+                                </div>
+
+                                {/* Eligible 5+ */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Eligible 5+</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Among eligible mothers, how many are &quot;still on track&quot; (count and %).</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> A mother is on track if she has <strong>5+ completed visits</strong> OR <strong>&le;1 missed visit</strong>.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Eligibility: <code>form.eligible_full_intervention_bonus</code> = &quot;1&quot;</div>
+                                        <div>Completed: visits with status starting with &quot;Completed&quot;</div>
+                                        <div>Missed: visits past <code>form.var_visit_N.visit_expiry_date</code></div>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 text-xs">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
+                                        <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
+                                    </div>
+                                </div>
+
+                                {/* % EBF */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">% EBF (Exclusive Breastfeeding)</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Percentage of postnatal visits reporting exclusive breastfeeding.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> (EBF visits / total visits with breastfeeding data) &times; 100. Rates too low may indicate counseling gaps; rates above 95% may indicate fabrication.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths</strong> (multi-choice field &mdash; &quot;ebf&quot; token = exclusive):</div>
+                                        <div><code>form.feeding_history.pnc_current_bf_status</code></div>
+                                        <div><code>form.feeding_history.oneweek_current_bf_status</code></div>
+                                        <div><code>form.feeding_history.onemonth_current_bf_status</code></div>
+                                        <div><code>form.feeding_history.threemonth_current_bf_status</code></div>
+                                        <div><code>form.feeding_history.sixmonth_current_bf_status</code></div>
+                                    </div>
+                                    <div className="mt-2 flex gap-2 text-xs">
+                                        <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">50&ndash;85% Green</span>
+                                        <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">31&ndash;49% or 86&ndash;95% Yellow</span>
+                                        <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&le;30% or &gt;95% Red</span>
+                                    </div>
+                                </div>
+
+                                {/* Revisit Dist. */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Revisit Dist.</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Average distance (km) between successive GPS coordinates when the FLW revisits the <strong>same mother</strong>. Number in parentheses (N) = distinct mothers with 2+ GPS visits (the denominator for the average).</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> Group visits by mother case ID, sort by time, calculate Haversine distance between consecutive visits, then average across all pairs.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>GPS: <code>form.meta.location</code> or <code>form.meta.location.#text</code></div>
+                                        <div>Mother case ID: <code>form.parents.parent.case.@case_id</code></div>
+                                        <div>Ordering: <code>form.meta.timeEnd</code></div>
+                                    </div>
+                                </div>
+
+                                {/* Meter/Visit */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Meter/Visit</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Median distance (meters) between consecutive visits to <strong>different mothers</strong> within a single day.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> Per working day: list visits chronologically, keep first per mother, require 2+ unique mothers, calculate distances between consecutive pairs, take median across all days.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>GPS: <code>form.meta.location</code> or <code>form.meta.location.#text</code></div>
+                                        <div>Ordering: <code>form.meta.timeEnd</code></div>
+                                        <div>Dedup: <code>form.parents.parent.case.@case_id</code></div>
+                                        <div>Version filter: <code>form.meta.app_build_version</code></div>
+                                    </div>
+                                    <div className="mt-2 text-xs"><span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">Red flag: &lt;100 meters</span></div>
+                                </div>
+
+                                {/* Dist. Ratio */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Dist. Ratio</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Ratio of revisit distance (km) to meter per visit (km). A dimensionless number.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> <code>Revisit Dist. &times; 1000 / Meter/Visit</code>. For example, if revisit distance is 2 km and meter/visit is 500 m, the ratio is 4.0.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> A high ratio means revisit distance is disproportionately large compared to daily inter-visit travel &mdash; could indicate GPS spoofing or fabricated revisits. Values close to 1.0 are expected.</p>
+                                </div>
+
+                                {/* Minute/Visit */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Minute/Visit</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Median time gap (minutes) between consecutive visits to different mothers within a day.</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> Same grouping as Meter/Visit, but calculates time difference between consecutive form submissions instead of distance.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Submission time: <code>form.meta.timeEnd</code></div>
+                                        <div>Dedup: <code>form.parents.parent.case.@case_id</code></div>
+                                    </div>
+                                </div>
+
+                                {/* Phone Dup % */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Phone Dup %</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Percentage of mothers whose phone numbers appear more than once across the FLW&apos;s caseload.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> High duplicate rates across different mothers may indicate fabricated registrations.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Phone: <code>form.mother_details.phone_number</code></div>
+                                        <div>Fallback: <code>form.mother_details.back_up_phone_number</code></div>
+                                    </div>
+                                </div>
+
+                                {/* ANC = PNC */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">ANC = PNC</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Number of mothers where ANC and PNC completion dates fall on the <strong>same day</strong>.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> ANC (during pregnancy) and PNC (after delivery) on the same day is biologically impossible &mdash; strongly suggests data fabrication.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>ANC date: <code>form.visit_completion.anc_completion_date</code></div>
+                                        <div>PNC date: <code>form.pnc_completion_date</code></div>
+                                    </div>
+                                </div>
+
+                                {/* Parity */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Parity</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> How concentrated (repetitive) the parity values are across the FLW&apos;s mothers. Parity = number of times a woman has given birth (live births or stillbirths after 24 weeks).</p>
+                                    <p className="mt-1"><strong>How it&apos;s calculated:</strong> (mothers with duplicate parity values / total with parity data) &times; 100. Also shows the mode value and its percentage.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> A natural population should have diverse parity values. High concentration of a single value may indicate copy-pasting or fabrication.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data path:</strong></div>
+                                        <div><code>form.confirm_visit_information.parity__of_live_births_or_stillbirths_after_24_weeks</code></div>
+                                    </div>
+                                </div>
+
+                                {/* Age */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Age</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> How concentrated (repetitive) the age values are across the FLW&apos;s mothers. Same logic as Parity.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Primary: <code>form.mother_details.mother_dob</code> (age = today &minus; DOB)</div>
+                                        <div>Fallback 1: <code>form.mother_details.age_in_years_rounded</code></div>
+                                        <div>Fallback 2: <code>form.mother_details.mothers_age</code></div>
+                                    </div>
+                                </div>
+
+                                {/* Age = Reg */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Age = Reg</h4>
+                                    <p className="mt-1"><strong>What it shows:</strong> Percentage of mothers whose date of birth has the <strong>same month and day</strong> as their registration date.</p>
+                                    <p className="mt-1"><strong>Why it matters:</strong> Statistically very unlikely &mdash; suggests the FLW entered the registration date as the DOB instead of asking.</p>
+                                    <div className="mt-2 bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                        <div><strong>Data paths:</strong></div>
+                                        <div>Mother DOB: <code>form.mother_details.mother_dob</code></div>
+                                        <div>Registration date: <code>received_on</code> (fallback: <code>metadata.timeEnd</code>)</div>
+                                    </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="border-l-4 border-blue-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Actions</h4>
+                                    <p className="mt-1">Interactive buttons per FLW: assessment (Eligible for Renewal / Probation / Suspended), notes, filter, and task creation (with optional AI via OCS).</p>
+                                </div>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Tab 2 GPS Analysis ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-location-dot mr-2 text-green-500"></i> Tab 2: GPS Analysis
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The GPS Analysis tab focuses on geographic patterns to detect suspicious travel behavior.</p>
+
+                                <div className="bg-blue-50 rounded p-3 text-xs">
+                                    <div className="font-semibold text-blue-800 mb-1">Shared Data Paths (all GPS columns):</div>
+                                    <div className="font-mono leading-relaxed text-blue-900">
+                                        <div>GPS: <code>form.meta.location</code> or <code>form.meta.location.#text</code> (&quot;lat lon alt accuracy&quot;)</div>
+                                        <div>Visit datetime: <code>form.meta.timeEnd</code></div>
+                                        <div>Mother case ID: <code>form.parents.parent.case.@case_id</code></div>
+                                        <div>Case ID: <code>form.case.@case_id</code></div>
+                                        <div>App version: <code>form.meta.app_build_version</code></div>
+                                        <div>Form name: <code>form.@name</code></div>
+                                    </div>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Summary Cards</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Card</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Description</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Total Visits</td><td className="px-3 py-1.5">Form submissions within selected date range</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Flagged Visits</td><td className="px-3 py-1.5">Visits where distance from previous visit to same mother &gt; 5 km</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Date Range</td><td className="px-3 py-1.5">Selected date range for analysis</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Flag Threshold</td><td className="px-3 py-1.5">5 km</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">FLW Table Columns</h4>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">With GPS</h4>
+                                    <p className="mt-1">Count and percentage of visits with parseable GPS coordinates. Shown as &quot;X (Y%)&quot;.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Flagged</h4>
+                                    <p className="mt-1">Visits where distance between consecutive visits to the <strong>same mother</strong> exceeds 5 km. Red text when any are flagged.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Unique Cases</h4>
+                                    <p className="mt-1">Distinct mother cases visited. Data path: count of unique <code className="bg-gray-100 px-1 rounded text-xs">form.case.@case_id</code>.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Revisit Dist.</h4>
+                                    <p className="mt-1">Average Haversine distance (km) between successive visits to the <strong>same mother</strong>. Number in parentheses (N) = distinct mothers with 2+ GPS visits (the denominator for the average). Same metric as the Overview tab.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Meter/Visit</h4>
+                                    <p className="mt-1">Median Haversine distance (meters) between consecutive visits to <strong>different mothers</strong> within a single day. Same metric as the Overview tab. Color-coded: green &ge;1000 m, yellow &ge;100 m, red &lt;100 m.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Dist. Ratio</h4>
+                                    <p className="mt-1">Ratio of Revisit Dist. to Meter/Visit: <code className="bg-gray-100 px-1 rounded text-xs">(revisit_km &times; 1000) / meter_per_visit</code>. High values (e.g. &gt;5) indicate the revisit distance is disproportionately large vs. daily travel.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Max Revisit Dist.</h4>
+                                    <p className="mt-1">Largest Haversine distance (km) between consecutive visits to the same mother. Red and bold when &gt; 5 km.</p>
+                                </div>
+
+                                <div className="border-l-4 border-green-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Trailing 7 Days</h4>
+                                    <p className="mt-1">Sparkline bar chart showing daily travel over the last 7 days. Each bar = total path distance that day (sum of distances between consecutive visit locations).</p>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Aggregate Map</h4>
+                                <p>A collapsible map at the top of the GPS tab showing <strong>all FLW visits</strong> on a single map. Each FLW is assigned a unique color (HSL hue rotation). Markers are clustered at higher zoom levels for performance. Click markers for visit details (FLW name, entity, date, flagged status). Flagged visits appear as red markers regardless of FLW color.</p>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">GPS Drill-Down</h4>
+                                <p>Clicking &quot;Details&quot; shows individual visit records with: Date, Form type, Entity (mother name), GPS coordinates, Revisit Dist. (distance from previous visit to same mother), and Flag status (&gt; 5 km). An interactive map shows visit and mother locations.</p>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Tab 3 Follow-Up Rate ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-clipboard-check mr-2 text-amber-500"></i> Tab 3: Follow-Up Rate
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>The Follow-Up Rate tab tracks whether each FLW is completing their scheduled visits on time.</p>
+
+                                <div className="bg-amber-50 rounded p-3 text-xs">
+                                    <div className="font-semibold text-amber-800 mb-1">Key Data Paths (two data sources merged):</div>
+                                    <div className="font-mono leading-relaxed text-amber-900">
+                                        <div className="font-semibold mt-1">From &quot;Register Mother&quot; forms (CCHQ) &mdash; expected visits:</div>
+                                        <div>&bull; <code>form.var_visit_1..6.visit_type</code>, <code>.visit_date_scheduled</code>, <code>.visit_expiry_date</code>, <code>.mother_case_id</code></div>
+                                        <div>&bull; Create flags: <code>form.var_visit_N.create_antenatal_visit</code>, <code>create_postnatal_visit</code>, etc. = &quot;1&quot;</div>
+                                        <div>&bull; Eligibility: <code>form.eligible_full_intervention_bonus</code> = &quot;1&quot;</div>
+                                        <div className="font-semibold mt-2">From visit forms (Connect API) &mdash; completed visits:</div>
+                                        <div>&bull; <code>form.@name</code> mapped to visit type</div>
+                                        <div>&bull; <code>form.parents.parent.case.@case_id</code> (mother link)</div>
+                                        <div>&bull; Completion flags: <code>antenatal_visit_completion</code>, <code>postnatal_visit_completion</code>, etc.</div>
+                                    </div>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">FLW Table Columns</h4>
+
+                                <div className="border-l-4 border-amber-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Follow-up Rate</h4>
+                                    <p className="mt-1">Same as Overview: (completed / due 5+ days ago for eligible mothers) &times; 100. Shown with colored progress bar.</p>
+                                </div>
+                                <div className="border-l-4 border-amber-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Completed / Due / Missed</h4>
+                                    <p className="mt-1"><strong>Completed:</strong> Both on-time and late, with % of total. <strong>Due:</strong> Not yet completed but before expiry. <strong>Missed:</strong> Past expiry, never completed.</p>
+                                </div>
+                                <div className="border-l-4 border-amber-200 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Per-Visit-Type Breakdown</h4>
+                                    <p className="mt-1">Six mini-columns (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) showing completed/due/missed counts individually.</p>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Visit Status Definitions</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Status</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Meaning</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Completed - On Time</td><td className="px-3 py-1.5">Within on-time window (7 days; 4 for Postnatal)</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Completed - Late</td><td className="px-3 py-1.5">After on-time window but before expiry</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Due - On Time</td><td className="px-3 py-1.5">Not completed, within on-time window</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Due - Late</td><td className="px-3 py-1.5">Not completed, past on-time but before expiry</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Missed</td><td className="px-3 py-1.5">Past expiry, will never be completed</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Not Due Yet</td><td className="px-3 py-1.5">Scheduled date hasn&apos;t arrived</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">On-Time Windows</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Visit Type</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Window</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5">ANC Visit</td><td className="px-3 py-1.5">7 days from scheduled date</td></tr>
+                                            <tr><td className="px-3 py-1.5">Postnatal / Post Delivery</td><td className="px-3 py-1.5"><strong>4 days</strong> from delivery (clinical urgency)</td></tr>
+                                            <tr><td className="px-3 py-1.5">1 Week Visit</td><td className="px-3 py-1.5">7 days</td></tr>
+                                            <tr><td className="px-3 py-1.5">1 Month Visit</td><td className="px-3 py-1.5">7 days</td></tr>
+                                            <tr><td className="px-3 py-1.5">3 Month Visit</td><td className="px-3 py-1.5">7 days</td></tr>
+                                            <tr><td className="px-3 py-1.5">6 Month Visit</td><td className="px-3 py-1.5">7 days</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Mother Drill-Down Fields</h4>
+                                <p>Clicking an FLW row expands per-mother details:</p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Field</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Data Path</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Source</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5">Mother name</td><td className="px-3 py-1.5 font-mono"><code>form.mother_details.format_mother_name</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Age</td><td className="px-3 py-1.5 font-mono"><code>form.mother_details.mother_dob</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Phone</td><td className="px-3 py-1.5 font-mono"><code>form.mother_details.phone_number</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Registration date</td><td className="px-3 py-1.5 font-mono"><code>received_on</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Household size</td><td className="px-3 py-1.5 font-mono"><code>form.number_of_other_household_members</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Preferred visit time</td><td className="px-3 py-1.5 font-mono"><code>form.var_visit_1.preferred_visit_time</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">ANC completion</td><td className="px-3 py-1.5 font-mono"><code>form.visit_completion.anc_completion_date</code></td><td className="px-3 py-1.5">ANC Visit</td></tr>
+                                            <tr><td className="px-3 py-1.5">PNC completion</td><td className="px-3 py-1.5 font-mono"><code>form.pnc_completion_date</code></td><td className="px-3 py-1.5">Post Delivery Visit</td></tr>
+                                            <tr><td className="px-3 py-1.5">Expected delivery</td><td className="px-3 py-1.5 font-mono"><code>form.mother_birth_outcome.expected_delivery_date</code></td><td className="px-3 py-1.5">Register Mother</td></tr>
+                                            <tr><td className="px-3 py-1.5">Baby DOB</td><td className="px-3 py-1.5 font-mono"><code>form.capture_the_following_birth_details.baby_dob</code></td><td className="px-3 py-1.5">Post Delivery Visit</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Tab 4 FLW Performance ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-ranking-star mr-2 text-purple-500"></i> Tab 4: FLW Performance
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <p>Aggregates case-level metrics grouped by each FLW&apos;s latest assessment status.</p>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Assessment Status Categories</h4>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Status</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Color</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Meaning</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Eligible for Renewal</td><td className="px-3 py-1.5"><span className="inline-block w-3 h-3 rounded-full bg-green-500 mr-1"></span> Green</td><td className="px-3 py-1.5">Good performance, eligible for contract renewal</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Probation</td><td className="px-3 py-1.5"><span className="inline-block w-3 h-3 rounded-full bg-yellow-500 mr-1"></span> Yellow</td><td className="px-3 py-1.5">Underperforming, not eligible for renewal</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Suspended</td><td className="px-3 py-1.5"><span className="inline-block w-3 h-3 rounded-full bg-red-500 mr-1"></span> Red</td><td className="px-3 py-1.5">Evidence of fraud or severe deficiencies</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">No Category</td><td className="px-3 py-1.5"><span className="inline-block w-3 h-3 rounded-full bg-gray-400 mr-1"></span> Gray</td><td className="px-3 py-1.5">Not yet assessed</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="bg-gray-50 rounded px-3 py-2 font-mono text-xs">
+                                    <strong>Data path:</strong> <code>run.data.state.worker_results.&#123;username&#125;.result</code> (most recent assessment)
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Performance Table Columns</h4>
+                                <div className="space-y-3">
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800"># FLWs / Total Cases / Eligible at Reg</h4>
+                                        <p className="mt-1">Count of FLWs in status group, total registered mothers, and mothers with <code className="bg-gray-100 px-1 rounded text-xs">eligible_full_intervention_bonus = &quot;1&quot;</code>.</p>
+                                    </div>
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800">Still Eligible / % Still Eligible</h4>
+                                        <p className="mt-1">Among eligible mothers: those with 5+ completed visits OR &le;1 missed visit. Percentage = (still eligible / eligible at reg) &times; 100.</p>
+                                        <div className="mt-2 flex gap-2 text-xs">
+                                            <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded">&ge;85% Green</span>
+                                            <span className="bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">50&ndash;84% Yellow</span>
+                                            <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded">&lt;50% Red</span>
+                                        </div>
+                                    </div>
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800">% &le;1 Missed</h4>
+                                        <p className="mt-1">Percentage of <strong>eligible</strong> mothers (<code>eligible_full_intervention_bonus = "1"</code>) with 0 or 1 missed visits.</p>
+                                    </div>
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800">% 4 Visits On Track</h4>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 1 visit is due (5-day grace): % with 3+ completed visits.</p>
+                                        <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;1 Month Visit&quot; &le; today &minus; 5 days</div>
+                                    </div>
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800">% 5 Visits Complete</h4>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 3 visit is due: % with 4+ completed visits.</p>
+                                        <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;3 Month Visit&quot; &le; today &minus; 5 days</div>
+                                    </div>
+                                    <div className="border-l-4 border-purple-200 pl-4 py-2">
+                                        <h4 className="font-semibold text-gray-800">% 6 Visits Complete</h4>
+                                        <p className="mt-1">Among <strong>eligible</strong> mothers whose Month 6 visit is due: % with 5+ completed visits.</p>
+                                        <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs">Denominator: <code>visit_date_scheduled</code> for &quot;6 Month Visit&quot; &le; today &minus; 5 days</div>
+                                    </div>
+                                </div>
+
+                                <h4 className="font-semibold text-gray-800 border-b border-gray-200 pb-1">Monthly Visit Schedule Sub-Table</h4>
+                                <p>Below the performance table, a second table shows visit completion rates by <strong>visit type</strong> and <strong>month</strong>.</p>
+                                <ul className="list-disc pl-5 space-y-1 text-xs">
+                                    <li><strong>Rows:</strong> One per visit type (ANC, Postnatal, Week 1, Month 1, Month 3, Month 6) + Totals</li>
+                                    <li><strong>Columns:</strong> One per month + Total column</li>
+                                    <li><strong>Display modes</strong> (toggle buttons): X/Y ratio, Completed only, Scheduled only, % Percent</li>
+                                </ul>
+                                <div className="bg-gray-50 rounded px-3 py-2 font-mono text-xs leading-relaxed">
+                                    <div><strong>Data paths:</strong></div>
+                                    <div>Visit type: <code>form.var_visit_N.visit_type</code></div>
+                                    <div>Month bucket: <code>form.var_visit_N.visit_date_scheduled</code></div>
+                                    <div>Completion: pipeline form submissions matched via completion flags</div>
+                                </div>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Red Flag Indicators ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-triangle-exclamation mr-2 text-red-500"></i> Red Flag Indicators
+                            </h3>
+                        </div>
+                        <div className="p-4 text-sm text-gray-700">
+                                <p className="mb-3">When creating a task for an FLW (via OCS AI), the system automatically detects these red flags and includes them in the AI prompt.</p>
+                                <div className="overflow-x-auto">
+                                    <table className="min-w-full text-xs">
+                                        <thead><tr className="bg-gray-50">
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Red Flag</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">Threshold</th>
+                                            <th className="px-3 py-1.5 text-left font-medium text-gray-600">What It Means</th>
+                                        </tr></thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            <tr><td className="px-3 py-1.5 font-medium">Low Gold Standard Score</td><td className="px-3 py-1.5">&lt; 50%</td><td className="px-3 py-1.5">Poorly performed on supervised assessment</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Low Follow-Up Visit Rate</td><td className="px-3 py-1.5">&lt; 50%</td><td className="px-3 py-1.5">More than half of due visits incomplete</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Low Case Eligibility Rate</td><td className="px-3 py-1.5">Eligible 5+ &lt; 50%</td><td className="px-3 py-1.5">Most eligible mothers are off track</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Low Travel Distance</td><td className="px-3 py-1.5">Meter/Visit &lt; 100m</td><td className="px-3 py-1.5">Forms submitted from same location</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">High Phone Duplicate Rate</td><td className="px-3 py-1.5">Phone Dup &gt; 30%</td><td className="px-3 py-1.5">Too many mothers sharing phone numbers</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">ANC/PNC Same-Date</td><td className="px-3 py-1.5">ANC=PNC &ge; 5</td><td className="px-3 py-1.5">Multiple biologically impossible same-day completions</td></tr>
+                                            <tr><td className="px-3 py-1.5 font-medium">Abnormal EBF Rate</td><td className="px-3 py-1.5">&le; 30% or &gt; 95%</td><td className="px-3 py-1.5">Breastfeeding rate outside expected range</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Color Coding Reference ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-palette mr-2 text-indigo-500"></i> Color Coding Reference
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-2">Follow-Up Rate / GS Score</h4>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>Follow-up &ge;80% | GS &ge;70%</div>
+                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>Follow-up 60&ndash;79% | GS 50&ndash;69%</div>
+                                        <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-center"><div className="font-semibold">Red</div>Follow-up &lt;60% | GS &lt;50%</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-2">% EBF</h4>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>50&ndash;85%</div>
+                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>31&ndash;49% or 86&ndash;95%</div>
+                                        <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-center"><div className="font-semibold">Red</div>&le;30% or &gt;95%</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-2">Eligible 5+ / % Still Eligible</h4>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-green-100 text-green-800 rounded px-3 py-2 text-center"><div className="font-semibold">Green</div>&ge;85%</div>
+                                        <div className="bg-yellow-100 text-yellow-800 rounded px-3 py-2 text-center"><div className="font-semibold">Yellow</div>50&ndash;84%</div>
+                                        <div className="bg-red-100 text-red-800 rounded px-3 py-2 text-center"><div className="font-semibold">Red</div>&lt;50%</div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h4 className="font-semibold text-gray-800 mb-2">GPS Flags</h4>
+                                    <div className="grid grid-cols-3 gap-2 text-xs">
+                                        <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Revisit to same mother &gt; 5 km</div>
+                                        <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Max Revisit Dist. &gt; 5 km</div>
+                                        <div className="bg-red-50 text-red-800 rounded px-3 py-2 text-center">Meter/Visit &lt; 100 m</div>
+                                    </div>
+                                </div>
+                            </div>
+                    </div>
+
+                    {/* ---- SECTION: Key Definitions ---- */}
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <h3 className="text-sm font-semibold text-gray-700">
+                                <i className="fa-solid fa-circle-info mr-2 text-gray-500"></i> Key Definitions
+                            </h3>
+                        </div>
+                        <div className="p-4 space-y-4 text-sm text-gray-700">
+                                <div className="border-l-4 border-gray-300 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Eligibility</h4>
+                                    <p className="mt-1">A mother is &quot;eligible for the full intervention bonus&quot; if <code className="bg-gray-100 px-1 rounded text-xs">eligible_full_intervention_bonus = &quot;1&quot;</code> in her registration form. Set at registration, does not change. Follow-up rate and Performance tab metrics only count eligible mothers.</p>
+                                </div>
+                                <div className="border-l-4 border-gray-300 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Grace Period (5 days)</h4>
+                                    <p className="mt-1">The follow-up rate only counts visits whose scheduled date was 5+ days ago. This gives FLWs a reasonable window to complete recent visits before they affect their score.</p>
+                                </div>
+                                <div className="border-l-4 border-gray-300 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Haversine Distance</h4>
+                                    <p className="mt-1">Straight-line distance between two GPS points on Earth&apos;s surface, accounting for curvature (radius = 6,371 km). Used for all distance calculations. Real travel distances are longer, but Haversine provides a consistent baseline.</p>
+                                </div>
+                                <div className="border-l-4 border-gray-300 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Assessment Status</h4>
+                                    <p className="mt-1">Result assigned during monitoring or audit: <strong>Eligible for Renewal</strong> (good), <strong>Probation</strong> (underperforming), <strong>Suspended</strong> (fraud/severe issues &mdash; label only, no platform action). Dashboard uses the most recent assessment.</p>
+                                    <div className="mt-1 bg-gray-50 rounded px-3 py-1 font-mono text-xs"><code>run.data.state.worker_results.&#123;username&#125;.result</code></div>
+                                </div>
+                                <div className="border-l-4 border-gray-300 pl-4 py-2">
+                                    <h4 className="font-semibold text-gray-800">Visit Types</h4>
+                                    <div className="mt-2 overflow-x-auto">
+                                        <table className="min-w-full text-xs">
+                                            <thead><tr className="bg-gray-50">
+                                                <th className="px-3 py-1.5 text-left font-medium text-gray-600">Visit</th>
+                                                <th className="px-3 py-1.5 text-left font-medium text-gray-600">When</th>
+                                                <th className="px-3 py-1.5 text-left font-medium text-gray-600">Purpose</th>
+                                            </tr></thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                <tr><td className="px-3 py-1.5 font-medium">ANC Visit</td><td className="px-3 py-1.5">~28 weeks of pregnancy</td><td className="px-3 py-1.5">Antenatal care assessment</td></tr>
+                                                <tr><td className="px-3 py-1.5 font-medium">Postnatal</td><td className="px-3 py-1.5">At delivery (EDD)</td><td className="px-3 py-1.5">Immediate postnatal care</td></tr>
+                                                <tr><td className="px-3 py-1.5 font-medium">1 Week Visit</td><td className="px-3 py-1.5">7 days after delivery</td><td className="px-3 py-1.5">Early newborn care</td></tr>
+                                                <tr><td className="px-3 py-1.5 font-medium">1 Month Visit</td><td className="px-3 py-1.5">30 days after delivery</td><td className="px-3 py-1.5">Growth monitoring</td></tr>
+                                                <tr><td className="px-3 py-1.5 font-medium">3 Month Visit</td><td className="px-3 py-1.5">90 days after delivery</td><td className="px-3 py-1.5">Continued follow-up</td></tr>
+                                                <tr><td className="px-3 py-1.5 font-medium">6 Month Visit</td><td className="px-3 py-1.5">180 days after delivery</td><td className="px-3 py-1.5">Final program visit</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                     </div>
                 </div>
             )}
