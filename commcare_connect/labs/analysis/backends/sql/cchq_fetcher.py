@@ -46,7 +46,7 @@ def normalize_cchq_form_to_visit_dict(form: dict, index: int) -> dict:
         "entity_id": "",
         "entity_name": "",
         "deliver_unit": "",
-        "deliver_unit_id": "",
+        "deliver_unit_id": None,
         "location": "",
         "flagged": False,
         "flag_reason": "",
@@ -58,7 +58,7 @@ def normalize_cchq_form_to_visit_dict(form: dict, index: int) -> dict:
         "review_created_on": None,
         "justification": "",
         "date_created": received_on,
-        "completed_work_id": "",
+        "completed_work_id": None,
         "images": [],
     }
 

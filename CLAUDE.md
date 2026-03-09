@@ -26,6 +26,14 @@ The repo also contains the full production CommCare Connect Django ORM codebase 
 
 **Cross-app connections:** Workflow can create audits and tasks. AI agents modify workflows and solicitations. Coverage is standalone.
 
+## Workflow Engine
+
+Templates are single Python files in `workflow/templates/` exporting DEFINITION (statuses, config), RENDER_CODE (React JSX string transpiled by Babel), and optionally PIPELINE_SCHEMAS (CommCare form field extraction). The registry auto-discovers them. Pipeline schemas map CommCare form JSON paths to extracted fields with aggregations and transforms. Render code receives `{definition, instance, workers, pipelines, links, actions, onUpdateState}` as props.
+
+Use the MCP server's `get_form_json_paths` tool to discover correct field paths when building pipeline schemas.
+
+**Full reference:** [WORKFLOW_REFERENCE.md](commcare_connect/workflow/WORKFLOW_REFERENCE.md)
+
 ## Key Commands
 
 ```bash
@@ -42,10 +50,24 @@ pre-commit run --all-files          # Run linters/formatters
 ## Critical Warnings
 
 - **DO NOT** query Django ORM models (`Opportunity`, `User`, `Organization`) expecting production data. Use `LabsRecordAPIClient`.
-- **DO NOT** use `config.settings.labs` for local development. Use `config.settings.local` (the default). Labs settings are for the AWS deployment at `labs.connect.dimagi.com`.
+- **DO NOT** use `config.settings.labs_aws` for local development. Use `config.settings.local` (the default). The `labs_aws` settings are only for the AWS deployment at `labs.connect.dimagi.com`.
 - **DO NOT** call `.save()` on `LabsUser` or `LocalLabsRecord` — they raise `NotImplementedError`. Use `LabsRecordAPIClient` for persistence.
 - **DO NOT** modify models in `opportunity/`, `organization/`, `program/`, or `users/` for labs features. That is production ORM code.
 - New app URL prefixes must be added to `WHITELISTED_PREFIXES` in `commcare_connect/labs/middleware.py` or they will redirect to production.
+
+## CommCare MCP Server
+
+A local MCP server (`tools/commcare_mcp/`) gives Claude access to CommCare application structure for building workflow pipeline schemas.
+
+**Tools:** `get_opportunity_apps`, `list_apps`, `get_app_structure`, `get_form_questions`, `get_form_json_paths`
+
+**Key tool:** `get_form_json_paths` maps form questions to their exact JSON submission paths (e.g., `form.anthropometric.child_weight_visit`) for use in `PIPELINE_SCHEMAS` field definitions.
+
+**Data safety:** The server calls only the CommCare HQ application definition API (`GET /a/{domain}/api/v0.5/application/`) — app schema metadata only. It does **not** access form submissions, case data, user data, or any patient-level information.
+
+**Runs locally** as a stdio subprocess in Claude Code. Config in `.claude/mcp.json`. Auth via CommCare API key (`.env`) and Connect OAuth token (`~/.commcare-connect/token.json`).
+
+**Source:** `server.py` (tool definitions), `hq_client.py` (HQ API), `connect_client.py` (Connect API), `extractors.py` (schema parsing)
 
 ## Deeper Documentation
 

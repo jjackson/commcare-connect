@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Literal
 
-AggregationType = Literal["sum", "avg", "count", "min", "max", "list", "first", "last", "count_unique"]
+AggregationType = Literal["sum", "avg", "count", "min", "max", "list", "first", "last", "count_unique", "count_distinct"]
 
 
 class CacheStage(Enum):
@@ -113,6 +113,8 @@ class FieldComputation:
     description: str = ""
     paths: list[str] | None = None
     extractor: Callable[[dict], Any] | None = None  # Custom extractor receives full visit dict
+    filter_path: str = ""  # Optional: path for FILTER (WHERE ...) clause
+    filter_value: str = ""  # Optional: value to compare against in filter
 
     def __post_init__(self):
         """Validate configuration."""
@@ -130,6 +132,7 @@ class FieldComputation:
             "first",
             "last",
             "count_unique",
+            "count_distinct",
         ]:
             raise ValueError(f"Invalid aggregation type: {self.aggregation}")
 

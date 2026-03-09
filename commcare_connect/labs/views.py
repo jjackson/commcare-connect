@@ -1,3 +1,5 @@
+import os
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponseRedirect
@@ -76,6 +78,23 @@ def refresh_org_data(request):
 
     # Redirect back to referrer
     return HttpResponseRedirect(request.headers.get("referer", "/"))
+
+
+class ScoutEmbedView(LoginRequiredMixin, TemplateView):
+    """Embeds the Scout data agent widget via the widget SDK."""
+
+    template_name = "labs/scout.html"
+
+    def get_context_data(self, **kwargs):
+        from .context import extract_context_from_session
+
+        ctx = super().get_context_data(**kwargs)
+        # Strip trailing slash — template adds slashes where needed
+        ctx["scout_url"] = os.environ.get("SCOUT_URL", "http://localhost:5173").rstrip("/")
+        # Pass the current labs opportunity as the Scout tenant
+        labs_ctx = extract_context_from_session(self.request)
+        ctx["opportunity_id"] = labs_ctx.get("opportunity_id", "")
+        return ctx
 
 
 class LabsOverviewView(LoginRequiredMixin, TemplateView):

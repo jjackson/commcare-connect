@@ -5,6 +5,7 @@ Handles reading/writing cache data to PostgreSQL tables.
 """
 
 import logging
+import random
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
@@ -93,9 +94,10 @@ class SQLCacheManager:
         ).exists()
 
     def get_raw_visit_count(self) -> int:
-        """Get count of cached raw visits."""
+        """Get count of cached raw visits (excludes in-progress sentinel rows)."""
         return RawVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
+            visit_count__gt=0,
             expires_at__gt=timezone.now(),
         ).count()
 
@@ -149,10 +151,101 @@ class SQLCacheManager:
 
         logger.info(f"[SQLCache] Stored {len(rows)} raw visits for opp {self.opportunity_id}")
 
+    def store_raw_visits_start(self, visit_count: int):
+        """
+        Delete existing raw cache and prepare for batched inserts.
+
+        Must be called before store_raw_visits_batch(). Rows are inserted
+        with a unique negative visit_count (sentinel) so they're invisible
+        to readers until store_raw_visits_finalize() is called.
+
+        Each writer gets a unique negative sentinel to prevent cross-contamination
+        when concurrent writers insert rows for the same opportunity.
+
+        Args:
+            visit_count: Estimated count (used for logging only, not stored)
+        """
+        # Unique negative sentinel per writer — prevents finalize cross-contamination
+        self._pending_visit_count = -random.randint(1, 2**31 - 1)
+        self._pending_expires_at = self._get_expires_at()
+        # Don't delete here — old rows remain visible to readers until finalize().
+        # This prevents Writer B's start() from wiping Writer A's in-progress batches.
+        logger.info(
+            f"[SQLCache] Preparing raw cache for opp {self.opportunity_id}, "
+            f"~{visit_count} visits (sentinel={self._pending_visit_count})"
+        )
+
+    def store_raw_visits_batch(self, visit_dicts: list[dict]) -> int:
+        """
+        Insert a batch of raw visits. Call store_raw_visits_start() first.
+
+        Returns:
+            Number of rows inserted
+        """
+        rows = []
+        for v in visit_dicts:
+            rows.append(
+                RawVisitCache(
+                    opportunity_id=self.opportunity_id,
+                    visit_count=self._pending_visit_count,
+                    expires_at=self._pending_expires_at,
+                    visit_id=v.get("id", 0),
+                    username=v.get("username") or "",
+                    deliver_unit=v.get("deliver_unit") or "",
+                    deliver_unit_id=v.get("deliver_unit_id"),
+                    entity_id=v.get("entity_id") or "",
+                    entity_name=v.get("entity_name") or "",
+                    visit_date=_parse_date(v.get("visit_date")),
+                    status=v.get("status") or "",
+                    reason=v.get("reason") or "",
+                    location=v.get("location") or "",
+                    flagged=v.get("flagged") or False,
+                    flag_reason=v.get("flag_reason") or {},
+                    form_json=v.get("form_json") or {},
+                    completed_work=v.get("completed_work") or {},
+                    status_modified_date=_parse_datetime(v.get("status_modified_date")),
+                    review_status=v.get("review_status") or "",
+                    review_created_on=_parse_datetime(v.get("review_created_on")),
+                    justification=v.get("justification") or "",
+                    date_created=_parse_datetime(v.get("date_created")),
+                    completed_work_id=v.get("completed_work_id"),
+                    images=v.get("images") or [],
+                )
+            )
+        RawVisitCache.objects.bulk_create(rows, batch_size=1000)
+        return len(rows)
+
+    def store_raw_visits_finalize(self, actual_count: int):
+        """
+        Atomically make batched rows visible by setting the real visit_count.
+
+        Must be called after all store_raw_visits_batch() calls. In a single
+        transaction: removes any other writer's rows (old finalized or other
+        in-progress sentinel), then promotes THIS writer's sentinel rows to
+        the actual parsed count — making them visible to has_valid_raw_cache().
+        """
+        with transaction.atomic():
+            # Remove rows that don't belong to this writer (old cache + other writers)
+            RawVisitCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+            ).exclude(
+                visit_count=self._pending_visit_count,
+            ).delete()
+            # Make this writer's rows visible
+            updated = RawVisitCache.objects.filter(
+                opportunity_id=self.opportunity_id,
+                visit_count=self._pending_visit_count,
+            ).update(visit_count=actual_count)
+        logger.info(
+            f"[SQLCache] Finalized {updated} raw visits for opp {self.opportunity_id} "
+            f"(visit_count={actual_count})"
+        )
+
     def get_raw_visits_queryset(self):
-        """Get queryset of cached raw visits."""
+        """Get queryset of cached raw visits (excludes in-progress sentinel rows)."""
         return RawVisitCache.objects.filter(
             opportunity_id=self.opportunity_id,
+            visit_count__gt=0,
             expires_at__gt=timezone.now(),
         )
 

@@ -18,6 +18,7 @@ pipeline data via the `pipelines` prop, keyed by alias.
 import json
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.settings import ModelSettings
@@ -26,7 +27,21 @@ from commcare_connect.ai.types import UserDependencies
 
 logger = logging.getLogger(__name__)
 
-WORKFLOW_AGENT_INSTRUCTIONS = """
+_REFERENCE_PATH = Path(__file__).resolve().parents[2] / "workflow" / "WORKFLOW_REFERENCE.md"
+
+
+def _load_reference() -> str:
+    """Load the workflow reference document for agent context."""
+    try:
+        return _REFERENCE_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.warning(f"Workflow reference not found at {_REFERENCE_PATH}")
+        return ""
+
+
+_WORKFLOW_REFERENCE = _load_reference()
+
+WORKFLOW_AGENT_INSTRUCTIONS = f"""
 You are an expert helping users build data-driven workflows with custom React UIs.
 
 ## Context Awareness
@@ -41,116 +56,9 @@ Use this to determine which tools to call:
 - On pipeline tab: primarily use update_pipeline_schema(), but also update_render_code() if UI changes are needed
 - Some requests may require changes to both (e.g., "add a new data field and display it")
 
-## What You Can Edit
+## Workflow Engine Reference
 
-1. **Workflow Definition** - Name, description, statuses, config, pipeline sources
-2. **Render Code** - React/JSX UI that displays workflow data and pipeline results
-3. **Pipeline Schema** - Fields, grouping, aggregation for data extraction
-
-## Workflow Definition Structure
-
-```json
-{
-    "name": "Weekly FLW Review",
-    "description": "Review worker performance with data insights",
-    "version": 1,
-    "statuses": [
-        {"id": "pending", "label": "Pending", "color": "gray"},
-        {"id": "reviewed", "label": "Reviewed", "color": "green"},
-        {"id": "flagged", "label": "Flagged", "color": "red"}
-    ],
-    "config": {
-        "showSummaryCards": true,
-        "showFilters": true
-    },
-    "pipeline_sources": [
-        {"pipeline_id": 123, "alias": "visits"},
-        {"pipeline_id": 456, "alias": "outcomes"}
-    ]
-}
-```
-
-Available status colors: gray, green, yellow, blue, red, purple, orange, pink
-
-## Pipeline Sources
-
-Workflows can reference pipelines as data sources. Each pipeline source has:
-- `pipeline_id` - ID of the pipeline to fetch data from
-- `alias` - Name used to access the data in render code (e.g., "visits", "metrics")
-
-The pipeline data is passed to your render code via the `pipelines` prop.
-
-## Render Code Props
-
-```jsx
-function WorkflowUI({
-    definition,      // Workflow definition object
-    instance,        // Current instance state (worker_states, period_start, period_end)
-    workers,         // Array of workers from Connect API
-    pipelines,       // Data from pipeline sources: { alias: { rows, metadata } }
-    links,           // URL helpers (auditUrl, taskUrl)
-    actions,         // Action handlers (createTask, checkOCSStatus, etc.)
-    onUpdateState    // Save state changes
-}) {
-    // Access pipeline data like:
-    const visitData = pipelines?.visits?.rows || [];
-    const outcomes = pipelines?.outcomes?.rows || [];
-
-    // Pipeline metadata
-    const visitMeta = pipelines?.visits?.metadata;
-    // { row_count, from_cache, pipeline_name, terminal_stage }
-}
-```
-
-## Pipeline Data Structure
-
-Each pipeline source provides:
-
-```javascript
-pipelines.visits = {
-    rows: [
-        // For visit_level terminal_stage:
-        { username, visit_date, status, entity_id, computed: { field1, field2 } },
-
-        // For aggregated terminal_stage:
-        { username, total_visits, approved_visits, custom_fields: { avg_metric, sum_count } }
-    ],
-    metadata: {
-        row_count: 150,
-        from_cache: true,
-        pipeline_name: "Visit Metrics",
-        terminal_stage: "aggregated"
-    }
-}
-```
-
-## Actions Available
-
-```jsx
-// Create a task for a worker
-const result = await actions.createTask({
-    username: worker.username,
-    title: "Follow up required",
-    description: "Review this worker's recent activity",
-    priority: "high"  // "low", "medium", or "high"
-});
-
-// OCS (Open Chat Studio) Integration
-const status = await actions.checkOCSStatus();
-const bots = await actions.listOCSBots();
-const result = await actions.createTaskWithOCS({
-    username: worker.username,
-    title: "AI Outreach",
-    ocs: { experiment: botId, prompt_text: "Instructions..." }
-});
-```
-
-## Available CSS Classes (Tailwind)
-
-- Layout: flex, grid, space-y-4, gap-4, p-4, m-2
-- Colors: bg-white, bg-gray-50, text-gray-900, text-blue-600
-- Borders: border, rounded-lg, shadow-sm
-- Typography: text-sm, text-xl, font-bold, font-medium
+{_WORKFLOW_REFERENCE}
 
 ## Tools Available
 
@@ -159,37 +67,6 @@ const result = await actions.createTaskWithOCS({
 - `add_pipeline_source(pipeline_id, alias)` - Add a pipeline as a data source
 - `remove_pipeline_source(alias)` - Remove a pipeline source by alias
 - `update_pipeline_schema(pipeline_id, schema)` - Update a pipeline's data extraction schema
-
-## Pipeline Schema Structure
-
-When modifying pipeline schemas with update_pipeline_schema(), use this structure:
-
-```json
-{
-    "name": "Worker Performance Data",
-    "description": "Extract metrics from form submissions",
-    "grouping_key": "username",  // or "entity_id", "deliver_unit_id"
-    "terminal_stage": "aggregated",  // or "visit_level"
-    "fields": [
-        {
-            "name": "visit_count",
-            "path": "form.meta.instanceID",
-            "aggregation": "count",
-            "description": "Total submissions"
-        },
-        {
-            "name": "last_date",
-            "path": "form.meta.timeEnd",
-            "aggregation": "last",
-            "description": "Most recent submission"
-        }
-    ],
-    "histograms": [],
-    "filters": {}
-}
-```
-
-Field aggregation options: first, last, sum, avg, count, min, max, list, count_unique
 
 ## When to Use Which Tool
 

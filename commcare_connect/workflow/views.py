@@ -184,6 +184,50 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
 
     template_name = "workflow/run.html"
 
+    def get(self, request, *args, **kwargs):
+        """Create-and-redirect when no run_id is provided.
+
+        When the URL has no ``?run_id=`` and is not in edit mode, create a new
+        run and redirect to the same URL with ``?run_id=<id>``.  This ensures
+        the URL always reflects the active run, preventing duplicate run
+        creation when the user is redirected back (e.g. after OAuth
+        re-authorization).
+        """
+        definition_id = kwargs.get("definition_id")
+        run_id = request.GET.get("run_id")
+        is_edit_mode = request.GET.get("edit") == "true"
+
+        if not run_id and not is_edit_mode:
+            labs_context = getattr(request, "labs_context", {})
+            opportunity_id = labs_context.get("opportunity_id")
+            if opportunity_id:
+                from datetime import datetime, timedelta, timezone
+
+                from django.shortcuts import redirect
+
+                data_access = WorkflowDataAccess(request=request)
+                try:
+                    today = datetime.now(timezone.utc).date()
+                    week_start = today - timedelta(days=today.weekday())
+                    week_end = week_start + timedelta(days=6)
+                    run = data_access.create_run(
+                        definition_id=definition_id,
+                        opportunity_id=opportunity_id,
+                        period_start=week_start.isoformat(),
+                        period_end=week_end.isoformat(),
+                        initial_state={"worker_states": {}},
+                    )
+                except Exception as e:
+                    logger.exception("Failed to create run for opp %s", opportunity_id)
+                    return super().get(request, *args, **kwargs)
+                finally:
+                    data_access.close()
+                params = request.GET.copy()
+                params["run_id"] = str(run.id)
+                return redirect(f"{request.path}?{params.urlencode()}")
+
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         definition_id = self.kwargs.get("definition_id")
@@ -311,6 +355,11 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "period_end": run.data.get("period_end"),
                 }
                 context["is_edit_mode"] = False
+                # No run_id and not edit mode — get() should have redirected.
+                # This branch only executes if opportunity_id was missing at
+                # get() time (no labs context), so show a friendly error.
+                context["error"] = "Could not create a new run. Please select an opportunity."
+                return context
 
             # Pipeline data will be loaded async via SSE - don't block page load
             # Pass empty data initially; frontend will connect to SSE stream

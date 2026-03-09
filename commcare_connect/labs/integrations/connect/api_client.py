@@ -232,9 +232,11 @@ class LabsRecordAPIClient:
 
         try:
             url = f"{self.base_url}/export/labs_record/"
-            logger.info(f"POST {url}")
+            logger.info(f"POST {url} payload: {payload}")
 
             response = self.http_client.post(url, json=[payload])
+            if response.status_code >= 400:
+                logger.error(f"API error response ({response.status_code}): {response.text[:1000]}")
             response.raise_for_status()
 
             result = response.json()

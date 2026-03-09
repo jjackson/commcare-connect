@@ -17,7 +17,7 @@ Labs is a **separate Django deployment** that communicates with production CommC
 2. `LabsURLWhitelistMiddleware` — redirects non-labs URLs to `connect.dimagi.com`; whitelisted prefixes: `/ai/`, `/audit/`, `/coverage/`, `/tasks/`, `/solicitations/`, `/labs/`, `/custom_analysis/`
 3. `LabsContextMiddleware` — extracts opportunity/program/organization from URL params and session into `request.labs_context`
 
-**Important:** Use `config.settings.local` for local development, NOT `config.settings.labs`. The labs settings are for AWS deployment only. Local settings already have `IS_LABS_ENVIRONMENT = True`.
+**Important:** Use `config.settings.local` for local development, NOT `config.settings.labs_aws`. The `labs_aws` settings are only for the AWS deployment at `labs.connect.dimagi.com`. Local settings already have `IS_LABS_ENVIRONMENT = True`.
 
 ## Data Access Patterns
 
@@ -277,7 +277,7 @@ Coverage ──────────→ CommCare HQ (separate OAuth, no Conne
 ## Common Mistakes to Avoid
 
 1. **Using Django ORM models** (`Opportunity`, `User`, `Organization`) expecting production data — these tables are empty in labs
-2. **Using `config.settings.labs` locally** — use `config.settings.local` instead. Labs settings are for AWS deployment.
+2. **Using `config.settings.labs_aws` locally** — use `config.settings.local` instead. The `labs_aws` settings are only for the AWS deployment.
 3. **Calling `.save()` on `LabsUser` or `LocalLabsRecord`** — raises `NotImplementedError`. Use `LabsRecordAPIClient` for persistence.
 4. **Forgetting the URL whitelist** — new app URL prefixes must be added to `WHITELISTED_PREFIXES` in `commcare_connect/labs/middleware.py`
 5. **Using `user_id` with the production API** — production uses `username` as the primary identifier, not integer IDs

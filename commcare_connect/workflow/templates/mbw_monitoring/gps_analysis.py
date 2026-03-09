@@ -76,6 +76,7 @@ class FLWSummary:
     unique_cases: int
     avg_case_distance_km: float | None
     max_case_distance_km: float | None
+    cases_with_revisits: int  # mothers with >1 GPS visit (revisit distance denominator)
     trailing_7_days: list[DailyTravel]
     avg_daily_travel_km: float | None
 
@@ -393,6 +394,13 @@ def build_result_from_analyzed_visits(
             total_km = sum(d.total_distance_km for d in trailing_7)
             avg_daily_travel = total_km / len(trailing_7)
 
+        # Count mothers with >1 GPS visit (revisit distance denominator)
+        cases_with_revisits = len({
+            v.mother_case_id or v.case_id
+            for v in flw_visits
+            if v.distance_from_prev_case_visit is not None
+        })
+
         flw_summaries.append(
             FLWSummary(
                 username=username,
@@ -405,6 +413,7 @@ def build_result_from_analyzed_visits(
                 if case_distances
                 else None,
                 max_case_distance_km=meters_to_km(max(case_distances)) if case_distances else None,
+                cases_with_revisits=cases_with_revisits,
                 trailing_7_days=trailing_7,
                 avg_daily_travel_km=avg_daily_travel,
             )
@@ -479,6 +488,13 @@ def analyze_gps_metrics(
             total_km = sum(d.total_distance_km for d in trailing_7)
             avg_daily_travel = total_km / len(trailing_7)
 
+        # Count mothers with >1 GPS visit (revisit distance denominator)
+        cases_with_revisits = len({
+            v.mother_case_id or v.case_id
+            for v in flw_visits
+            if v.distance_from_prev_case_visit is not None
+        })
+
         flw_summaries.append(
             FLWSummary(
                 username=username,
@@ -491,6 +507,7 @@ def analyze_gps_metrics(
                 if case_distances
                 else None,
                 max_case_distance_km=meters_to_km(max(case_distances)) if case_distances else None,
+                cases_with_revisits=cases_with_revisits,
                 trailing_7_days=trailing_7,
                 avg_daily_travel_km=avg_daily_travel,
             )

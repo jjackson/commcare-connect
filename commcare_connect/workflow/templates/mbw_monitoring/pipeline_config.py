@@ -7,60 +7,12 @@ Extracts GPS coordinates and case linking information for distance analysis.
 from commcare_connect.labs.analysis import AnalysisPipelineConfig, CacheStage, FieldComputation
 
 
-def extract_gps_location(visit_data: dict) -> str | None:
-    """
-    Extract GPS location string from visit data.
-
-    GPS can be in multiple locations:
-    - metadata.location (top-level, already parsed)
-    - form.meta.location.#text (nested in form)
-
-    Args:
-        visit_data: Full visit dict with form_json
-
-    Returns:
-        GPS string "lat lon altitude accuracy" or None
-    """
-    # First try top-level metadata.location (already extracted by pipeline)
-    form_json = visit_data.get("form_json", {})
-
-    # Try form.meta.location.#text path
-    meta = form_json.get("form", {}).get("meta", {})
-    location = meta.get("location", {})
-
-    if isinstance(location, dict):
-        return location.get("#text")
-    elif isinstance(location, str):
-        return location
-
-    return None
-
-
-def extract_visit_datetime(visit_data: dict) -> str | None:
-    """
-    Extract visit datetime from form metadata.
-
-    Args:
-        visit_data: Full visit dict with form_json
-
-    Returns:
-        ISO datetime string or None
-    """
-    form_json = visit_data.get("form_json", {})
-    meta = form_json.get("form", {}).get("meta", {})
-    return meta.get("timeEnd")
-
-
-def extract_app_build_version(visit_data: dict) -> int | None:
-    """Extract app build version as an integer from form_json.form.meta."""
-    form_json = visit_data.get("form_json", {})
-    value = form_json.get("form", {}).get("meta", {}).get("app_build_version")
-    if value is not None:
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            return None
-    return None
+def _safe_parse_int(x):
+    """Safe int parse; SQL backend matches 'simple_int' pattern from source inspection."""
+    try:
+        return int(x) if x else None  # int(x) if x else None
+    except (ValueError, TypeError):
+        return None
 
 
 MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
@@ -69,10 +21,14 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
     terminal_stage=CacheStage.VISIT_LEVEL,  # Visit-level for GPS analysis
     linking_field="entity_id",  # Use entity_id for linking visits
     fields=[
-        # GPS location - extract from form metadata
+        # GPS location - extract from form metadata (path-based, not Python extractor,
+        # to avoid loading form_json for all visits into memory)
         FieldComputation(
             name="gps_location",
-            extractor=extract_gps_location,
+            paths=[
+                "form.meta.location.#text",  # dict location with #text key
+                "form.meta.location",         # string location fallback
+            ],
             aggregation="first",
             description="GPS location string (lat lon altitude accuracy)",
         ),
@@ -100,7 +56,7 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
         # Visit datetime - for ordering and daily grouping
         FieldComputation(
             name="visit_datetime",
-            extractor=extract_visit_datetime,
+            path="form.meta.timeEnd",
             aggregation="first",
             description="Visit datetime for ordering",
         ),
@@ -155,7 +111,8 @@ MBW_GPS_PIPELINE_CONFIG = AnalysisPipelineConfig(
         # App build version - for filtering GPS metrics by app version
         FieldComputation(
             name="app_build_version",
-            extractor=extract_app_build_version,
+            path="form.meta.app_build_version",
+            transform=_safe_parse_int,
             aggregation="first",
             description="App build version (integer)",
         ),
