@@ -1010,7 +1010,7 @@ function WorkflowUI({ definition, instance, workers, pipelines, links, actions, 
                         onClick={function() { setCurrentView('outcomes'); }}
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                     >
-                        View Detailed Outcomes &rarr;
+                        View Individual Children &rarr;
                     </button>
                 </div>
             </div>
@@ -1113,18 +1113,18 @@ function WorkflowUI({ definition, instance, workers, pipelines, links, actions, 
     // --- Indicators Table View ---
     var IndicatorsView = function() {
         var indicators = [
-            {level: 'Impact', name: '28-Day Mortality Rate', value: metrics.mortalityRate, format: 'pct', target: null, lowerIsBetter: true},
-            {level: 'Outcome', name: 'Avg KMC Hours (Primary)', value: metrics.avgKmcHoursPrimary, format: 'decimal1', target: 8, lowerIsBetter: false},
-            {level: 'Outcome', name: 'Avg KMC Hours (Secondary)', value: metrics.avgKmcHoursSecondary, format: 'decimal1', target: null, lowerIsBetter: false},
-            {level: 'Outcome', name: 'Exclusive Breastfeeding Rate', value: metrics.ebfRate, format: 'pct', target: null, lowerIsBetter: false},
-            {level: 'Outcome', name: 'Referral Completion Rate', value: metrics.referralCompletionRate, format: 'pct', target: 80, lowerIsBetter: false},
-            {level: 'Output', name: 'SVNs Enrolled', value: metrics.totalEnrolled, format: 'int', target: null, lowerIsBetter: false},
-            {level: 'Output', name: 'Avg Days to First Visit', value: metrics.avgDaysToFirstVisit, format: 'decimal1', target: 3, lowerIsBetter: true},
-            {level: 'Output', name: '28-Day Retention Rate', value: metrics.retentionRate28d, format: 'pct', target: 80, lowerIsBetter: false},
-            {level: 'Output', name: 'Referrals Made', value: metrics.referralsMade, format: 'int', target: null, lowerIsBetter: false},
-            {level: 'Output', name: 'Visits on Schedule', value: metrics.visitsOnSchedule, format: 'pct', target: 80, lowerIsBetter: false},
-            {level: 'Output', name: 'Danger Signs Assessed', value: metrics.dangerSignsAssessed, format: 'pct', target: 90, lowerIsBetter: false},
-            {level: 'Output', name: 'Avg Visits per Child', value: metrics.avgVisitsPerChild, format: 'decimal1', target: 5, lowerIsBetter: false}
+            {level: 'Impact', name: '28-Day Mortality Rate', value: metrics.mortalityRate, format: 'pct', target: null, lowerIsBetter: true, trend: null},
+            {level: 'Outcome', name: 'Avg KMC Hours (Primary)', value: metrics.avgKmcHoursPrimary, format: 'decimal1', target: 8, lowerIsBetter: false, trend: null},
+            {level: 'Outcome', name: 'Avg KMC Hours (Secondary)', value: metrics.avgKmcHoursSecondary, format: 'decimal1', target: null, lowerIsBetter: false, trend: null},
+            {level: 'Outcome', name: 'Exclusive Breastfeeding Rate', value: metrics.ebfRate, format: 'pct', target: null, lowerIsBetter: false, trend: null},
+            {level: 'Outcome', name: 'Referral Completion Rate', value: metrics.referralCompletionRate, format: 'pct', target: 80, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'SVNs Enrolled', value: metrics.totalEnrolled, format: 'int', target: null, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'Avg Days to First Visit', value: metrics.avgDaysToFirstVisit, format: 'decimal1', target: 3, lowerIsBetter: true, trend: null},
+            {level: 'Output', name: '28-Day Retention Rate', value: metrics.retentionRate28d, format: 'pct', target: 80, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'Referrals Made', value: metrics.referralsMade, format: 'int', target: null, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'Visits on Schedule', value: metrics.visitsOnSchedule, format: 'pct', target: 80, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'Danger Signs Assessed', value: metrics.dangerSignsAssessed, format: 'pct', target: 90, lowerIsBetter: false, trend: null},
+            {level: 'Output', name: 'Avg Visits per Child', value: metrics.avgVisitsPerChild, format: 'decimal1', target: 5, lowerIsBetter: false, trend: null}
         ];
 
         var getStatus = function(ind) {
@@ -1214,6 +1214,7 @@ function WorkflowUI({ definition, instance, workers, pipelines, links, actions, 
                             <SortHeader col="value" label="Current Value" />
                             <SortHeader col="target" label="Target" />
                             <SortHeader col="status" label="Status" />
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trend</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1233,6 +1234,15 @@ function WorkflowUI({ definition, instance, workers, pipelines, links, actions, 
                                         <span className={'inline-block px-2 py-0.5 text-xs font-medium rounded-full ' + status.color}>
                                             {status.label}
                                         </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-sm">
+                                        {ind.trend === 'up'
+                                            ? <span className={ind.lowerIsBetter ? 'text-red-600' : 'text-green-600'}>{'\u2191'}</span>
+                                            : ind.trend === 'down'
+                                            ? <span className={ind.lowerIsBetter ? 'text-green-600' : 'text-red-600'}>{'\u2193'}</span>
+                                            : ind.trend === 'stable'
+                                            ? <span className="text-gray-400">{'\u2192'}</span>
+                                            : <span className="text-gray-400">{'\u2014'}</span>}
                                     </td>
                                 </tr>
                             );
@@ -1258,7 +1268,7 @@ TEMPLATE = {
     "key": "kmc_project_metrics",
     "name": "KMC Project Metrics",
     "description": "Program-level M&E dashboard showing enrollment, health outcomes, KMC practice, and visit quality indicators",
-    "icon": "fa-chart-bar",
+    "icon": "fa-chart-line",
     "color": "indigo",
     "definition": DEFINITION,
     "render_code": RENDER_CODE,
