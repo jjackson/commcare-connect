@@ -71,7 +71,7 @@ def live_server_url():
 
     server_log = open("e2e_django_server.log", "w")
     proc = subprocess.Popen(
-        [sys.executable, "manage.py", "runserver", f"{E2E_HOST}:{E2E_PORT}"],
+        [sys.executable, "manage.py", "runserver", f"{E2E_HOST}:{E2E_PORT}", "--noreload"],
         stdout=server_log,
         stderr=subprocess.STDOUT,
     )
