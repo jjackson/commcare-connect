@@ -215,7 +215,7 @@ def create_workflow_from_template(
 # =============================================================================
 
 # Re-export individual template modules for direct access if needed
-from . import audit_with_ai_review, kmc_flw_flags, kmc_longitudinal, mbw_monitoring_v2, ocs_outreach, performance_review  # noqa: E402
+from . import audit_with_ai_review, kmc_flw_flags, kmc_longitudinal, kmc_project_metrics, mbw_monitoring_v2, ocs_outreach, performance_review  # noqa: E402
 
 __all__ = [
     "TEMPLATES",
@@ -229,4 +229,5 @@ __all__ = [
     "mbw_monitoring_v2",
     "kmc_longitudinal",
     "kmc_flw_flags",
+    "kmc_project_metrics",
 ]
