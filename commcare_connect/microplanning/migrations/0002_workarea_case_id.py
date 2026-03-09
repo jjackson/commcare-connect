@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="workarea",
-            name="extra_case_properties",
+            name="case_properties",
             field=models.JSONField(default=dict, null=True, blank=True),
         ),
     ]

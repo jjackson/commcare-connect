@@ -72,7 +72,7 @@ class WorkAreaCSVImporter:
                     boundary=self.get_boundary(row),
                     building_count=buildings,
                     expected_visit_count=visits,
-                    extra_case_properties={
+                    case_properties={
                         "max_wag": extra_props.get("max_wag"),
                         "wag_serial_number": extra_props.get("wag_serial_number"),
                         "lga": extra_props.get("lga"),
