@@ -226,7 +226,7 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     var auditEndDate = _auditEndDate[0]; var setAuditEndDate = _auditEndDate[1];
     var _countPerFlw = React.useState(10);
     var countPerFlw = _countPerFlw[0]; var setCountPerFlw = _countPerFlw[1];
-    var _aiAgent = React.useState('scale_validation');
+    var _aiAgent = React.useState('none');
     var aiAgent = _aiAgent[0]; var setAiAgent = _aiAgent[1];
     var _auditTitle = React.useState('');
     var auditTitle = _auditTitle[0]; var setAuditTitle = _auditTitle[1];
@@ -589,14 +589,11 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
 
         var relatedFields = [
             {
-                label: 'Weight Image',
-                path: 'anthropometric/upload_weight_image',
-                type: 'image'
-            },
-            {
+                imagePath: 'anthropometric/upload_weight_image',
+                fieldPath: 'child_weight_visit',
                 label: 'Weight Reading',
-                path: 'child_weight_visit',
-                type: 'text'
+                filter_by_image: false,
+                filter_by_field: false
             }
         ];
 
