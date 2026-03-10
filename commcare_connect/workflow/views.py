@@ -8,9 +8,11 @@ as LabsRecord objects with React component code for rendering.
 import json
 import logging
 
+import httpx
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views import View
 from django.views.decorators.http import require_GET, require_POST
 from django.views.generic import TemplateView
@@ -282,7 +284,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                         component_code=TEMPLATES[matched_template]["render_code"],
                         version=1,
                     )
-                    logger.info(f"Synced render code for definition {definition_id} from template '{matched_template}'")
+                    logger.info(
+                        f"Synced render code for definition {definition_id} from template '{matched_template}'"
+                    )
 
             # Get render code
             render_code = data_access.get_render_code(definition_id)
@@ -672,7 +676,8 @@ def save_worker_result_api(request, run_id):
         current_state = run.data.get("state", {})
         current_results = current_state.get("worker_results") or current_state.get("flw_results", {})
 
-        from datetime import datetime, timezone as tz
+        from datetime import datetime
+        from datetime import timezone as tz
 
         updated_results = {
             **current_results,
@@ -685,9 +690,13 @@ def save_worker_result_api(request, run_id):
         }
 
         # Write back the full dict (shallow merge safe)
-        updated_run = data_access.update_run_state(run_id, {
-            "worker_results": updated_results,
-        }, run=run)
+        updated_run = data_access.update_run_state(
+            run_id,
+            {
+                "worker_results": updated_results,
+            },
+            run=run,
+        )
 
         if not updated_run:
             return JsonResponse({"error": "Failed to update run"}, status=500)
@@ -698,11 +707,13 @@ def save_worker_result_api(request, run_id):
         assessed = sum(1 for u in selected if updated_results.get(u, {}).get("result"))
         pct = round((assessed / total) * 100) if total > 0 else 0
 
-        return JsonResponse({
-            "success": True,
-            "worker_results": updated_results,
-            "progress": {"percentage": pct, "assessed": assessed, "total": total},
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "worker_results": updated_results,
+                "progress": {"percentage": pct, "assessed": assessed, "total": total},
+            }
+        )
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
@@ -749,11 +760,13 @@ def complete_run_api(request, run_id):
         if not result:
             return JsonResponse({"error": "Failed to update run"}, status=500)
 
-        return JsonResponse({
-            "success": True,
-            "status": "completed",
-            "overall_result": overall_result,
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "status": "completed",
+                "overall_result": overall_result,
+            }
+        )
 
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
@@ -977,7 +990,10 @@ def sync_template_render_code_api(request, definition_id):
 
         if not template_key:
             return JsonResponse(
-                {"error": "Could not detect template. Pass 'template_key' in request body.", "available": list(TEMPLATES.keys())},
+                {
+                    "error": "Could not detect template. Pass 'template_key' in request body.",
+                    "available": list(TEMPLATES.keys()),
+                },
                 status=400,
             )
 
@@ -993,12 +1009,14 @@ def sync_template_render_code_api(request, definition_id):
             version=1,
         )
 
-        return JsonResponse({
-            "success": True,
-            "definition_id": definition_id,
-            "render_code_id": render_code_record.id,
-            "template_key": template_key,
-        })
+        return JsonResponse(
+            {
+                "success": True,
+                "definition_id": definition_id,
+                "render_code_id": render_code_record.id,
+                "template_key": template_key,
+            }
+        )
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     except Exception as e:
@@ -2273,3 +2291,88 @@ def delete_run_api(request, run_id):
                 data_access.close()
             except Exception:
                 pass
+
+
+# =============================================================================
+# Image Proxy and Visit Images API
+# =============================================================================
+
+
+class WorkflowImageProxyView(LoginRequiredMixin, View):
+    """Serve visit images from Connect production API for workflow templates."""
+
+    def get(self, request, opp_id, blob_id):
+        try:
+            labs_oauth = request.session.get("labs_oauth", {})
+            access_token = labs_oauth.get("access_token")
+            if not access_token:
+                return HttpResponse("Unauthorized", status=401)
+
+            production_url = settings.CONNECT_PRODUCTION_URL.rstrip("/")
+            with httpx.Client(
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30.0,
+            ) as client:
+                resp = client.get(
+                    f"{production_url}/export/opportunity/{opp_id}/image/",
+                    params={"blob_id": blob_id},
+                )
+                resp.raise_for_status()
+
+            response = HttpResponse(resp.content, content_type="image/jpeg")
+            response["Content-Disposition"] = f'inline; filename="{blob_id}.jpg"'  # noqa: E702
+            response["Cache-Control"] = "public, max-age=86400"
+            return response
+        except Exception as e:
+            logger.error(f"Workflow image fetch failed: blob_id={blob_id}, opp_id={opp_id}: {e}")
+            return HttpResponse("Image not found", status=404)
+
+
+@login_required
+@require_GET
+def visit_images_api(request, opp_id):
+    """Return image metadata for visits, keyed by visit_id.
+
+    Query params:
+        visit_ids: comma-separated visit IDs
+    """
+    visit_ids_raw = request.GET.get("visit_ids", "")
+    if not visit_ids_raw:
+        return JsonResponse({"error": "visit_ids required"}, status=400)
+
+    try:
+        visit_ids = [int(v.strip()) for v in visit_ids_raw.split(",") if v.strip()]
+    except ValueError:
+        return JsonResponse({"error": "Invalid visit_ids"}, status=400)
+
+    if len(visit_ids) > 100:
+        return JsonResponse({"error": "Max 100 visit IDs"}, status=400)
+
+    try:
+        labs_oauth = request.session.get("labs_oauth", {})
+        access_token = labs_oauth.get("access_token")
+        if not access_token:
+            return JsonResponse({"error": "Unauthorized"}, status=401)
+
+        from commcare_connect.labs.analysis.pipeline import AnalysisPipeline
+
+        pipeline = AnalysisPipeline(request=request)
+        visit_dicts = pipeline.fetch_raw_visits(
+            opportunity_id=opp_id,
+            filter_visit_ids=set(visit_ids),
+            include_images=True,
+        )
+
+        from commcare_connect.audit.analysis_config import extract_images_with_question_ids
+
+        result = {}
+        for visit_dict in visit_dicts:
+            vid = str(visit_dict.get("id", ""))
+            images = extract_images_with_question_ids(visit_dict)
+            if images:
+                result[vid] = images
+
+        return JsonResponse({"visit_images": result})
+    except Exception as e:
+        logger.error(f"Visit images fetch failed: opp_id={opp_id}: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
