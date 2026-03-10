@@ -14,6 +14,11 @@ urlpatterns = [
     path("<int:pk>/bulk/", views.ExperimentBulkAssessmentView.as_view(), name="bulk_assessment"),
     # API endpoints
     path(
+        "api/opportunity/<int:opp_id>/image-questions/",
+        views.OpportunityImageQuestionsAPIView.as_view(),
+        name="opportunity_image_questions",
+    ),
+    path(
         "api/opportunities/search/",
         views.ExperimentOpportunitySearchAPIView.as_view(),
         name="program_search",

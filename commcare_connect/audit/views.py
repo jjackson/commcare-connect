@@ -24,10 +24,12 @@ from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
 from commcare_connect.audit.data_access import AuditDataAccess
+from commcare_connect.audit.hq_app_utils import extract_image_questions
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.sse_streaming import CeleryTaskStreamView
+from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -1830,3 +1832,59 @@ class AIReviewAPIView(LoginRequiredMixin, View):
 
             logger.error(f"AI review API error: {traceback.format_exc()}")
             return JsonResponse({"error": str(e)}, status=500)
+
+
+class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
+    """Return Image-type questions from the opportunity's deliver app on CommCare HQ.
+
+    Fetches the app definition from HQ, extracts Image questions, filters out
+    always-hidden questions (ancestors with trivially-false relevant conditions),
+    and auto-detects associated HQ URL fields.
+
+    GET /audit/api/opportunity/<opp_id>/image-questions/
+    Response: [{id, label, path, hq_url_path, form_name}, ...]
+    """
+
+    def get(self, request, opp_id: int):
+        labs_oauth = request.session.get("labs_oauth", {})
+        access_token = labs_oauth.get("access_token", "")
+
+        # Step 1: Resolve cc_domain + cc_app_id from Connect
+        try:
+            meta = fetch_opportunity_metadata(access_token, opp_id)
+        except Exception as e:
+            logger.error(f"[ImageQuestions] Failed to fetch opportunity {opp_id} metadata: {e}")
+            return JsonResponse({"error": "Failed to fetch opportunity metadata"}, status=502)
+
+        cc_domain = meta.get("cc_domain", "")
+        cc_app_id = meta.get("cc_app_id", "")
+        if not cc_domain or not cc_app_id:
+            return JsonResponse(
+                {"error": f"Opportunity {opp_id} is missing CommCare domain or app ID"},
+                status=400,
+            )
+
+        # Step 2: Fetch app definition from CommCare HQ
+        hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
+        api_key = getattr(settings, "COMMCARE_API_KEY", "")
+        username = getattr(settings, "COMMCARE_USERNAME", "")
+        if not api_key or not username:
+            logger.error("[ImageQuestions] COMMCARE_API_KEY / COMMCARE_USERNAME not configured")
+            return JsonResponse({"error": "CommCare HQ credentials not configured"}, status=500)
+
+        hq_url = f"{hq_base}/a/{cc_domain}/api/v0.5/application/{cc_app_id}/"
+        try:
+            resp = httpx.get(
+                hq_url,
+                headers={"Authorization": f"ApiKey {username}:{api_key}"},
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            app = resp.json()
+        except Exception as e:
+            logger.error(f"[ImageQuestions] Failed to fetch HQ app {cc_app_id}: {e}")
+            return JsonResponse({"error": "Failed to fetch app definition from CommCare HQ"}, status=502)
+
+        # Step 3: Extract image questions
+        questions = extract_image_questions(app)
+        return JsonResponse(questions, safe=False)
