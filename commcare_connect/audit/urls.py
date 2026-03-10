@@ -79,6 +79,11 @@ urlpatterns = [
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
     ),
+    path(
+        "hq-image/",
+        views.CommCareHQImageProxyView.as_view(),
+        name="audit_image_hq",
+    ),
     # Workflow integration endpoints
     path(
         "api/workflow/<int:workflow_run_id>/sessions/",
