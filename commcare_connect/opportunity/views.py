@@ -1211,6 +1211,8 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
+    if not request.is_opportunity_pm:
+        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = True
     access.suspension_date = now()
@@ -1228,6 +1230,8 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 @org_program_manager_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
+    if not request.is_opportunity_pm:
+        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = False
     access.save()
