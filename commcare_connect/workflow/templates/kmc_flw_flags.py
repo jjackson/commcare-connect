@@ -224,8 +224,6 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
     var auditStartDate = _auditStartDate[0]; var setAuditStartDate = _auditStartDate[1];
     var _auditEndDate = React.useState(defaultDates.end);
     var auditEndDate = _auditEndDate[0]; var setAuditEndDate = _auditEndDate[1];
-    var _countPerFlw = React.useState(10);
-    var countPerFlw = _countPerFlw[0]; var setCountPerFlw = _countPerFlw[1];
     var _aiAgent = React.useState('none');
     var aiAgent = _aiAgent[0]; var setAiAgent = _aiAgent[1];
     var _auditTitle = React.useState('');
@@ -605,7 +603,6 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
             title: title,
             start_date: auditStartDate,
             end_date: auditEndDate,
-            count_per_flw: countPerFlw,
             related_fields: relatedFields,
             selected_flw_user_ids: selectedUsernames
         };
@@ -1100,20 +1097,6 @@ RENDER_CODE = r"""function WorkflowUI({ definition, instance, workers, pipelines
                                         />
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Visits per FLW */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Visits to Review per FLW</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="50"
-                                    value={countPerFlw}
-                                    onChange={function(e) { setCountPerFlw(parseInt(e.target.value) || 10); }}
-                                    className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                                />
-                                <span className="text-xs text-gray-500 ml-2">visits per FLW in the date range</span>
                             </div>
 
                             {/* AI Agent */}
