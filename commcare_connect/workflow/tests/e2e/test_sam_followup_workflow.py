@@ -185,8 +185,8 @@ class TestSAMFollowupWorkflow:
                 # Verify MUAC Trend chart container
                 expect(wf_root.get_by_text("MUAC Trend")).to_be_visible()
 
-                # Verify MUAC Photos section (filmstrip)
-                expect(wf_root.get_by_text("MUAC Photos")).to_be_visible()
+                # Verify MUAC Photos section (filmstrip heading)
+                expect(wf_root.get_by_role("heading", name="MUAC Photos")).to_be_visible()
 
                 # Verify clinical detail panel sections (collapsible accordions)
                 expect(wf_root.get_by_text("MUAC", exact=True).first).to_be_visible()
