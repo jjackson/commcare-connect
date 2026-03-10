@@ -487,6 +487,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                 def build_image_url(blob_id: str, hq_url: str | None = None) -> str:
                     if hq_url:
                         from urllib.parse import quote
+
                         proxy_url = reverse("audit:audit_image_hq")
                         return f"{proxy_url}?url={quote(hq_url, safe='')}"
                     # Use Connect API image endpoint
@@ -697,6 +698,7 @@ class CommCareHQImageProxyView(LoginRequiredMixin, View):
                 return HttpResponse("Invalid URL host", status=400)
             # Restrict to attachment paths only (e.g. /a/<domain>/api/form/attachment/...)
             import re
+
             if not re.match(r"^/a/[^/]+/api/form/attachment/", parsed.path):
                 return HttpResponse("Invalid URL path", status=400)
         except Exception:

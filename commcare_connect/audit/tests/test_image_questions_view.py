@@ -107,9 +107,7 @@ def test_image_questions_returns_visible_images_only(labs_client):
     with patch(
         "commcare_connect.audit.views.fetch_opportunity_metadata",
         return_value=opp_meta,
-    ), patch(
-        "commcare_connect.audit.views.httpx.get"
-    ) as mock_hq_get:
+    ), patch("commcare_connect.audit.views.httpx.get") as mock_hq_get:
         mock_hq_get.return_value.status_code = 200
         mock_hq_get.return_value.raise_for_status = lambda: None
         mock_hq_get.return_value.json = lambda: SAMPLE_APP
