@@ -1858,6 +1858,8 @@ class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
 
         cc_domain = meta.get("cc_domain", "")
         cc_app_id = meta.get("cc_app_id", "")
+        # cc_domain is validated by fetch_opportunity_metadata (raises ValueError if missing),
+        # but cc_app_id can be None when the opportunity has no deliver/learn app yet.
         if not cc_domain or not cc_app_id:
             return JsonResponse(
                 {"error": f"Opportunity {opp_id} is missing CommCare domain or app ID"},
