@@ -66,7 +66,7 @@
 
                 <!-- Modal Panel -->
                 <div class="flex min-h-full items-center justify-center p-4">
-                    <div class="relative bg-white rounded-lg shadow-xl max-w-3xl w-full p-6"
+                    <div class="relative bg-white rounded-lg shadow-xl max-w-5xl w-full p-6"
                          @click.stop>
                         <div class="absolute top-4 right-4">
                             <button @click="!creating && (showTemplateModal = false)"
@@ -85,7 +85,7 @@
                             <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading templates...
                         </p>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             <!-- Dynamic Template List -->
                             <template x-for="t in templates" :key="t.key">
                                 <form method="post" action="{% url 'labs:workflow:create_from_template' %}"
