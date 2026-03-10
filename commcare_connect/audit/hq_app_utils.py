@@ -97,9 +97,10 @@ def _has_always_false_ancestor(xform_path: str, path_index: dict[str, dict]) -> 
     if self_q and _is_always_false(self_q.get("relevant")):
         return True
 
-    # Walk up the path hierarchy
+    # Walk up the path hierarchy, skipping index 1 (/data) — the XForm root
+    # is never a filterable question in path_index.
     parts = xform_path.strip("/").split("/")
-    for i in range(1, len(parts)):
+    for i in range(2, len(parts)):
         ancestor_path = "/" + "/".join(parts[:i])
         ancestor = path_index.get(ancestor_path)
         if ancestor and _is_always_false(ancestor.get("relevant")):
