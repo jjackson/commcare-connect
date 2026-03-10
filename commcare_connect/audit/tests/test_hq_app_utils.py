@@ -203,6 +203,21 @@ class TestExtractImageQuestions:
         ids = {r["id"] for r in result}
         assert ids == {"photo_a", "photo_b"}
 
+    def test_deduplicates_same_leaf_id_across_forms(self):
+        """When two forms have same leaf ID, fall back to full path."""
+        app = _make_app(
+            [
+                _make_form("form1", [_q("/data/group_a/photo", "Image", label="Form1 Photo")]),
+                _make_form("form2", [_q("/data/group_b/photo", "Image", label="Form2 Photo")]),
+            ]
+        )
+        result = extract_image_questions(app)
+        assert len(result) == 2
+        ids = {r["id"] for r in result}
+        # First gets leaf "photo", second gets full path "group_b/photo"
+        assert "photo" in ids
+        assert "group_b/photo" in ids
+
     def test_relevant_whitespace_normalized(self):
         """Whitespace variations of always-false patterns should still be filtered."""
         app = _make_app(
