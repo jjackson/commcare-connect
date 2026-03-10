@@ -225,4 +225,17 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
             },
         ]
 
+        # Audit of Audits — admin report restricted to @dimagi.com users only
+        user_email = getattr(self.request.user, "email", "") or ""
+        if user_email.endswith("@dimagi.com"):
+            context["custom_analysis_projects"].append(
+                {
+                    "name": "Audit of Audits",
+                    "url": "/custom_analysis/audit_of_audits/",
+                    "icon": "fa-magnifying-glass-chart",
+                    "description": "Cross-opportunity admin report of all workflow runs and audit sessions",
+                    "color": "purple",
+                }
+            )
+
         return context

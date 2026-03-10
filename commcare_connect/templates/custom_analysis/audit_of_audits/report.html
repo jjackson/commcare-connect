@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audit of Audits — Admin Report{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8 max-w-screen-2xl">
+
+  {# ── Header ── #}
+  <div class="flex flex-wrap items-start justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100">
+          <i class="fa-solid fa-magnifying-glass-chart text-purple-600 text-base"></i>
+        </span>
+        Audit of Audits
+      </h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Cross-opportunity report of all workflow runs and audit sessions &mdash; Dimagi staff only
+      </p>
+      <p class="text-xs text-gray-400 mt-0.5 font-mono">{{ user_email }}</p>
+    </div>
+
+    {% if not error %}
+    {# Summary badges #}
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-700 font-medium">
+        <i class="fa-solid fa-layer-group text-gray-500 text-xs"></i>
+        {{ total_runs }} total run{{ total_runs|pluralize }}
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-50 text-purple-700 font-medium">
+        <i class="fa-solid fa-images text-purple-400 text-xs"></i>
+        {{ bulk_image_run_count }} Bulk Image Audit
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-50 text-green-700 font-medium">
+        <i class="fa-solid fa-circle-check text-green-400 text-xs"></i>
+        {{ completed_run_count }} completed
+      </span>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if error %}
+  {# ── Error state ── #}
+  <div class="rounded-lg bg-red-50 border border-red-200 p-4 mb-6 flex items-start gap-3">
+    <i class="fa-solid fa-circle-exclamation text-red-400 mt-0.5 flex-shrink-0"></i>
+    <div>
+      <p class="text-sm font-medium text-red-800">Failed to load report</p>
+      <p class="text-sm text-red-600 mt-0.5">{{ error }}</p>
+    </div>
+  </div>
+
+  {% else %}
+
+  {# ── Filter bar ── #}
+  <div class="flex flex-wrap items-center gap-3 mb-4">
+    <form method="get" class="flex items-center gap-2">
+      <label for="template-filter" class="text-sm font-medium text-gray-600 whitespace-nowrap">
+        Template:
+      </label>
+      <select id="template-filter"
+              name="template_type"
+              onchange="this.form.submit()"
+              class="text-sm border border-gray-300 rounded-md px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent">
+        <option value="" {% if not filter_type %}selected{% endif %}>All Templates</option>
+        {% for ttype in all_template_types %}
+        <option value="{{ ttype }}" {% if filter_type == ttype %}selected{% endif %}>
+          {% if ttype == "bulk_image_audit" %}Bulk Image Audit
+          {% else %}{{ ttype|title }}
+          {% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </form>
+
+    {% if filter_type %}
+    <a href="?" class="text-xs text-purple-600 hover:text-purple-800 hover:underline">
+      Clear filter
+    </a>
+    {% endif %}
+
+    <span class="ml-auto text-sm text-gray-500">
+      {{ rows|length }} run{{ rows|length|pluralize }}{% if filter_type %} (filtered){% endif %}
+    </span>
+  </div>
+
+  {% if rows %}
+  {# ── Data table ── #}
+  <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-sm">
+        <thead>
+          <tr class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            <th class="px-4 py-3 text-left">Template</th>
+            <th class="px-4 py-3 text-left">Run</th>
+            <th class="px-4 py-3 text-left">Opportunity</th>
+            <th class="px-4 py-3 text-left">Created</th>
+            <th class="px-4 py-3 text-left">Period</th>
+            <th class="px-4 py-3 text-center">FLWs</th>
+            <th class="px-4 py-3 text-left">Status</th>
+            <th class="px-4 py-3 text-center">Sessions</th>
+            <th class="px-4 py-3 text-left">Avg % Passed</th>
+            <th class="px-4 py-3 text-left">Run By</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100 bg-white">
+          {% for row in rows %}
+          <tr class="hover:bg-gray-50 transition-colors duration-100">
+
+            {# Template name + type icon #}
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                {% if row.template_type == "bulk_image_audit" %}
+                <i class="fa-solid fa-images text-purple-500 text-xs flex-shrink-0" title="Bulk Image Audit"></i>
+                {% elif row.template_type %}
+                <i class="fa-solid fa-diagram-project text-blue-400 text-xs flex-shrink-0" title="{{ row.template_type }}"></i>
+                {% else %}
+                <i class="fa-solid fa-diagram-project text-gray-300 text-xs flex-shrink-0"></i>
+                {% endif %}
+                <span class="font-medium text-gray-800 leading-tight">{{ row.definition_name }}</span>
+              </div>
+              {% if row.template_type %}
+              <div class="text-xs text-gray-400 mt-0.5 pl-5">{{ row.template_type }}</div>
+              {% endif %}
+            </td>
+
+            {# Run ID #}
+            <td class="px-4 py-3">
+              <span class="font-mono text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                #{{ row.run_id }}
+              </span>
+            </td>
+
+            {# Opportunity #}
+            <td class="px-4 py-3">
+              {% if row.opportunity_id %}
+              <span class="font-mono text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">
+                opp:{{ row.opportunity_id }}
+              </span>
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+            {# Created at #}
+            <td class="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">
+              {% if row.created_at %}
+              {{ row.created_at|slice:":10" }}
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+            {# Period #}
+            <td class="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">
+              {% if row.period_start and row.period_end %}
+                {% if row.period_start == row.period_end %}
+                {{ row.period_start|slice:":10" }}
+                {% else %}
+                {{ row.period_start|slice:":10" }}&nbsp;–&nbsp;{{ row.period_end|slice:":10" }}
+                {% endif %}
+              {% elif row.period_start %}
+              {{ row.period_start|slice:":10" }}
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+            {# FLWs #}
+            <td class="px-4 py-3 text-center">
+              {% if row.selected_count %}
+              <span class="font-semibold text-gray-800">{{ row.selected_count }}</span>
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+            {# Status badge #}
+            <td class="px-4 py-3">
+              {% if row.status == "completed" %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                <i class="fa-solid fa-circle-check text-xs"></i>Completed
+              </span>
+              {% elif row.status == "in_progress" %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                <i class="fa-solid fa-spinner fa-spin text-xs"></i>In Progress
+              </span>
+              {% elif row.status == "failed" %}
+              <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                <i class="fa-solid fa-circle-xmark text-xs"></i>Failed
+              </span>
+              {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                {{ row.status|default:"Unknown"|capfirst }}
+              </span>
+              {% endif %}
+            </td>
+
+            {# Session count #}
+            <td class="px-4 py-3 text-center">
+              {% if row.session_count %}
+              <span class="font-medium text-gray-700">{{ row.session_count }}</span>
+              {% if row.completed_session_count and row.completed_session_count < row.session_count %}
+              <span class="text-xs text-gray-400 block leading-none">{{ row.completed_session_count }} done</span>
+              {% endif %}
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+            {# Avg % Passed — progress bar + colored number #}
+            <td class="px-4 py-3">
+              {% if row.avg_pct_passed is not None %}
+              <div class="flex items-center gap-2 min-w-[100px]">
+                <div class="flex-1 bg-gray-200 rounded-full h-1.5" title="{{ row.avg_pct_passed }}% passed">
+                  <div class="h-1.5 rounded-full
+                    {% if row.avg_pct_passed >= 80 %}bg-green-500
+                    {% elif row.avg_pct_passed >= 60 %}bg-yellow-400
+                    {% else %}bg-red-400{% endif %}"
+                    style="width: {{ row.avg_pct_passed }}%">
+                  </div>
+                </div>
+                <span class="text-xs font-semibold tabular-nums
+                  {% if row.avg_pct_passed >= 80 %}text-green-600
+                  {% elif row.avg_pct_passed >= 60 %}text-yellow-600
+                  {% else %}text-red-600{% endif %}">
+                  {{ row.avg_pct_passed }}%
+                </span>
+              </div>
+              {% else %}
+              <span class="text-xs text-gray-400 italic">No sessions</span>
+              {% endif %}
+            </td>
+
+            {# Run By #}
+            <td class="px-4 py-3">
+              {% if row.username %}
+              <span class="font-mono text-xs text-gray-600">{{ row.username }}</span>
+              {% else %}
+              <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  {# ── Empty state ── #}
+  <div class="text-center py-20 text-gray-400">
+    <i class="fa-solid fa-inbox text-5xl mb-4 block"></i>
+    <p class="text-lg font-medium text-gray-500">No workflow runs found</p>
+    <p class="text-sm mt-1">
+      {% if filter_type %}
+        No runs match the selected template type.
+        <a href="?" class="text-purple-600 hover:underline ml-1">Clear filter</a>
+      {% else %}
+        No workflow runs have been created yet across any opportunity.
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  {% endif %}{# end if error #}
+
+</div>
+{% endblock %}
