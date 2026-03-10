@@ -3,6 +3,11 @@
 <div class="bg-white shadow-sm p-4 rounded-2xl flex flex-col gap-4 w-110" x-data="{showSuspendModal: false}">
   <div class="flex justify-between items-center text-gray-400 text-sm">
     <h3 class="text-base font-medium text-brand-deep-purple">User Status Details</h3>
+    {% if opportunity_access.suspended %}
+      <span class="badge badge-md negative-dark">{% translate "Suspended" %}</span>
+    {% else %}
+      <span class="badge badge-md positive-dark">{% translate "Active" %}</span>
+    {% endif %}
     <div>
       {% if request.is_opportunity_pm %}
         {% if opportunity_access.suspended %}
