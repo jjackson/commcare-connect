@@ -871,7 +871,7 @@
                                 </td>
                                 {% if workflow.template_type == "bulk_image_audit" %}
                                 <td class="py-3 text-center">
-                                    {% with avg=run.state.avg_passed threshold=run.state.threshold|default:run.threshold|default:80 %}
+                                    {% with avg=run.state.avg_passed threshold=run.state.threshold|default:80 %}
                                     {% if avg != "" and avg is not None %}
                                     <span class="text-sm font-medium {% if avg >= threshold %}text-green-700{% else %}text-red-700{% endif %}">
                                         {{ avg }}%

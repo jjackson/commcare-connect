@@ -225,9 +225,20 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
             },
         ]
 
-        # Audit of Audits — admin report restricted to @dimagi.com users only
-        user_email = getattr(self.request.user, "email", "") or ""
-        if user_email.endswith("@dimagi.com"):
+        # Audit of Audits — admin report restricted to Dimagi staff only.
+        # Uses the same logic as _is_dimagi_user() in audit_of_audits/views.py:
+        # email/username @dimagi.com domain check OR LABS_ADMIN_USERNAMES allowlist.
+        from django.conf import settings as _settings
+
+        _u_email = getattr(self.request.user, "email", "") or ""
+        _u_username = getattr(self.request.user, "username", "") or ""
+        _labs_admins = getattr(_settings, "LABS_ADMIN_USERNAMES", [])
+        _is_dimagi = (
+            _u_email.endswith("@dimagi.com")
+            or _u_username.endswith("@dimagi.com")
+            or (_u_username and _u_username in _labs_admins)
+        )
+        if _is_dimagi:
             context["custom_analysis_projects"].append(
                 {
                     "name": "Audit of Audits",
