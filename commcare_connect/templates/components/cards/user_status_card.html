@@ -12,7 +12,7 @@
       {% if opportunity_access.suspended %}
         <button
           hx-post="{% url 'opportunity:revoke_user_suspension' org_slug=request.org.slug opp_id=opportunity_access.opportunity.opportunity_id pk=opportunity_access.opportunity_access_id %}"
-          hx-vals='{"next": "{{ request.path }}"}'
+          hx-vals='{"next": "{{ request.get_full_path }}"}'
           class="button button-sm primary-light">
           {% translate "Revoke Suspension" %}
         </button>
