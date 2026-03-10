@@ -1,13 +1,13 @@
 """
 Bulk Image Audit Workflow Template.
 
-Multi-opportunity image review with per-FLW pass/fail summary.
-Supports Scale Photo, ORS Photo, and MUAC Photo image types.
+Single-opportunity image review with per-FLW pass/fail summary.
+Image types are discovered dynamically from the CommCare HQ app definition.
 """
 
 DEFINITION = {
     "name": "Bulk Image Audit",
-    "description": "Review photos across multiple opportunities with per-FLW pass/fail tracking",
+    "description": "Review photos for an opportunity with per-FLW pass/fail tracking",
     "version": 1,
     "templateType": "bulk_image_audit",
     "statuses": [
@@ -25,30 +25,6 @@ DEFINITION = {
 
 RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines, links, actions, onUpdateState }) {
 
-    // ── Image type map ──────────────────────────────────────────────────────
-    const IMAGE_TYPES = [
-        {
-            id: 'ors_photo',
-            label: 'ORS Photo',
-            path: 'service_delivery/ors_group/ors_photo',
-            hq_url_path: 'service_delivery/ors_group/photo_link_ors',
-            icon: 'fa-droplet',
-        },
-        {
-            id: 'muac_photo',
-            label: 'MUAC Photo',
-            path: 'service_delivery/muac_group/muac_display_group_1/muac_photo',
-            hq_url_path: 'service_delivery/muac_group/muac_photo_link',
-            icon: 'fa-ruler',
-        },
-        {
-            id: 'scale_photo',
-            label: 'Scale Photo',
-            path: 'anthropometric/upload_weight_image',
-            icon: 'fa-weight-scale',
-        },
-    ];
-
     // ── Phase (drives which section renders) ────────────────────────────────
     const [phase, setPhase] = React.useState(instance.state?.phase || 'config');
 
@@ -62,12 +38,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // ── Config state ────────────────────────────────────────────────────────
     const [selectedOpps, setSelectedOpps] = React.useState(
         instance.state?.config?.selected_opps || []
-    );
-    const [searchQuery, setSearchQuery] = React.useState('');
-    const [searchResults, setSearchResults] = React.useState([]);
-    const [isSearching, setIsSearching] = React.useState(false);
-    const [imageType, setImageType] = React.useState(
-        instance.state?.config?.image_type || 'ors_photo'
     );
     const [auditMode, setAuditMode] = React.useState(
         instance.state?.config?.audit_mode || 'date_range'
@@ -91,37 +61,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         instance.state?.config?.threshold ?? 80
     );
 
-    // ── Opp search ───────────────────────────────────────────────────────────
-    const searchTimeout = React.useRef(null);
-
-    const handleOppSearch = (query) => {
-        setSearchQuery(query);
-        if (searchTimeout.current) clearTimeout(searchTimeout.current);
-        if (!query.trim()) { setSearchResults([]); return; }
-
-        searchTimeout.current = setTimeout(() => {
-            setIsSearching(true);
-            fetch('/audit/api/opportunities/search/?q=' + encodeURIComponent(query))
-                .then(r => r.json())
-                .then(data => {
-                    setSearchResults(data.opportunities || []);
-                    setIsSearching(false);
-                })
-                .catch(() => setIsSearching(false));
-        }, 300);
-    };
-
-    const addOpp = (opp) => {
-        if (!selectedOpps.find(o => o.id === opp.id)) {
-            setSelectedOpps(prev => [...prev, { id: opp.id, name: opp.name }]);
-        }
-        setSearchQuery('');
-        setSearchResults([]);
-    };
-
-    const removeOpp = (id) => {
-        setSelectedOpps(prev => prev.filter(o => o.id !== id));
-    };
+    // ── Dynamic image type state ─────────────────────────────────────────────
+    const [imageQuestions, setImageQuestions] = React.useState(
+        instance.state?.config?.image_questions || []
+    );
+    const [imageQuestionsLoading, setImageQuestionsLoading] = React.useState(false);
+    const [imageQuestionsError, setImageQuestionsError] = React.useState(null);
+    const [selectedImageTypeIds, setSelectedImageTypeIds] = React.useState(
+        instance.state?.config?.selected_image_type_ids || []
+    );
 
     // ── Date helpers ─────────────────────────────────────────────────────────
     const calculateDateRange = (preset) => {
@@ -173,6 +121,33 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         if (selectedOpps.length === 0 && instance.opportunity_id && instance.opportunity_name) {
             setSelectedOpps([{ id: instance.opportunity_id, name: instance.opportunity_name }]);
         }
+    }, []);
+
+    // Fetch image question types from CommCare HQ on mount
+    React.useEffect(() => {
+        const oppId = instance.opportunity_id;
+        if (!oppId) return;
+        // If already loaded from saved state, skip
+        if (imageQuestions.length > 0) return;
+        setImageQuestionsLoading(true);
+        setImageQuestionsError(null);
+        fetch('/audit/api/opportunity/' + oppId + '/image-questions/')
+            .then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(data => {
+                setImageQuestions(data);
+                // Default: select all returned types
+                if (selectedImageTypeIds.length === 0) {
+                    setSelectedImageTypeIds(data.map(q => q.id));
+                }
+                setImageQuestionsLoading(false);
+            })
+            .catch(err => {
+                setImageQuestionsError('Failed to load image types: ' + err.message);
+                setImageQuestionsLoading(false);
+            });
     }, []);
 
     // ── Execution state ──────────────────────────────────────────────────────
@@ -281,17 +256,15 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     // ── Create handler ───────────────────────────────────────────────────────
     const handleCreate = async () => {
         if (selectedOpps.length === 0) return;
+        if (selectedImageTypeIds.length === 0) return;
 
-        const imageTypeObj = IMAGE_TYPES.find(t => t.id === imageType);
-        if (!imageTypeObj) {
-            setProgress({ status: 'failed', error: 'Unknown image type: ' + imageType });
-            setPhase('config');
-            return;
-        }
+        const selectedTypes = imageQuestions.filter(q => selectedImageTypeIds.includes(q.id));
+
         const config = {
             selected_opps: selectedOpps,
-            image_type: imageType,
-            image_path: imageTypeObj.path,
+            image_questions: imageQuestions,
+            selected_image_type_ids: selectedImageTypeIds,
+            image_types: selectedTypes.map(t => ({ id: t.id, label: t.label })),
             audit_mode: auditMode,
             start_date: auditMode === 'date_range' ? startDate : null,
             end_date: auditMode === 'date_range' ? endDate : null,
@@ -313,7 +286,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             end_date: auditMode === 'date_range' ? endDate : null,
             count_per_opp: auditMode === 'last_n_per_opp' ? lastNCount : null,
             sample_percentage: samplePct,
-            related_fields: [{ image_path: imageTypeObj.path, hq_url_path: imageTypeObj.hq_url_path || null, filter_by_image: true }],
+            related_fields: selectedTypes.map(t => ({
+                image_path: t.path,
+                hq_url_path: t.hq_url_path || null,
+                filter_by_image: true,
+            })),
         };
 
         try {
@@ -700,79 +677,81 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const ConfigPhase = () => (
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
 
-            {/* Opportunity selector */}
-            <div>
-                <h3 className="text-sm font-medium text-gray-700 mb-3">
-                    <i className="fa-solid fa-building mr-2 text-gray-400"></i>
-                    Opportunities
-                </h3>
-                <div className="relative">
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => handleOppSearch(e.target.value)}
-                        placeholder="Search opportunities..."
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                    />
-                    {isSearching && (
-                        <div className="absolute right-3 top-2.5">
-                            <i className="fa-solid fa-spinner fa-spin text-gray-400"></i>
-                        </div>
-                    )}
-                    {searchResults.length > 0 && (
-                        <div className={'absolute z-10 w-full bg-white border border-gray-200 ' +
-                            'rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto'}>
-                            {searchResults.map(opp => (
-                                <button
-                                    key={opp.id}
-                                    onClick={() => addOpp(opp)}
-                                    className={'w-full text-left px-4 py-2 text-sm hover:bg-blue-50 ' +
-                                        'flex items-center justify-between'}
-                                >
-                                    <span className="font-medium text-gray-900">{opp.name}</span>
-                                    <span className="text-xs text-gray-400 ml-2">ID {opp.id}</span>
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-                {selectedOpps.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-                        {selectedOpps.map(opp => (
-                            <span key={opp.id}
-                                className={'inline-flex items-center gap-1.5 px-3 py-1 bg-blue-100 ' +
-                                    'text-blue-800 rounded-full text-sm font-medium'}>
-                                {opp.name}
-                                <button onClick={() => removeOpp(opp.id)}
-                                    className="text-blue-500 hover:text-blue-800 ml-1">
-                                    <i className="fa-solid fa-times text-xs"></i>
-                                </button>
-                            </span>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Image type */}
+            {/* Image types (dynamic, from CommCare HQ) */}
             <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">
                     <i className="fa-solid fa-image mr-2 text-gray-400"></i>
-                    Image Type
+                    Image Types
                 </h3>
-                <div className="flex gap-2">
-                    {IMAGE_TYPES.map(t => (
-                        <button key={t.id} onClick={() => setImageType(t.id)}
-                            className={
-                                'flex-1 px-4 py-3 text-sm rounded-lg border-2 transition-colors ' +
-                                (imageType === t.id
-                                    ? 'bg-blue-50 text-blue-700 border-blue-500'
-                                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300')
-                            }>
-                            <i className={'fa-solid ' + t.icon + ' mr-2'}></i>
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
+                {imageQuestionsLoading && (
+                    <div className="flex items-center gap-2 text-sm text-blue-600 p-3 bg-blue-50 rounded-lg">
+                        <i className="fa-solid fa-spinner fa-spin"></i>
+                        <span>Loading image types from CommCare...</span>
+                    </div>
+                )}
+                {imageQuestionsError && (
+                    <div className="text-sm text-red-600 p-3 bg-red-50 rounded-lg border border-red-200">
+                        <i className="fa-solid fa-circle-exclamation mr-2"></i>
+                        {imageQuestionsError}
+                    </div>
+                )}
+                {!imageQuestionsLoading && !imageQuestionsError && imageQuestions.length > 0 && (
+                    <div>
+                        <div className="flex gap-2 mb-2">
+                            <button
+                                onClick={() => setSelectedImageTypeIds(imageQuestions.map(q => q.id))}
+                                className="text-xs text-blue-600 hover:underline">
+                                Select All
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                                onClick={() => setSelectedImageTypeIds([])}
+                                className="text-xs text-blue-600 hover:underline">
+                                Deselect All
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                            {imageQuestions.map(q => {
+                                const checked = selectedImageTypeIds.includes(q.id);
+                                return (
+                                    <label key={q.id}
+                                        className={'flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer ' +
+                                            'transition-colors ' +
+                                            (checked
+                                                ? 'bg-blue-50 border-blue-400'
+                                                : 'bg-white border-gray-200 hover:border-gray-300')}>
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => {
+                                                setSelectedImageTypeIds(prev =>
+                                                    checked
+                                                        ? prev.filter(id => id !== q.id)
+                                                        : [...prev, q.id]
+                                                );
+                                            }}
+                                            className="mt-0.5 h-4 w-4 text-blue-600 rounded"
+                                        />
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-medium text-gray-900">{q.label}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">
+                                                <span className="font-mono">{q.id}</span>
+                                                {q.form_name && (
+                                                    <span className="ml-2 text-gray-400">&bull; {q.form_name}</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+                {!imageQuestionsLoading && !imageQuestionsError && imageQuestions.length === 0 && (
+                    <div className="text-sm text-gray-500 p-3 bg-gray-50 rounded-lg">
+                        No image questions found in this opportunity's app.
+                    </div>
+                )}
             </div>
 
             {/* Visit Selection */}
@@ -812,16 +791,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             <div className="pt-4 border-t border-gray-200">
                 <button
                     onClick={handleCreate}
-                    disabled={selectedOpps.length === 0}
+                    disabled={selectedOpps.length === 0 || selectedImageTypeIds.length === 0}
                     className={'inline-flex items-center px-6 py-3 bg-blue-600 text-white ' +
                         'rounded-lg hover:bg-blue-700 disabled:bg-gray-400 font-medium'}
                 >
                     <i className="fa-solid fa-play mr-2"></i>
                     Create Review
                 </button>
-                {selectedOpps.length === 0 && (
+                {selectedImageTypeIds.length === 0 && !imageQuestionsLoading && (
                     <p className="mt-2 text-sm text-red-600">
-                        Select at least one opportunity to continue.
+                        Select at least one image type to continue.
                     </p>
                 )}
             </div>
@@ -996,7 +975,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 TEMPLATE = {
     "key": "bulk_image_audit",
     "name": "Bulk Image Audit",
-    "description": "Review photos across multiple opportunities with per-FLW pass/fail tracking",
+    "description": "Review photos for an opportunity with per-FLW pass/fail tracking",
     "icon": "fa-images",
     "color": "blue",
     "definition": DEFINITION,
