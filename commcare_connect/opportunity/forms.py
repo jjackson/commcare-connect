@@ -100,6 +100,9 @@ class OpportunityUserInviteForm(forms.Form):
     def clean_users(self):
         user_data = self.cleaned_data["users"]
 
+        if user_data and self.opportunity and self.opportunity.has_ended:
+            raise ValidationError(gettext("This opportunity has ended. You cannot invite more workers."))
+
         if user_data and self.opportunity and not self.opportunity.is_setup_complete:
             raise ValidationError(gettext("Please finish setting up the opportunity before inviting users."))
 
