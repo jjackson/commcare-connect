@@ -427,24 +427,25 @@ class WorkflowDataAccess(BaseDataAccess):
         """
         deleted_counts = {"definition": 0, "render_code": 0, "runs": 0, "audit_sessions": 0, "chat_history": 0}
 
+        # Collect all IDs to delete in a single batch at the end
+        ids_to_delete: list[int] = []
+
         # Always delete render code (belongs to the definition)
         render_code = self.get_render_code(definition_id)
         if render_code:
-            self.labs_api.delete_record(render_code.id)
+            ids_to_delete.append(render_code.id)
             deleted_counts["render_code"] = 1
 
         # Always delete chat history (belongs to the definition)
         chat_history = self.get_chat_history(definition_id)
         if chat_history:
-            self.labs_api.delete_record(chat_history.id)
+            ids_to_delete.append(chat_history.id)
             deleted_counts["chat_history"] = 1
 
         if delete_linked:
-            # Delete all runs and their linked audit sessions
+            # Collect all run and audit session IDs for batch deletion
             runs = self.list_runs(definition_id)
             for run in runs:
-                # Find and delete audit sessions linked to this run
-                # Audit sessions store workflow_run_id in labs_record_id field
                 try:
                     audit_sessions = self.labs_api.get_records(
                         experiment="audit",
@@ -452,18 +453,20 @@ class WorkflowDataAccess(BaseDataAccess):
                         labs_record_id=run.id,
                     )
                     for session in audit_sessions:
-                        self.labs_api.delete_record(session.id)
+                        ids_to_delete.append(session.id)
                         deleted_counts["audit_sessions"] += 1
                 except Exception as e:
-                    logger.warning(f"Failed to query/delete audit sessions for run {run.id}: {e}")
+                    logger.warning(f"Failed to query audit sessions for run {run.id}: {e}")
 
-                # Delete the run itself
-                self.labs_api.delete_record(run.id)
+                ids_to_delete.append(run.id)
                 deleted_counts["runs"] += 1
 
-        # Delete the definition itself
-        self.labs_api.delete_record(definition_id)
+        # Add the definition itself
+        ids_to_delete.append(definition_id)
         deleted_counts["definition"] = 1
+
+        # Single batch delete for all collected IDs
+        self.labs_api.delete_records(ids_to_delete)
 
         return deleted_counts
 
@@ -604,9 +607,9 @@ class WorkflowDataAccess(BaseDataAccess):
         """
         deleted_counts = {"run": 0, "audit_sessions": 0}
 
+        ids_to_delete: list[int] = []
+
         if delete_linked:
-            # Find and delete audit sessions linked to this run
-            # Audit sessions store workflow_run_id in labs_record_id field
             try:
                 audit_sessions = self.labs_api.get_records(
                     experiment="audit",
@@ -614,16 +617,19 @@ class WorkflowDataAccess(BaseDataAccess):
                     labs_record_id=run_id,
                 )
                 for session in audit_sessions:
-                    self.labs_api.delete_record(session.id)
+                    ids_to_delete.append(session.id)
                     deleted_counts["audit_sessions"] += 1
                 if deleted_counts["audit_sessions"] > 0:
-                    logger.info(f"Deleted {deleted_counts['audit_sessions']} audit sessions linked to run {run_id}")
+                    logger.info(f"Deleting {deleted_counts['audit_sessions']} audit sessions linked to run {run_id}")
             except Exception as e:
-                logger.warning(f"Failed to query/delete audit sessions for run {run_id}: {e}")
+                logger.warning(f"Failed to query audit sessions for run {run_id}: {e}")
 
-        # Delete the run itself
-        self.labs_api.delete_record(run_id)
+        # Add the run itself
+        ids_to_delete.append(run_id)
         deleted_counts["run"] = 1
+
+        # Single batch delete
+        self.labs_api.delete_records(ids_to_delete)
 
         return deleted_counts
 
