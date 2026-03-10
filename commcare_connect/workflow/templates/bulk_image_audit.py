@@ -725,7 +725,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                             checked={checked}
                                             onChange={() => {
                                                 setSelectedImageTypeIds(prev =>
-                                                    checked
+                                                    prev.includes(q.id)
                                                         ? prev.filter(id => id !== q.id)
                                                         : [...prev, q.id]
                                                 );
@@ -798,7 +798,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     <i className="fa-solid fa-play mr-2"></i>
                     Create Review
                 </button>
-                {selectedImageTypeIds.length === 0 && !imageQuestionsLoading && (
+                {selectedImageTypeIds.length === 0 && !imageQuestionsLoading && imageQuestions.length > 0 && !imageQuestionsError && (
                     <p className="mt-2 text-sm text-red-600">
                         Select at least one image type to continue.
                     </p>
