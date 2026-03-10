@@ -1974,3 +1974,17 @@ def test_visit_export_count_boundary_dates(
 
     assert response.status_code == HTTPStatus.OK
     assert "2 visits match your filters." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_user_invite_redirects_for_ended_opportunity(org_user_member, organization):
+    opportunity = OpportunityFactory(
+        organization=organization,
+        end_date=date.today() - timedelta(days=1),
+    )
+    client = Client()
+    client.force_login(org_user_member)
+    url = reverse("opportunity:user_invite", args=[organization.slug, opportunity.opportunity_id])
+    response = client.get(url)
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url

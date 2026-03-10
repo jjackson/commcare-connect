@@ -1293,6 +1293,9 @@ def import_catchment_area(request, org_slug=None, opp_id=None):
 @org_member_required
 @opportunity_required
 def opportunity_user_invite(request, org_slug=None, opp_id=None):
+    if request.opportunity.has_ended:
+        messages.error(request, _("This opportunity has ended. You cannot invite more workers."))
+        return redirect("opportunity:detail", request.org.slug, opp_id)
     form = OpportunityUserInviteForm(data=request.POST or None, opportunity=request.opportunity)
     if form.is_valid():
         users = form.cleaned_data["users"]
