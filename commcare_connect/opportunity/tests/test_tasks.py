@@ -73,6 +73,7 @@ class TestConnectUserCreation:
             ]
             add_connect_users(["+15555555555"], opportunity.id)
 
+        fetch_users.assert_not_called()
         assert User.objects.filter(username="test").count() == 0
         assert OpportunityAccess.objects.filter(opportunity=opportunity).count() == 0
         assert UserInvite.objects.filter(opportunity=opportunity).count() == 0

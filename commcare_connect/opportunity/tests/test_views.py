@@ -1988,3 +1988,8 @@ def test_user_invite_redirects_for_ended_opportunity(org_user_member, organizati
     response = client.get(url)
     assert response.status_code == 302
     assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+
+    # POST should also redirect, not process the invite
+    response = client.post(url, data={"users": "+15555555555"})
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
