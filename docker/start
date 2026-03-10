@@ -5,4 +5,5 @@ set -o pipefail
 set -o nounset
 
 
-gunicorn config.wsgi --bind 0.0.0.0:8000 --chdir=/app --timeout 600 -w 2
+WORKERS=${WEB_CONCURRENCY:-3}
+gunicorn config.wsgi --bind 0.0.0.0:8000 --chdir=/app --timeout 600 -k gthread --threads 4 -w "$WORKERS"
