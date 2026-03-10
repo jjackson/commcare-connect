@@ -25,6 +25,12 @@
       "runtimeExecutable": "celery",
       "runtimeArgs": ["-A", "config.celery_app", "worker", "-l", "info"],
       "port": 0
+    },
+    {
+      "name": "celery-beat",
+      "runtimeExecutable": "celery",
+      "runtimeArgs": ["-A", "config.celery_app", "beat"],
+      "port": 0
     }
   ]
 }
