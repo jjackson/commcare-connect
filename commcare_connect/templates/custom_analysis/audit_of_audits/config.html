@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audit of Audits — Select Organizations{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8 max-w-2xl">
+
+  {# ── Header ── #}
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-purple-100">
+        <i class="fa-solid fa-magnifying-glass-chart text-purple-600 text-base"></i>
+      </span>
+      Audit of Audits
+    </h1>
+    <p class="text-sm text-gray-500 mt-1">
+      Select the organizations to include. Fewer organizations = faster load time.
+    </p>
+    <p class="text-xs text-gray-400 mt-0.5 font-mono">{{ user_email }}</p>
+  </div>
+
+  <form method="get" action="">
+
+    {# ── Organization checkboxes ── #}
+    <div class="bg-white shadow-sm ring-1 ring-gray-200 rounded-lg overflow-hidden mb-5">
+
+      <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-700 flex items-center gap-2">
+          <i class="fa-solid fa-building text-gray-400 text-xs"></i>
+          Organizations
+          <span id="checked-count" class="text-xs font-normal text-gray-400"></span>
+        </h2>
+        <div class="flex items-center gap-3">
+          <button type="button" onclick="selectAll()"
+                  class="text-xs text-purple-600 hover:text-purple-800 hover:underline bg-transparent border-none cursor-pointer p-0">
+            Select all
+          </button>
+          <span class="text-gray-300 text-xs">|</span>
+          <button type="button" onclick="deselectAll()"
+                  class="text-xs text-gray-500 hover:text-gray-700 hover:underline bg-transparent border-none cursor-pointer p-0">
+            Deselect all
+          </button>
+        </div>
+      </div>
+
+      <div class="divide-y divide-gray-100">
+        {% for org in user_orgs %}
+        <label class="flex items-center gap-3 px-4 py-3 hover:bg-purple-50 cursor-pointer transition-colors">
+          <input type="checkbox"
+                 name="org_ids"
+                 value="{{ org.id }}"
+                 checked
+                 onchange="updateCount()"
+                 class="org-checkbox w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer">
+          <span class="text-sm text-gray-800 font-medium flex-1">{{ org.name }}</span>
+          <span class="text-xs text-gray-400 font-mono">id:{{ org.id }}</span>
+        </label>
+        {% empty %}
+        <div class="px-4 py-10 text-center">
+          <i class="fa-solid fa-building text-3xl text-gray-200 mb-3 block"></i>
+          <p class="text-sm text-gray-500 font-medium">No organizations found</p>
+          <p class="text-xs text-gray-400 mt-1">
+            Try refreshing your session on the
+            <a href="/labs/overview/" class="text-purple-600 hover:underline">Labs home page</a>.
+          </p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ── Load time estimate + submit ── #}
+    <div class="flex items-center gap-4 flex-wrap">
+      <button type="submit"
+              id="run-btn"
+              class="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg transition-colors shadow-sm">
+        <i class="fa-solid fa-play text-xs"></i>
+        Run Report
+      </button>
+
+      <p id="estimate" class="text-xs text-gray-400">
+        <i class="fa-regular fa-clock mr-1"></i>
+        <span id="estimate-text">Estimated load time: calculating…</span>
+      </p>
+    </div>
+
+  </form>
+</div>
+
+<script>
+(function () {
+  const total = {{ user_orgs|length }};
+
+  function getChecked() {
+    return document.querySelectorAll('.org-checkbox:checked').length;
+  }
+
+  function updateCount() {
+    const checked = getChecked();
+    const countEl = document.getElementById('checked-count');
+    const estimateEl = document.getElementById('estimate-text');
+    const runBtn = document.getElementById('run-btn');
+
+    if (countEl) {
+      countEl.textContent = checked === total
+        ? '(all ' + total + ')'
+        : '(' + checked + ' of ' + total + ' selected)';
+    }
+
+    // Rough estimate: each org ~1s for sessions + shared opp calls
+    if (estimateEl) {
+      if (checked === 0) {
+        estimateEl.textContent = 'Select at least one organization';
+      } else {
+        const secs = checked + Math.ceil(checked * 1.5);
+        estimateEl.textContent = 'Estimated load time: ~' + secs + '–' + (secs + 5) + ' seconds';
+      }
+    }
+
+    if (runBtn) runBtn.disabled = checked === 0;
+  }
+
+  function selectAll() {
+    document.querySelectorAll('.org-checkbox').forEach(cb => cb.checked = true);
+    updateCount();
+  }
+
+  function deselectAll() {
+    document.querySelectorAll('.org-checkbox').forEach(cb => cb.checked = false);
+    updateCount();
+  }
+
+  // Expose for inline onclick handlers
+  window.selectAll = selectAll;
+  window.deselectAll = deselectAll;
+  window.updateCount = updateCount;
+
+  // Init on load
+  document.addEventListener('DOMContentLoaded', updateCount);
+}());
+</script>
+{% endblock %}
