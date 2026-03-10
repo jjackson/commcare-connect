@@ -96,6 +96,9 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    if opportunity.has_ended:
+        return
     found_users = fetch_users(user_list)
     not_found_users = set(user_list) - {user.phone_number for user in found_users}
     for u in not_found_users:
