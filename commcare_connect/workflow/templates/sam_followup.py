@@ -41,7 +41,10 @@ PIPELINE_SCHEMAS = [
                 # --- Identity (from additional_case_info) ---
                 {
                     "name": "child_case_id",
-                    "path": "form.additional_case_info.child_case_id",
+                    "paths": [
+                        "form.case.@case_id",
+                        "form.additional_case_info.child_case_id",
+                    ],
                     "aggregation": "first",
                 },
                 {
