@@ -79,13 +79,15 @@ def extract_image_questions(app: dict) -> list[dict]:
                 # Auto-detect hq_url_path
                 hq_url_path = _detect_hq_url_path(xform_path, questions)
 
-                results.append({
-                    "id": _question_id(xform_path),
-                    "label": label,
-                    "path": image_path,
-                    "hq_url_path": hq_url_path,
-                    "form_name": form_name,
-                })
+                results.append(
+                    {
+                        "id": _question_id(xform_path),
+                        "label": label,
+                        "path": image_path,
+                        "hq_url_path": hq_url_path,
+                        "form_name": form_name,
+                    }
+                )
 
     return results
 
