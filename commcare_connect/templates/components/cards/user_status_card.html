@@ -4,18 +4,19 @@
   <div class="flex justify-between items-center text-gray-400 text-sm">
     <h3 class="text-base font-medium text-brand-deep-purple">User Status Details</h3>
     <div>
-      {% if opportunity_access.suspended and not request.org_membership.is_viewer %}
-        <button
-          hx-post="{% url 'opportunity:revoke_user_suspension' org_slug=request.org.slug opp_id=opportunity_access.opportunity.opportunity_id pk=opportunity_access.opportunity_access_id %}"
-          hx-vals='{"next": "{{ request.path }}"}'
-          class="button button-sm primary-light">
-          {% translate "Revoke Suspension" %}
-        </button>
-      {% else %}
-      <button  {% if request.org_membership.is_viewer %} disabled {% endif %}
-               class="button button-sm primary-light" @click="showSuspendModal = true">
-        Suspend
-      </button>
+      {% if request.is_opportunity_pm %}
+        {% if opportunity_access.suspended %}
+          <button
+            hx-post="{% url 'opportunity:revoke_user_suspension' org_slug=request.org.slug opp_id=opportunity_access.opportunity.opportunity_id pk=opportunity_access.opportunity_access_id %}"
+            hx-vals='{"next": "{{ request.path }}"}'
+            class="button button-sm primary-light">
+            {% translate "Revoke Suspension" %}
+          </button>
+        {% else %}
+          <button class="button button-sm primary-light" @click="showSuspendModal = true">
+            Suspend
+          </button>
+        {% endif %}
       {% endif %}
       <button class="button-icon"
         @click="isStatusModalOpen = false">

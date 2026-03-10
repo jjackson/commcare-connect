@@ -1207,7 +1207,7 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
     return redirect("opportunity:detail", org_slug, opp_id)
 
 
-@org_member_required
+@org_program_manager_required
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
@@ -1225,7 +1225,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @require_POST
-@org_member_required
+@org_program_manager_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
