@@ -121,6 +121,19 @@
             <option value="fail">Failed</option>
           </select>
         </div>
+        <div x-show="questionIds.length > 1">
+          <label for="image-type-filter" class="block text-sm font-medium text-gray-700 mb-1">Image Type</label>
+          <select id="image-type-filter"
+                  x-model="selectedQuestionId"
+                  @change="applyFilters()"
+                  :disabled="loading"
+                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
+            <option value="">All Types</option>
+            <template x-for="qid in questionIds" :key="qid">
+              <option :value="qid" x-text="formatQuestionId(qid)"></option>
+            </template>
+          </select>
+        </div>
         <div class="text-sm text-gray-600">
           <template x-if="loading">
             <span>Loading assessments…</span>
@@ -778,6 +791,12 @@ function bulkAssessmentInterface() {
       this.loadCancelled = false;
       this.loadError = null;
       this.fetchData();
+    },
+    formatQuestionId(qid) {
+      return (qid || '')
+        .split('_')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
     },
     applyFilters() {
       this.updateUrlParams();
