@@ -428,10 +428,12 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
         return (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className={'px-6 py-4 border-b ' + (readOnly ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100')}>
+                <div className={'px-6 py-4 border-b ' +
+                    (readOnly ? 'bg-green-50 border-green-100' : 'bg-blue-50 border-blue-100')}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className={'text-lg font-semibold flex items-center gap-2 ' + (readOnly ? 'text-green-800' : 'text-blue-800')}>
+                            <h2 className={'text-lg font-semibold flex items-center gap-2 ' +
+                                (readOnly ? 'text-green-800' : 'text-blue-800')}>
                                 <i className={'fa-solid ' + (readOnly ? 'fa-check-circle' : 'fa-images')}></i>
                                 {readOnly ? 'Completed Review' : 'Audit Sessions'}
                             </h2>
@@ -439,7 +441,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                 {sessions.length} session{sessions.length !== 1 ? 's' : ''} &bull;{' '}
                                 {sessions.filter(s => s.status === 'completed').length} completed
                                 {avgPct !== null && (
-                                    <span className={'ml-2 font-medium ' + (avgPct >= threshold ? 'text-green-700' : 'text-red-700')}>
+                                    <span className={'ml-2 font-medium ' +
+                                        (avgPct >= threshold ? 'text-green-700' : 'text-red-700')}>
                                         &bull; Avg {avgPct}% passed
                                     </span>
                                 )}
@@ -798,7 +801,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     <i className="fa-solid fa-play mr-2"></i>
                     Create Review
                 </button>
-                {selectedImageTypeIds.length === 0 && !imageQuestionsLoading && imageQuestions.length > 0 && !imageQuestionsError && (
+                {selectedImageTypeIds.length === 0 && !imageQuestionsLoading &&
+                    imageQuestions.length > 0 && !imageQuestionsError && (
                     <p className="mt-2 text-sm text-red-600">
                         Select at least one image type to continue.
                     </p>
@@ -934,7 +938,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             )}
                         </div>
                         {avgPassed !== null && avgPassed !== undefined && (
-                            <span className={'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ' +
+                            <span className={
+                                'inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium ' +
                                 (avgPassed >= threshold
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800')}>

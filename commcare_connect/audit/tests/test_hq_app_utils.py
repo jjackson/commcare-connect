@@ -1,6 +1,4 @@
 """Unit tests for HQ app utility: image question extraction and filtering."""
-import pytest
-
 from commcare_connect.audit.hq_app_utils import extract_image_questions
 
 
