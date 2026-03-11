@@ -34,6 +34,17 @@ Use the MCP server's `get_form_json_paths` tool to discover correct field paths 
 
 **Full reference:** [WORKFLOW_REFERENCE.md](commcare_connect/workflow/WORKFLOW_REFERENCE.md)
 
+## Deployment
+
+Labs deploys to **AWS ECS Fargate** via `.github/workflows/deploy-labs.yml`. This is the only deploy workflow used on `labs-main`.
+
+**Ignore `.github/workflows/deploy.yml`** — that is the Kamal staging/production deploy from upstream `main`. It does not apply to labs and should not be modified or used. It may reappear when merging from upstream; just leave it alone.
+
+- **Docker image:** Built from `Dockerfile`, pushed to ECR (`labs-jj-commcare-connect`)
+- **Gunicorn config:** `docker/start` — uses gthread workers, count set via `WEB_CONCURRENCY` env var (default 3)
+- **ECS cluster:** `labs-jj-cluster` in `us-east-1`
+- **Services:** `labs-jj-web` (web), `labs-jj-worker` (celery)
+
 ## Key Commands
 
 ```bash

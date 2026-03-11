@@ -119,8 +119,25 @@ class SQLBackend:
         if not force_refresh:
             effective_count = expected_visit_count or 0
             if cache_manager.has_valid_raw_cache(effective_count, tolerance_pct=tolerance_pct):
-                logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id} (tolerance={tolerance_pct}%)")
-                return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
+                # If images requested, verify cache actually has image data.
+                # The initial pipeline run fetches without ?images=true, so cached
+                # visits may have empty images arrays. In that case, fall through
+                # to re-fetch from API with images included.
+                if include_images:
+                    qs = cache_manager.get_raw_visits_queryset()
+                    if filter_visit_ids:
+                        qs = qs.filter(visit_id__in=filter_visit_ids)
+                    has_images = qs.exclude(images=[]).exists()
+                    if not has_images:
+                        logger.info(
+                            f"[SQL] Cache has no images for opp {opportunity_id}, re-fetching with images"
+                        )
+                    else:
+                        logger.info(f"[SQL] Raw cache HIT (with images) for opp {opportunity_id}")
+                        return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
+                else:
+                    logger.info(f"[SQL] Raw cache HIT for opp {opportunity_id} (tolerance={tolerance_pct}%)")
+                    return self._load_from_cache(cache_manager, skip_form_json, filter_visit_ids)
 
         # Cache miss or force refresh - fetch from API
         logger.info(f"[SQL] Raw cache MISS for opp {opportunity_id}, fetching from API")
