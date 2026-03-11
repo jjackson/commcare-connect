@@ -15,12 +15,31 @@ from django.core.exceptions import PermissionDenied
 from django.views.generic import TemplateView
 
 from commcare_connect.labs.integrations.connect.api_client import LabsAPIError
+from commcare_connect.workflow.templates import list_templates
 
 from .data_access import AuditOfAuditsDataAccess
 
 logger = logging.getLogger(__name__)
 
 DIMAGI_EMAIL_DOMAIN = "@dimagi.com"
+
+# Session key used to cache discovered template types across config page visits.
+# After each report run the view stores the union of all seen template types so
+# the config page can show them as filter options on the next visit.
+SESSION_KEY_TEMPLATE_TYPES = "aoa_known_template_types"
+
+
+def _registry_template_labels() -> dict[str, str]:
+    """Return all registered workflow template types as {key: display_name}.
+
+    Reads from the live workflow template registry so any newly added
+    template automatically appears in the Audit of Audits config page.
+    """
+    try:
+        return {t["key"]: t["name"] for t in list_templates()}
+    except Exception:
+        logger.warning("[AuditOfAudits] Could not load workflow template registry", exc_info=True)
+        return {}
 
 
 def _is_dimagi_user(user) -> bool:
@@ -106,6 +125,19 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
         # ── Config mode: no org selection yet — just show the form ───────────
         selected_org_id_strs: list[str] = self.request.GET.getlist("org_ids")
         if not selected_org_id_strs:
+            # Build template type options from the live workflow template registry.
+            # Merge with session cache to include any types discovered at runtime
+            # that may not yet have a registered template module.
+            registry_labels = _registry_template_labels()
+            cached_types: list[str] = self.request.session.get(SESSION_KEY_TEMPLATE_TYPES, [])
+            all_keys: list[str] = sorted(set(registry_labels.keys()) | set(cached_types))
+            context["available_template_types"] = [
+                {
+                    "value": k,
+                    "label": registry_labels.get(k, k.replace("_", " ").title()),
+                }
+                for k in all_keys
+            ]
             return context
 
         # ── Report mode ───────────────────────────────────────────────────────
@@ -116,13 +148,16 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
             context["error"] = "No OAuth token found. Please log in to Connect Labs first."
             context["rows"] = []
             context["total_runs"] = 0
-            context["bulk_image_run_count"] = 0
             context["completed_run_count"] = 0
             context["filter_type"] = ""
             context["selected_org_ids"] = []
             return context
 
         selected_org_ids: list[int] = [int(x) for x in selected_org_id_strs if x.isdigit()]
+
+        # Template type filter — empty list means "all types" (no filter applied).
+        selected_template_types: list[str] = self.request.GET.getlist("template_types")
+        template_types_filter: list[str] | None = selected_template_types if selected_template_types else None
 
         # All user opportunities — runs are always scoped by opp_id
         opportunity_ids: list[int] = [
@@ -158,6 +193,7 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
                     access_token=access_token,
                     organization_ids=selected_org_ids,
                     opportunity_ids=opportunity_ids,
+                    template_types=template_types_filter,
                 ) as da:
                     rows = da.build_report_data()
 
@@ -165,6 +201,14 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
                 for row in rows:
                     opp_id = row.get("opportunity_id")
                     row["opportunity_name"] = opp_name_map.get(opp_id, "") if opp_id else ""
+
+                # Cache all discovered template types in the session so the config
+                # page can show them as filter options on the next visit.
+                discovered_types = sorted({r["template_type"] for r in rows if r["template_type"]})
+                previously_known = self.request.session.get(SESSION_KEY_TEMPLATE_TYPES, [])
+                all_known = sorted(set(discovered_types) | set(previously_known))
+                if all_known:
+                    self.request.session[SESSION_KEY_TEMPLATE_TYPES] = all_known
 
             except LabsAPIError as e:
                 logger.error("[AuditOfAudits] API error: %s", e, exc_info=True)
@@ -177,17 +221,24 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
         # Actual filtering is done client-side in JS — no server round-trip needed.
         filter_type = self.request.GET.get("template_type", "").strip()
 
-        # Collect unique template types for the filter dropdown
-        all_template_types = sorted({r["template_type"] for r in rows if r["template_type"]})
+        # Build template type label map from registry for the filter dropdown
+        registry_labels = _registry_template_labels()
+
+        # Collect unique template types from rows for the filter dropdown,
+        # using human-readable labels from the registry where available.
+        all_template_types = [
+            {"value": t, "label": registry_labels.get(t, t.replace("_", " ").title())}
+            for t in sorted({r["template_type"] for r in rows if r["template_type"]})
+        ]
 
         context.update(
             {
                 "rows": rows,
                 "total_runs": len(rows),
-                "bulk_image_run_count": sum(1 for r in rows if r["template_type"] == "bulk_image_audit"),
                 "completed_run_count": sum(1 for r in rows if r["status"] == "completed"),
                 "filter_type": filter_type,
                 "all_template_types": all_template_types,
+                "registry_labels": registry_labels,
                 "selected_org_ids": selected_org_ids,
                 "selected_orgs_display": selected_orgs_display,
                 "error": error,

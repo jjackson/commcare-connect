@@ -177,10 +177,17 @@ def filter_visits_for_audit(
     if criteria.selected_flw_user_ids and "username" in df.columns:
         df = df[df["username"].isin(criteria.selected_flw_user_ids)]
 
-    # Apply sample percentage
+    # Apply sample percentage — sample per FLW for equal representation, then shuffle
     if criteria.sample_percentage < 100 and len(df) > 0:
-        sample_size = max(1, int(len(df) * criteria.sample_percentage / 100))
-        df = df.sample(n=min(sample_size, len(df)), random_state=42)
+        if "username" in df.columns:
+            groups = []
+            for _, grp in df.groupby("username", dropna=False):
+                n = max(1, int(len(grp) * criteria.sample_percentage / 100))
+                groups.append(grp.sample(n=min(n, len(grp)), random_state=42))
+            df = pd.concat(groups).sample(frac=1, random_state=42)
+        else:
+            sample_size = max(1, int(len(df) * criteria.sample_percentage / 100))
+            df = df.sample(n=min(sample_size, len(df)), random_state=42)
 
     if return_visits:
         return df.to_dict("records")
@@ -746,6 +753,7 @@ class AuditDataAccess:
         cc_domain = None
         try:
             from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
+
             meta = fetch_opportunity_metadata(self.access_token, opp_id)
             cc_domain = meta.get("cc_domain")
         except Exception as e:
@@ -765,11 +773,16 @@ class AuditDataAccess:
                     img["hq_url"] = f"{hq_base}/a/{cc_domain}/api/form/attachment/{xform_id}/{img['name']}"
 
         # Fallback: for visits with no Connect blobs, extract CommCareHQ URL images
-        # from form_json using hq_url_path rules in related_fields.
+        # from form_json using related_fields rules.
+        # Strategy 1: use hq_url_path (pre-computed URL stored in form JSON)
+        # Strategy 2: extract filename from image_path, build HQ attachment URL
+        #   (used when hq_url_path is empty — e.g. dynamic image type discovery
+        #   can't resolve DataBindOnly XForm paths from the HQ app definition API)
         if related_fields:
             import hashlib
-            hq_url_rules = [r for r in related_fields if r.get("hq_url_path")]
-            if hq_url_rules:
+
+            image_rules = [r for r in related_fields if r.get("image_path")]
+            if image_rules:
                 for visit_id_str, images in result.items():
                     if images:
                         continue  # Already has Connect blob images
@@ -781,22 +794,38 @@ class AuditDataAccess:
                     # Use form.meta.timeEnd for actual submission time; fall back to visit_date (date only)
                     visit_date = form_data.get("meta", {}).get("timeEnd") or visit_data.get("visit_date") or ""
                     entity_name = visit_data.get("entity_name") or "No Entity"
-                    for rule in hq_url_rules:
+                    for rule in image_rules:
                         hq_url_path = rule.get("hq_url_path", "")
                         image_path = rule.get("image_path", "")
-                        hq_url = self._extract_field_value(form_data, hq_url_path)
-                        if hq_url and isinstance(hq_url, str) and hq_url.startswith("http"):
+
+                        # Strategy 1: pre-computed URL field in form JSON
+                        hq_url = None
+                        if hq_url_path:
+                            extracted = self._extract_field_value(form_data, hq_url_path)
+                            if extracted and isinstance(extracted, str) and extracted.startswith("http"):
+                                hq_url = extracted
+
+                        # Strategy 2: build URL from filename stored at image_path
+                        if not hq_url and cc_domain and xform_id and image_path:
+                            filename = self._extract_field_value(form_data, image_path)
+                            if filename and isinstance(filename, str) and not filename.startswith("http"):
+                                hq_url = f"{hq_base}/a/{cc_domain}/api/form/attachment/{xform_id}/{filename}"
+
+                        if hq_url:
                             blob_id = "hq_" + hashlib.sha256(hq_url.encode()).hexdigest()[:16]
-                            images.append({
-                                "blob_id": blob_id,
-                                "hq_url": hq_url,
-                                "xform_id": xform_id,
-                                "name": hq_url_path.split("/")[-1],
-                                "question_id": image_path,
-                                "username": username,
-                                "visit_date": visit_date,
-                                "entity_name": entity_name,
-                            })
+                            name = hq_url_path.split("/")[-1] if hq_url_path else image_path.split("/")[-1]
+                            images.append(
+                                {
+                                    "blob_id": blob_id,
+                                    "hq_url": hq_url,
+                                    "xform_id": xform_id,
+                                    "name": name,
+                                    "question_id": image_path,
+                                    "username": username,
+                                    "visit_date": visit_date,
+                                    "entity_name": entity_name,
+                                }
+                            )
 
         # Add related field values if rules provided
         if related_fields:
@@ -834,25 +863,23 @@ class AuditDataAccess:
         if not filter_rules:
             return visit_images
 
+        image_filter_paths = [r.get("image_path", "") for r in filter_rules if r.get("filter_by_image")]
+        field_filter_rules = [r for r in filter_rules if r.get("filter_by_field")]
+
         filtered_result = {}
         for visit_id, images in visit_images.items():
             include_visit = True
 
-            for rule in filter_rules:
-                image_path = rule.get("image_path", "")
-                field_path = rule.get("field_path", "")
-                filter_by_image = rule.get("filter_by_image", False)
-                filter_by_field = rule.get("filter_by_field", False)
+            # OR logic: include visit if it has ANY of the required image types
+            if image_filter_paths:
+                question_ids = {img.get("question_id") for img in images}
+                if not any(p in question_ids for p in image_filter_paths):
+                    include_visit = False
 
-                # Check if this visit has the required image
-                if filter_by_image:
-                    has_matching_image = any(img.get("question_id") == image_path for img in images)
-                    if not has_matching_image:
-                        include_visit = False
-                        break
-
-                # Check if this visit has the required field value
-                if filter_by_field:
+            # AND logic: visit must satisfy every field filter rule
+            if include_visit:
+                for rule in field_filter_rules:
+                    field_path = rule.get("field_path", "")
                     has_field_value = False
                     for img in images:
                         for rf in img.get("related_fields", []):

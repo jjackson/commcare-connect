@@ -27,6 +27,7 @@ it has audit sessions yet.
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from commcare_connect.audit.models import AuditSessionRecord
@@ -37,6 +38,11 @@ logger = logging.getLogger(__name__)
 
 WORKFLOW_EXPERIMENT = "workflow"
 AUDIT_EXPERIMENT = "audit"
+
+# Maximum number of concurrent HTTP requests to the Connect API.
+# 276 sequential calls × 300 ms ≈ 83 s.  10 workers → ~9 s.
+# Keep below 20 to avoid triggering server-side rate limits.
+MAX_CONCURRENT_REQUESTS = 10
 
 _DATE_PARSE_FORMATS = ("%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%d/%m/%Y")
 
@@ -62,28 +68,125 @@ def _normalize_date(value: str | None) -> str | None:
     return value  # Return as-is if unrecognised
 
 
+def _log_api_error(record_type: str, scope_type: str, scope_id: int, error: LabsAPIError) -> None:
+    """Log an API fetch error at the appropriate level.
+
+    404 responses are expected (opportunity not enrolled in any workflow yet)
+    and are logged at DEBUG to avoid alarming noise in production logs.
+    All other errors are logged at WARNING.
+    """
+    # LabsAPIError may wrap an httpx.HTTPStatusError — try common attribute locations.
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        cause = getattr(error, "__cause__", None)
+        status_code = getattr(getattr(cause, "response", None), "status_code", None)
+
+    if status_code == 404:
+        logger.debug(
+            "[AuditOfAudits] No labs records for %s %d (404 — not enrolled in workflow)",
+            scope_type, scope_id,
+        )
+    else:
+        logger.warning(
+            "[AuditOfAudits] Failed to fetch %s for %s %d: %s",
+            record_type, scope_type, scope_id, error,
+        )
+
+
 class AuditOfAuditsDataAccess:
     """
     Cross-opportunity admin data access for the Audit of Audits report.
 
     See module docstring for the two-phase query strategy.
+
+    Optional template_types filter
+    --------------------------------
+    When template_types is provided (e.g. ["bulk_image_audit"]), the fetch is
+    optimised in two passes:
+
+    Pass A — Definitions (all opps): fetch definitions for every opportunity,
+             keep only those whose templateType matches the filter.  Record which
+             opportunity IDs have at least one matching definition.
+
+    Pass B — Runs (filtered opps only): fetch workflow runs only for the
+             opportunities identified in Pass A.  Opportunities with no matching
+             definitions are skipped entirely, saving 1 HTTP call each.
+
+    Without a filter (template_types=None) the behaviour is unchanged and runs
+    are fetched for every opportunity.
     """
 
-    def __init__(self, access_token: str, organization_ids: list[int], opportunity_ids: list[int]):
+    def __init__(
+        self,
+        access_token: str,
+        organization_ids: list[int],
+        opportunity_ids: list[int],
+        template_types: list[str] | None = None,
+    ):
         self.access_token = access_token
         self.organization_ids = organization_ids
         self.opportunity_ids = opportunity_ids
-        # Unscoped client used only for org-scoped session queries
-        self.labs_api = LabsRecordAPIClient(access_token=access_token)
+        # None → no filter (fetch all template types)
+        self.template_types: frozenset[str] | None = (
+            frozenset(template_types) if template_types else None
+        )
 
     def close(self):
-        self.labs_api.close()
+        pass  # All HTTP clients are short-lived and closed after each request
 
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         self.close()
+
+    # ── Thread-safe per-item fetch helpers ───────────────────────────────────
+    # Each helper creates its own short-lived HTTP client so they are safe to
+    # call concurrently from a ThreadPoolExecutor.
+
+    def _fetch_sessions_for_org(self, org_id: int) -> list[AuditSessionRecord]:
+        """Fetch all AuditSession records scoped to one organization."""
+        try:
+            with LabsRecordAPIClient(access_token=self.access_token) as client:
+                return client.get_records(
+                    experiment=AUDIT_EXPERIMENT,
+                    type="AuditSession",
+                    organization_id=org_id,
+                    model_class=AuditSessionRecord,
+                )
+        except LabsAPIError as e:
+            _log_api_error("sessions", "org", org_id, e)
+            return []
+
+    def _fetch_definitions_for_opp(self, opp_id: int) -> list[WorkflowDefinitionRecord]:
+        """Fetch all workflow definition records scoped to one opportunity."""
+        try:
+            with LabsRecordAPIClient(
+                access_token=self.access_token, opportunity_id=opp_id
+            ) as client:
+                return client.get_records(
+                    experiment=WORKFLOW_EXPERIMENT,
+                    type="workflow_definition",
+                    model_class=WorkflowDefinitionRecord,
+                )
+        except LabsAPIError as e:
+            _log_api_error("definitions", "opp", opp_id, e)
+            return []
+
+    def _fetch_runs_for_opp(self, opp_id: int) -> list[WorkflowRunRecord]:
+        """Fetch all workflow run records scoped to one opportunity."""
+        try:
+            with LabsRecordAPIClient(
+                access_token=self.access_token, opportunity_id=opp_id
+            ) as client:
+                return client.get_records(
+                    experiment=WORKFLOW_EXPERIMENT,
+                    type="workflow_run",
+                    model_class=WorkflowRunRecord,
+                )
+        except LabsAPIError as e:
+            _log_api_error("runs", "opp", opp_id, e)
+            return []
 
     def build_report_data(self) -> list[dict]:
         """
@@ -106,72 +209,60 @@ class AuditOfAuditsDataAccess:
             logger.warning("[AuditOfAudits] No org or opportunity IDs provided — returning empty report")
             return []
 
-        # ── Phase 1: Fetch all audit sessions across all organizations ──────────
+        # ── Phase 1: Fetch sessions concurrently across all organizations ────────
+        valid_org_ids = [o for o in self.organization_ids if isinstance(o, int)]
         all_sessions: list[AuditSessionRecord] = []
-        for org_id in self.organization_ids:
-            if not isinstance(org_id, int):
-                logger.warning("[AuditOfAudits] Skipping non-integer org_id %r", org_id)
-                continue
-            try:
-                org_sessions: list[AuditSessionRecord] = self.labs_api.get_records(
-                    experiment=AUDIT_EXPERIMENT,
-                    type="AuditSession",
-                    organization_id=org_id,
-                    model_class=AuditSessionRecord,
-                )
-                all_sessions.extend(org_sessions)
-            except LabsAPIError:
-                logger.exception("[AuditOfAudits] Failed to fetch sessions for org %d", org_id)
 
-        logger.info("[AuditOfAudits] Phase 1: fetched %d sessions across %d orgs",
-                    len(all_sessions), len(self.organization_ids))
+        with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_REQUESTS, len(valid_org_ids) or 1)) as ex:
+            future_to_org = {ex.submit(self._fetch_sessions_for_org, oid): oid for oid in valid_org_ids}
+            for future in as_completed(future_to_org):
+                all_sessions.extend(future.result())
 
-        # ── Phase 2: Fetch runs & definitions for all user opportunities ─────────
-        # Use the full opportunity list (not just session-derived ones) so that
-        # runs with zero sessions are still shown in the report.
+        logger.info(
+            "[AuditOfAudits] Phase 1: fetched %d sessions across %d orgs (concurrent)",
+            len(all_sessions), len(valid_org_ids),
+        )
+
+        # ── Phase 2A: Fetch definitions concurrently for ALL opportunities ───────
+        # 276 sequential calls × ~300 ms ≈ 83 s.  With 10 workers → ~9 s.
+        # Results are aggregated in the main thread (no shared-state races).
         opportunity_ids: set[int] = set(self.opportunity_ids)
-        logger.info("[AuditOfAudits] Phase 2: querying %d opportunities",
-                    len(opportunity_ids))
+        logger.info(
+            "[AuditOfAudits] Phase 2A: fetching definitions for %d opportunities "
+            "concurrently (template filter: %s)",
+            len(opportunity_ids),
+            sorted(self.template_types) if self.template_types else "none",
+        )
 
         def_map: dict[int, WorkflowDefinitionRecord] = {}
+        opps_with_matching_defs: set[int] = set()
+
+        with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_REQUESTS, len(opportunity_ids) or 1)) as ex:
+            future_to_opp = {ex.submit(self._fetch_definitions_for_opp, oid): oid for oid in opportunity_ids}
+            for future in as_completed(future_to_opp):
+                opp_id = future_to_opp[future]
+                for d in future.result():
+                    def_map[d.id] = d
+                    if self.template_types is None or d.template_type in self.template_types:
+                        opps_with_matching_defs.add(opp_id)
+
+        # ── Phase 2B: Fetch runs — skip opps with no matching definitions ─────
+        run_opps: set[int] = opps_with_matching_defs if self.template_types else opportunity_ids
+        logger.info(
+            "[AuditOfAudits] Phase 2B: fetching runs for %d/%d opportunities "
+            "(%d skipped by template filter)",
+            len(run_opps), len(opportunity_ids), len(opportunity_ids) - len(run_opps),
+        )
+
         runs: list[WorkflowRunRecord] = []
 
-        for opp_id in opportunity_ids:
-            # get_records() has no opportunity_id parameter — scope must be set
-            # at client init time, so create a short-lived scoped client.
-            try:
-                with LabsRecordAPIClient(
-                    access_token=self.access_token, opportunity_id=opp_id
-                ) as opp_client:
-                    # Definitions for this opportunity
-                    try:
-                        opp_defs: list[WorkflowDefinitionRecord] = opp_client.get_records(
-                            experiment=WORKFLOW_EXPERIMENT,
-                            type="workflow_definition",
-                            model_class=WorkflowDefinitionRecord,
-                        )
-                        for d in opp_defs:
-                            def_map[d.id] = d
-                    except LabsAPIError:
-                        logger.exception(
-                            "[AuditOfAudits] Failed to fetch definitions for opp %d", opp_id
-                        )
-
-                    # Runs for this opportunity
-                    try:
-                        opp_runs: list[WorkflowRunRecord] = opp_client.get_records(
-                            experiment=WORKFLOW_EXPERIMENT,
-                            type="workflow_run",
-                            model_class=WorkflowRunRecord,
-                        )
-                        logger.info("[AuditOfAudits] opp_id=%d → %d runs", opp_id, len(opp_runs))
-                        runs.extend(opp_runs)
-                    except LabsAPIError:
-                        logger.exception(
-                            "[AuditOfAudits] Failed to fetch runs for opp %d", opp_id
-                        )
-            except Exception:
-                logger.exception("[AuditOfAudits] Unexpected error querying opp %d", opp_id)
+        with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT_REQUESTS, len(run_opps) or 1)) as ex:
+            future_to_opp = {ex.submit(self._fetch_runs_for_opp, oid): oid for oid in run_opps}
+            for future in as_completed(future_to_opp):
+                opp_id = future_to_opp[future]
+                opp_runs = future.result()
+                logger.info("[AuditOfAudits] opp_id=%d → %d runs", opp_id, len(opp_runs))
+                runs.extend(opp_runs)
 
         logger.info(
             "[AuditOfAudits] Totals — definitions: %d, runs: %d, sessions: %d",
@@ -196,6 +287,49 @@ class AuditOfAuditsDataAccess:
             linked_sessions = sessions_by_run.get(run.id, [])
             avg_pct_passed = _extract_avg_pct_passed(run, linked_sessions)
 
+            state = run.state or {}
+
+            # ── Passing % — percentage of completed sessions that passed ──────
+            completed_sessions = [s for s in linked_sessions if s.overall_result in ("pass", "fail")]
+            passing_sessions = [s for s in completed_sessions if s.overall_result == "pass"]
+            pct_passing = (
+                round(len(passing_sessions) / len(completed_sessions) * 100, 1)
+                if completed_sessions else None
+            )
+
+            # ── Tasks created — CommCare tasks created by this run ───────────
+            # Stored by the template as run.state["tasks_created"].
+            # This is distinct from flw_count (= number of audit sessions / FLWs).
+            raw_tasks_created = state.get("tasks_created")
+            tasks_created: int | None = None
+            if raw_tasks_created is not None:
+                try:
+                    tasks_created = int(raw_tasks_created)
+                except (TypeError, ValueError):
+                    pass
+
+            # ── Images reviewed — total images reviewed in this run ───────────
+            raw_images = state.get("images_reviewed")
+            images_reviewed: int | None = None
+            if raw_images is not None:
+                try:
+                    images_reviewed = int(raw_images)
+                except (TypeError, ValueError):
+                    pass
+
+            # ── % Sampled — percentage of submissions sampled for image review ─
+            pct_sampled = state.get("sample_percentage")
+
+            # ── Run By — username of the NM who created the run ──────────────
+            # Priority: top-level API field → state["run_by"] (written by
+            # the template on creation for newer runs) → data["username"].
+            run_by = (
+                run.username
+                or state.get("run_by", "")
+                or run.data.get("username", "")
+                or ""
+            )
+
             rows.append(
                 {
                     "run_id": run.id,
@@ -208,15 +342,14 @@ class AuditOfAuditsDataAccess:
                     "period_end": _normalize_date(run.period_end) or "",
                     "status": run.status or "unknown",
                     "selected_count": run.selected_count or 0,
-                    # username lives at the top-level API field; fall back to
-                    # data["username"] for older runs stored before that field
-                    # was reliably populated server-side.
-                    "username": run.username or run.data.get("username", "") or "",
+                    "username": run_by,
                     "session_count": len(linked_sessions),
-                    "completed_session_count": sum(
-                        1 for s in linked_sessions if s.overall_result in ("pass", "fail")
-                    ),
+                    "completed_session_count": len(completed_sessions),
                     "avg_pct_passed": avg_pct_passed,
+                    "pct_passing": pct_passing,
+                    "tasks_created": tasks_created,
+                    "images_reviewed": images_reviewed,
+                    "pct_sampled": pct_sampled,
                 }
             )
 
@@ -235,8 +368,10 @@ def _extract_avg_pct_passed(run: WorkflowRunRecord, sessions: list[AuditSessionR
     """
     state = run.state or {}
 
-    # Check common pre-computed keys in run state
-    for key in ("avg_pct_passed", "avg_pass_rate", "pass_rate"):
+    # Check common pre-computed keys in run state.
+    # "avg_passed" is written by the bulk_image_audit template on completion.
+    # The others are aliases used by other template types.
+    for key in ("avg_passed", "avg_pct_passed", "avg_pass_rate", "pass_rate"):
         val = state.get(key)
         if val is not None:
             try:
@@ -247,7 +382,7 @@ def _extract_avg_pct_passed(run: WorkflowRunRecord, sessions: list[AuditSessionR
     # Check nested overall_stats dict
     overall_stats = state.get("overall_stats", {})
     if isinstance(overall_stats, dict):
-        for key in ("avg_pct_passed", "avg_pass_rate", "pass_rate"):
+        for key in ("avg_passed", "avg_pct_passed", "avg_pass_rate", "pass_rate"):
             val = overall_stats.get(key)
             if val is not None:
                 try:

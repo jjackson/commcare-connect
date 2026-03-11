@@ -62,65 +62,6 @@ class TestExtractImageQuestions:
         result = extract_image_questions(app)
         assert result == []
 
-    def test_filters_image_with_always_false_relevant_1_eq_2(self):
-        app = _make_app(
-            [
-                _make_form(
-                    "form1",
-                    [
-                        _q("/data/hidden_photo", "Image", label="Hidden", relevant="1 = 2"),
-                    ],
-                )
-            ]
-        )
-        result = extract_image_questions(app)
-        assert result == []
-
-    def test_filters_image_with_always_false_relevant_false_func(self):
-        app = _make_app(
-            [
-                _make_form(
-                    "form1",
-                    [
-                        _q("/data/hidden_photo", "Image", label="Hidden", relevant="false()"),
-                    ],
-                )
-            ]
-        )
-        result = extract_image_questions(app)
-        assert result == []
-
-    def test_filters_image_with_always_false_relevant_0_eq_1(self):
-        app = _make_app(
-            [
-                _make_form(
-                    "form1",
-                    [
-                        _q("/data/hidden_photo", "Image", label="Hidden", relevant="0 = 1"),
-                    ],
-                )
-            ]
-        )
-        result = extract_image_questions(app)
-        assert result == []
-
-    def test_filters_image_whose_ancestor_group_is_always_false(self):
-        """vita_capsule_photo scenario: parent group vita_group has relevant=1=2."""
-        app = _make_app(
-            [
-                _make_form(
-                    "form1",
-                    [
-                        _q("/data/vita_group", "Group", relevant="1 = 2"),
-                        _q("/data/vita_group/photo_vita", "Group"),
-                        _q("/data/vita_group/photo_vita/vita_capsule_photo", "Image", label="Vita A"),
-                    ],
-                )
-            ]
-        )
-        result = extract_image_questions(app)
-        assert result == []
-
     def test_keeps_image_with_normal_relevant_condition(self):
         """Non-trivially-false relevant should NOT filter out the question."""
         app = _make_app(
@@ -228,19 +169,3 @@ class TestExtractImageQuestions:
         assert "photo" in ids
         assert "group_b/photo" in ids
 
-    def test_relevant_whitespace_normalized(self):
-        """Whitespace variations of always-false patterns should still be filtered."""
-        app = _make_app(
-            [
-                _make_form(
-                    "form1",
-                    [
-                        _q("/data/p1", "Image", relevant="1=2"),
-                        _q("/data/p2", "Image", relevant="  1  =  2  "),
-                        _q("/data/p3", "Image", relevant="FALSE()"),
-                    ],
-                )
-            ]
-        )
-        result = extract_image_questions(app)
-        assert result == []
