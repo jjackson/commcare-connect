@@ -3,7 +3,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0114_paymentinvoice_invoice_ticket_link"),
+        ("opportunity", "0115_uservisit_work_area"),
     ]
 
     operations = [
