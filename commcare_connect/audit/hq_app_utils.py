@@ -126,7 +126,7 @@ def _detect_hq_url_path(image_xform_path: str, questions: list[dict]) -> str:
     for q in questions:
         if q.get("type") != "DataBindOnly":
             continue
-        calculate = q.get("calculate", "")
+        calculate = q.get("calculate") or ""
         if calculate.rstrip(")").endswith(image_xform_path):
             return _xform_path_to_image_path(q.get("value", ""))
     return ""
