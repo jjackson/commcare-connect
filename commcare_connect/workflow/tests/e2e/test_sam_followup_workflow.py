@@ -197,7 +197,22 @@ class TestSAMFollowupWorkflow:
                 child_name_tab = wf_root.locator(".border-b.border-gray-200 button").nth(2)  # Third tab = child name
                 expect(child_name_tab).to_be_visible()
 
-                # Take a screenshot of the timeline
+                # Wait for MUAC photos to load (images fetched via proxy)
+                photo_images = wf_root.locator("img[alt='MUAC photo']")
+                photo_count = photo_images.count()
+                if photo_count > 0:
+                    # Wait for at least one image to have a natural width (loaded)
+                    page.wait_for_function(
+                        """() => {
+                            const imgs = document.querySelectorAll("img[alt='MUAC photo']");
+                            return imgs.length > 0 && Array.from(imgs).some(img => img.naturalWidth > 0);
+                        }""",
+                        timeout=30_000,
+                    )
+                    # Brief pause for remaining images to finish loading
+                    page.wait_for_timeout(2_000)
+
+                # Take a screenshot of the timeline (with photos loaded)
                 page.screenshot(path="e2e_sam_timeline.png")
 
                 # --- Step 8: Navigate back via tabs ---

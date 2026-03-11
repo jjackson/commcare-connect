@@ -1654,6 +1654,7 @@ class PipelineDataAccess(BaseDataAccess):
                         return str(d) if d else None
 
                     row_dict = {
+                        "id": getattr(row, "id", None),
                         "username": getattr(row, "username", None),
                         "visit_date": format_date(getattr(row, "visit_date", None)),
                         # Built-in FLW aggregation fields

@@ -455,11 +455,24 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     var imageLoading = _imageLoading[0];
     var setImageLoading = _imageLoading[1];
 
+    var _expandedSections = React.useState({
+        muac: true,
+        referral: true,
+        barriers: true,
+        visit_info: true,
+    });
+    var expandedSections = _expandedSections[0];
+    var setExpandedSections = _expandedSections[1];
+
     // --- Dashboard chart refs ---
     var muacDistChartRef = React.useRef(null);
     var muacDistChartInstance = React.useRef(null);
     var visitsChartRef = React.useRef(null);
     var visitsChartInstance = React.useRef(null);
+
+    // --- Timeline chart refs ---
+    var timelineChartRef = React.useRef(null);
+    var timelineChartInstanceRef = React.useRef(null);
 
     // ========================================================================
     // COMPUTED DATA
@@ -710,25 +723,192 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     }
 
     // ========================================================================
+    // TIMELINE HOOKS (at parent level to avoid remount loops)
+    // ========================================================================
+
+    // Derive selected child data (safe when no child selected)
+    var timelineChild = selectedChildId ? children.find(function(c) { return c.child_case_id === selectedChildId; }) : null;
+    var timelineSortedVisits = timelineChild ? timelineChild.visits.slice().reverse() : [];
+
+    // --- MUAC Trend Chart (deferred to allow canvas to mount) ---
+    React.useEffect(function() {
+        if (!timelineChild || currentView !== 'timeline') return;
+        if (!window.Chart) return;
+
+        // Defer to next frame so the canvas element is in the DOM
+        var frameId = requestAnimationFrame(function() {
+            if (!timelineChartRef.current) return;
+            renderTimelineChart();
+        });
+        return function() {
+            cancelAnimationFrame(frameId);
+            if (timelineChartInstanceRef.current) {
+                timelineChartInstanceRef.current.destroy();
+                timelineChartInstanceRef.current = null;
+            }
+        };
+
+        function renderTimelineChart() {
+        if (!timelineChartRef.current) return;
+
+        var chartVisits = timelineChild.visits.filter(function(v) { return v.muac_cm != null && v.muac_cm !== ''; });
+        if (chartVisits.length === 0) return;
+
+        if (timelineChartInstanceRef.current) {
+            timelineChartInstanceRef.current.destroy();
+        }
+
+        var chartLabels = chartVisits.map(function(v) { return v.fu_visit_date || v.time_end; });
+        var chartMuacs = chartVisits.map(function(v) { return parseFloat(v.muac_cm); });
+
+        var selVisit = timelineSortedVisits[selectedVisitIdx];
+        var selectedChartIdx = selVisit ? chartVisits.findIndex(function(v) { return v === selVisit; }) : -1;
+
+        var pointBackgroundColors = chartMuacs.map(function(m, i) {
+            if (i === selectedChartIdx) return '#3b82f6';
+            if (m < 11.5) return '#ef4444';
+            if (m <= 12.5) return '#f59e0b';
+            return '#10b981';
+        });
+        var pointRadii = chartMuacs.map(function(_, i) { return i === selectedChartIdx ? 8 : 4; });
+
+        var ctx = timelineChartRef.current.getContext('2d');
+        timelineChartInstanceRef.current = new window.Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartLabels,
+                datasets: [
+                    {
+                        label: 'MUAC (cm)',
+                        data: chartMuacs,
+                        borderColor: '#6b7280',
+                        backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                        fill: true,
+                        tension: 0.3,
+                        pointBackgroundColor: pointBackgroundColors,
+                        pointBorderColor: pointBackgroundColors,
+                        pointRadius: pointRadii,
+                        pointHoverRadius: 8,
+                    },
+                    {
+                        label: 'SAM (11.5 cm)',
+                        data: chartLabels.map(function() { return 11.5; }),
+                        borderColor: '#ef4444',
+                        borderDash: [6, 4],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false,
+                    },
+                    {
+                        label: 'MAM (12.5 cm)',
+                        data: chartLabels.map(function() { return 12.5; }),
+                        borderColor: '#f59e0b',
+                        borderDash: [6, 4],
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        fill: false,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                onClick: function(e, elements) {
+                    if (elements.length > 0) {
+                        var chartIdx = elements[0].index;
+                        var clickedVisit = chartVisits[chartIdx];
+                        var sortedIdx = timelineSortedVisits.findIndex(function(v) { return v === clickedVisit; });
+                        if (sortedIdx >= 0) {
+                            setSelectedVisitIdx(sortedIdx);
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { boxWidth: 12, font: { size: 11 } },
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(tooltipCtx) {
+                                if (tooltipCtx.datasetIndex === 0) {
+                                    return tooltipCtx.parsed.y.toFixed(1) + ' cm';
+                                }
+                                return tooltipCtx.dataset.label + ': ' + tooltipCtx.parsed.y + ' cm';
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: { unit: 'day', tooltipFormat: 'MMM d, yyyy' },
+                        title: { display: true, text: 'Visit Date', font: { size: 11 } },
+                    },
+                    y: {
+                        title: { display: true, text: 'MUAC (cm)', font: { size: 11 } },
+                        beginAtZero: false,
+                    },
+                },
+            },
+        });
+
+        }
+    }, [selectedChildId, currentView, selectedVisitIdx]);
+
+    // --- Photo filmstrip: JIT loading ---
+    React.useEffect(function() {
+        if (!selectedChildId || currentView !== 'timeline') return;
+        if (!timelineChild) return;
+        var visitIds = timelineChild.visits.map(function(v) { return v.id; }).filter(Boolean);
+        if (visitIds.length === 0) return;
+        setImageLoading(true);
+        var opportunityId = instance.opportunity_id;
+        var url = '/labs/workflow/api/' + opportunityId + '/visit-images/?visit_ids=' + visitIds.join(',');
+        fetch(url, { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                setImageData(data.visit_images || {});
+                setImageLoading(false);
+            })
+            .catch(function() { setImageLoading(false); });
+    }, [selectedChildId, currentView]);
+
+    // --- Build photo filmstrip data ---
+    var filmstripPhotos = React.useMemo(function() {
+        if (!timelineChild) return [];
+        var photos = [];
+        timelineChild.visits.forEach(function(visit, visitIdx) {
+            var visitId = visit.id;
+            if (!visitId || !imageData[visitId]) return;
+            var images = imageData[visitId];
+            images.forEach(function(img) {
+                if (!img.blob_id) return;
+                var opportunityId = instance.opportunity_id;
+                photos.push({
+                    visitIdx: visitIdx,
+                    visit: visit,
+                    url: '/labs/workflow/api/image/' + opportunityId + '/' + img.blob_id + '/',
+                    date: visit.fu_visit_date || visit.time_end,
+                    muacColor: visit.muac_color,
+                    muacCm: visit.muac_cm,
+                });
+            });
+        });
+        return photos;
+    }, [selectedChildId, imageData]);
+
+    // ========================================================================
     // CHILD TIMELINE VIEW
     // ========================================================================
 
     function ChildTimeline() {
-        var child = children.find(function(c) { return c.child_case_id === selectedChildId; });
-        if (!child) return <div className="p-8 text-center text-gray-500">Child not found</div>;
+        if (!timelineChild) return <div className="p-8 text-center text-gray-500">Child not found</div>;
 
-        var sortedVisits = child.visits.slice().reverse();
+        var child = timelineChild;
+        var sortedVisits = timelineSortedVisits;
         var selectedVisit = sortedVisits[selectedVisitIdx] || {};
-
-        // --- Collapsible detail sections ---
-        var _expandedSections = React.useState({
-            muac: true,
-            referral: true,
-            barriers: true,
-            visit_info: true,
-        });
-        var expandedSections = _expandedSections[0];
-        var setExpandedSections = _expandedSections[1];
 
         var toggleSection = function(key) {
             var updated = {};
@@ -780,167 +960,11 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             },
         ];
 
-        // Filter out sections that should not show
         var visibleSections = detailSections.filter(function(s) {
             return s.show !== false;
         });
 
-        // --- MUAC Trend Chart ---
-        var chartRef = React.useRef(null);
-        var chartInstanceRef = React.useRef(null);
-
         var chartVisits = child.visits.filter(function(v) { return v.muac_cm != null && v.muac_cm !== ''; });
-        var chartLabels = chartVisits.map(function(v) { return v.fu_visit_date || v.time_end; });
-        var chartMuacs = chartVisits.map(function(v) { return parseFloat(v.muac_cm); });
-
-        React.useEffect(function() {
-            if (!chartRef.current || !window.Chart || chartVisits.length === 0) return;
-
-            if (chartInstanceRef.current) {
-                chartInstanceRef.current.destroy();
-            }
-
-            // Map selectedVisitIdx (index in sortedVisits) to index in chartVisits
-            var selVisit = sortedVisits[selectedVisitIdx];
-            var selectedChartIdx = selVisit ? chartVisits.findIndex(function(v) { return v === selVisit; }) : -1;
-
-            // Point colors based on MUAC thresholds
-            var pointBackgroundColors = chartMuacs.map(function(m, i) {
-                if (i === selectedChartIdx) return '#3b82f6';
-                if (m < 11.5) return '#ef4444';
-                if (m <= 12.5) return '#f59e0b';
-                return '#10b981';
-            });
-            var pointRadii = chartMuacs.map(function(_, i) { return i === selectedChartIdx ? 8 : 4; });
-
-            var ctx = chartRef.current.getContext('2d');
-            chartInstanceRef.current = new window.Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: chartLabels,
-                    datasets: [
-                        {
-                            label: 'MUAC (cm)',
-                            data: chartMuacs,
-                            borderColor: '#6b7280',
-                            backgroundColor: 'rgba(107, 114, 128, 0.1)',
-                            fill: true,
-                            tension: 0.3,
-                            pointBackgroundColor: pointBackgroundColors,
-                            pointBorderColor: pointBackgroundColors,
-                            pointRadius: pointRadii,
-                            pointHoverRadius: 8,
-                        },
-                        {
-                            label: 'SAM (11.5 cm)',
-                            data: chartLabels.map(function() { return 11.5; }),
-                            borderColor: '#ef4444',
-                            borderDash: [6, 4],
-                            borderWidth: 1,
-                            pointRadius: 0,
-                            fill: false,
-                        },
-                        {
-                            label: 'MAM (12.5 cm)',
-                            data: chartLabels.map(function() { return 12.5; }),
-                            borderColor: '#f59e0b',
-                            borderDash: [6, 4],
-                            borderWidth: 1,
-                            pointRadius: 0,
-                            fill: false,
-                        },
-                    ],
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: function(e, elements) {
-                        if (elements.length > 0) {
-                            var chartIdx = elements[0].index;
-                            var clickedVisit = chartVisits[chartIdx];
-                            var sortedIdx = sortedVisits.findIndex(function(v) { return v === clickedVisit; });
-                            if (sortedIdx >= 0) {
-                                setSelectedVisitIdx(sortedIdx);
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            position: 'bottom',
-                            labels: { boxWidth: 12, font: { size: 11 } },
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(tooltipCtx) {
-                                    if (tooltipCtx.datasetIndex === 0) {
-                                        return tooltipCtx.parsed.y.toFixed(1) + ' cm';
-                                    }
-                                    return tooltipCtx.dataset.label + ': ' + tooltipCtx.parsed.y + ' cm';
-                                },
-                            },
-                        },
-                    },
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: { unit: 'day', tooltipFormat: 'MMM d, yyyy' },
-                            title: { display: true, text: 'Visit Date', font: { size: 11 } },
-                        },
-                        y: {
-                            title: { display: true, text: 'MUAC (cm)', font: { size: 11 } },
-                            beginAtZero: false,
-                        },
-                    },
-                },
-            });
-
-            return function() {
-                if (chartInstanceRef.current) {
-                    chartInstanceRef.current.destroy();
-                    chartInstanceRef.current = null;
-                }
-            };
-        }, [child.visits, selectedVisitIdx]);
-
-        // --- Photo filmstrip: JIT loading ---
-        React.useEffect(function() {
-            if (!selectedChildId || currentView !== 'timeline') return;
-            var c = children.find(function(ch) { return ch.child_case_id === selectedChildId; });
-            if (!c) return;
-            var visitIds = c.visits.map(function(v) { return v.id; }).filter(Boolean);
-            if (visitIds.length === 0) return;
-            setImageLoading(true);
-            var opportunityId = instance.opportunity_id;
-            var url = '/labs/workflow/api/' + opportunityId + '/visit-images/?visit_ids=' + visitIds.join(',');
-            fetch(url, { credentials: 'same-origin' })
-                .then(function(r) { return r.json(); })
-                .then(function(data) { setImageData(data.visit_images || {}); setImageLoading(false); })
-                .catch(function() { setImageLoading(false); });
-        }, [selectedChildId, currentView]);
-
-        // --- Build photo filmstrip data ---
-        var filmstripPhotos = React.useMemo(function() {
-            var photos = [];
-            child.visits.forEach(function(visit, visitIdx) {
-                var visitId = visit.id;
-                if (!visitId || !imageData[visitId]) return;
-                var images = imageData[visitId];
-                images.forEach(function(img) {
-                    if (!img.question_id || img.question_id.indexOf('muac_photo') === -1) return;
-                    var opportunityId = instance.opportunity_id;
-                    photos.push({
-                        visitIdx: visitIdx,
-                        visit: visit,
-                        url: '/labs/workflow/api/image/' + opportunityId + '/' + img.blob_id + '/',
-                        date: visit.fu_visit_date || visit.time_end,
-                        muacColor: visit.muac_color,
-                        muacCm: visit.muac_cm,
-                    });
-                });
-            });
-            return photos;
-        }, [child.visits, imageData]);
 
         var handleBackToList = function() {
             setCurrentView('childList');
@@ -1030,7 +1054,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                             <h3 className="text-sm font-medium text-gray-700 mb-2">MUAC Trend</h3>
                             {chartVisits.length > 0 ? (
                                 <div style={{height: '250px'}}>
-                                    <canvas ref={chartRef}></canvas>
+                                    <canvas ref={timelineChartRef}></canvas>
                                 </div>
                             ) : (
                                 <p className="text-gray-400 text-sm text-center py-8">No MUAC data available</p>
@@ -1039,14 +1063,28 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
                         {/* MUAC Photo Filmstrip */}
                         <div className="bg-white rounded-lg shadow-sm p-4">
-                            <h3 className="text-sm font-medium text-gray-700 mb-2">MUAC Photos</h3>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-sm font-medium text-gray-700">MUAC Photos</h3>
+                                {!imageLoading && filmstripPhotos.length > 0 && (
+                                    <span className="text-xs text-gray-400">{filmstripPhotos.length} photo{filmstripPhotos.length !== 1 ? 's' : ''}</span>
+                                )}
+                            </div>
                             {imageLoading ? (
-                                <div className="flex items-center justify-center py-8">
-                                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-4 border-gray-200 border-t-blue-600 mr-2"></div>
-                                    <span className="text-gray-400 text-sm">Loading photos...</span>
+                                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px'}}>
+                                    {[0,1,2,3].map(function(i) {
+                                        return (
+                                            <div key={i} style={{borderRadius: '8px', overflow: 'hidden', backgroundColor: '#f3f4f6'}}>
+                                                <div className="animate-pulse" style={{width: '100%', height: '100px', backgroundColor: '#e5e7eb'}}></div>
+                                                <div style={{padding: '6px', textAlign: 'center'}}>
+                                                    <div className="animate-pulse" style={{height: '10px', backgroundColor: '#e5e7eb', borderRadius: '4px', width: '75%', margin: '0 auto 4px'}}></div>
+                                                    <div className="animate-pulse" style={{height: '10px', backgroundColor: '#e5e7eb', borderRadius: '4px', width: '50%', margin: '0 auto'}}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             ) : filmstripPhotos.length > 0 ? (
-                                <div style={{overflowX: 'auto', display: 'flex', gap: '12px', paddingBottom: '4px'}}>
+                                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px', maxHeight: '320px', overflowY: 'auto'}}>
                                     {filmstripPhotos.map(function(photo, pIdx) {
                                         var isSelected = photo.visitIdx === (child.visits.length - 1 - selectedVisitIdx);
                                         return (
@@ -1056,28 +1094,33 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                                     var sortedIdx = child.visits.length - 1 - photo.visitIdx;
                                                     setSelectedVisitIdx(sortedIdx);
                                                 }}
-                                                className={"flex-shrink-0 cursor-pointer rounded-lg overflow-hidden " + (isSelected ? "ring-2 ring-blue-500" : "ring-1 ring-gray-200")}
-                                                style={{width: '150px'}}
+                                                style={{
+                                                    border: isSelected ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    overflow: 'hidden',
+                                                    cursor: 'pointer',
+                                                    backgroundColor: '#fff',
+                                                }}
                                             >
                                                 <img
                                                     src={photo.url}
                                                     alt="MUAC photo"
-                                                    className="h-32 w-full object-cover"
+                                                    style={{width: '100%', height: '100px', objectFit: 'cover', display: 'block'}}
                                                 />
-                                                <div className="p-1.5 text-center">
-                                                    <div className="text-xs text-gray-500">{photo.date || ''}</div>
-                                                    <div className="flex items-center justify-center gap-1 mt-0.5">
-                                                        <span style={{
-                                                            display: 'inline-block',
-                                                            width: '8px',
-                                                            height: '8px',
-                                                            borderRadius: '50%',
-                                                            backgroundColor: getMuacDotColor(photo.muacColor),
-                                                        }}></span>
-                                                        <span className="text-xs font-medium text-gray-700">
-                                                            {photo.muacCm != null ? parseFloat(photo.muacCm).toFixed(1) + ' cm' : ''}
-                                                        </span>
-                                                    </div>
+                                                <div style={{padding: '4px 6px', textAlign: 'center'}}>
+                                                    <div style={{fontSize: '11px', color: '#6b7280'}}>{photo.date || ''}</div>
+                                                    {photo.muacCm && (
+                                                        <div style={{fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'}}>
+                                                            <span style={{
+                                                                display: 'inline-block',
+                                                                width: '8px',
+                                                                height: '8px',
+                                                                borderRadius: '50%',
+                                                                backgroundColor: getMuacDotColor(photo.muacColor),
+                                                            }}></span>
+                                                            {parseFloat(photo.muacCm).toFixed(1) + ' cm'}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
@@ -1430,16 +1473,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     if (currentView === 'timeline' && selectedChildId) {
         return (
             <div>
-                <NavigationBar />
-                <ChildTimeline />
+                {NavigationBar()}
+                {ChildTimeline()}
             </div>
         );
     }
     if (currentView === 'childList') {
         return (
             <div>
-                <NavigationBar />
-                <ChildList />
+                {NavigationBar()}
+                {ChildList()}
             </div>
         );
     }
@@ -1503,7 +1546,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     return (
         <div>
-            <NavigationBar />
+            {NavigationBar()}
             <div className="space-y-6">
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

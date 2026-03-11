@@ -2167,6 +2167,7 @@ class PipelineDataStreamView(LoginRequiredMixin, View):
                                 return d
 
                             row_dict = {
+                                "id": getattr(row, "id", None),
                                 "entity_id": row.entity_id,
                                 "entity_name": row.entity_name,
                                 "username": row.username,
