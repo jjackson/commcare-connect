@@ -27,10 +27,9 @@ class TestOrganization:
         org.save()
         assert org.slug == original_slug
 
-    def test_get_member_emails_returns_all(self, organization):
+    def test_get_member_emails_returns_all(self, organization, org_user_admin, org_user_member):
         emails = organization.get_member_emails()
-        expected = list(organization.memberships.values_list("user__email", flat=True))
-        assert sorted(emails) == sorted(expected)
+        assert sorted(emails) == sorted([org_user_admin.email, org_user_member.email])
 
 
 @pytest.mark.django_db
