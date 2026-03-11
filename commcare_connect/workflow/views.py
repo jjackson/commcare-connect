@@ -25,6 +25,18 @@ from commcare_connect.workflow.templates import list_templates
 logger = logging.getLogger(__name__)
 
 
+def _is_dimagi_user(user) -> bool:
+    """Return True if the user is a @dimagi.com staff member or in the local dev allowlist."""
+    email = getattr(user, "email", "") or ""
+    username = getattr(user, "username", "") or ""
+    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])
+    return (
+        email.endswith("@dimagi.com")
+        or username.endswith("@dimagi.com")
+        or bool(username and username in allowlist)
+    )
+
+
 class WorkflowTemplateListAPIView(LoginRequiredMixin, View):
     """API endpoint to list available workflow templates."""
 
@@ -48,14 +60,7 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
         context["opportunity_name"] = labs_context.get("opportunity_name")
 
         # Restrict Create Workflow button to @dimagi.com users / allowlist
-        _email = getattr(self.request.user, "email", "") or ""
-        _username = getattr(self.request.user, "username", "") or ""
-        _allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])
-        context["is_dimagi"] = (
-            _email.endswith("@dimagi.com")
-            or _username.endswith("@dimagi.com")
-            or bool(_username and _username in _allowlist)
-        )
+        context["is_dimagi"] = _is_dimagi_user(self.request.user)
 
         # Get workflow definitions and their runs
         if context["has_context"]:
@@ -835,10 +840,16 @@ def get_run_api(request, run_id):
 
 @login_required
 @require_POST
+@login_required
+@require_POST
 def create_workflow_from_template_view(request):
     """Create a workflow from a template."""
     from django.contrib import messages
+    from django.core.exceptions import PermissionDenied
     from django.shortcuts import redirect
+
+    if not _is_dimagi_user(request.user):
+        raise PermissionDenied
 
     template_key = request.POST.get("template", "performance_review")
 
