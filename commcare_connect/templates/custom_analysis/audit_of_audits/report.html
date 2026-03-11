@@ -178,11 +178,11 @@
               data-created="{{ row.created_at|slice:':10' }}"
               data-run-id="{{ row.run_id }}"
               data-flws="{{ row.selected_count|default:'0' }}"
-              data-pct-sampled="{{ row.pct_sampled|default:'' }}"
-              data-avg-passed="{{ row.avg_pct_passed|default:'' }}"
-              data-passing="{{ row.pct_passing|default:'' }}"
-              data-images="{{ row.images_reviewed|default:'' }}"
-              data-tasks="{{ row.tasks_created|default:'' }}"
+              data-pct-sampled="{{ row.pct_sampled|default_if_none:'' }}"
+              data-avg-passed="{{ row.avg_pct_passed|default_if_none:'' }}"
+              data-passing="{{ row.pct_passing|default_if_none:'' }}"
+              data-images="{{ row.images_reviewed|default_if_none:'' }}"
+              data-tasks="{{ row.tasks_created|default_if_none:'' }}"
               data-template-name="{{ row.definition_name|default:'' }}">
 
             {# Template — definition name + type icon + slug hint below #}

@@ -842,14 +842,6 @@ function bulkAssessmentInterface() {
         this.allAssessments = data.assessments || [];
         // Apply filters client-side
         this.applyFiltersClientSide();
-        // Persist image count to workflow run state once on load
-        if (workflowRunId && this.allAssessments.length > 0) {
-          fetch('/labs/workflow/api/run/' + workflowRunId + '/state/', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrfToken },
-            body: JSON.stringify({ state: { images_reviewed: this.allAssessments.length } }),
-          }).catch(() => {});
-        }
         this.recalculateStats();
         this.loading = false;
         this.controller = null;
@@ -1099,6 +1091,7 @@ function bulkAssessmentInterface() {
         if (!data.success) throw new Error(data.error || 'Failed to create task');
         const flwUsername = this.taskModal.flw.username;
         const taskId = data.tasks && data.tasks[0] ? data.tasks[0].id : null;
+        if (!taskId) throw new Error('Task created but no task ID returned');
         this.createdTaskFLWs = new Set([...this.createdTaskFLWs, flwUsername]);
         this.flwTasks = { ...this.flwTasks, [flwUsername]: taskId };
         if (workflowRunId) {
@@ -1477,7 +1470,7 @@ function bulkAssessmentInterface() {
 
           // Update workflow run state if launched from a workflow
           if (workflowRunId) {
-            const totalAssessed = this.stats.pass + this.stats.fail;
+            const totalAssessed = this.stats.pass + this.stats.fail + (this.stats.incomplete || 0);
             const avgPassed = totalAssessed > 0 ? Math.round(this.stats.pass / totalAssessed * 100) : null;
             try {
               await fetch('/labs/workflow/api/run/' + workflowRunId + '/state/', {

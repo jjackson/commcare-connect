@@ -169,3 +169,44 @@ class TestExtractImageQuestions:
         assert "photo" in ids
         assert "group_b/photo" in ids
 
+    def test_deduplicates_identical_path_across_forms_uses_xmlns(self):
+        """When leaf and full path are both taken, fall back to xmlns-qualified id."""
+
+        def _make_form_with_xmlns(name, xmlns, questions):
+            return {"name": name, "xmlns": xmlns, "questions": questions}
+
+        # Three forms with the same question path:
+        # form1 → gets leaf "photo"
+        # form2 → leaf taken, gets full "group/photo"
+        # form3 → leaf AND full path taken → falls back to xmlns:group/photo
+        app = {
+            "modules": [
+                {
+                    "name": "Module",
+                    "forms": [
+                        _make_form_with_xmlns(
+                            "form1",
+                            "http://openrosa.org/form/form1",
+                            [_q("/data/group/photo", "Image", label="Photo A")],
+                        ),
+                        _make_form_with_xmlns(
+                            "form2",
+                            "http://openrosa.org/form/form2",
+                            [_q("/data/group/photo", "Image", label="Photo B")],
+                        ),
+                        _make_form_with_xmlns(
+                            "form3",
+                            "http://openrosa.org/form/form3",
+                            [_q("/data/group/photo", "Image", label="Photo C")],
+                        ),
+                    ],
+                }
+            ]
+        }
+        result = extract_image_questions(app)
+        assert len(result) == 3
+        ids = {r["id"] for r in result}
+        assert "photo" in ids
+        assert "group/photo" in ids
+        assert any("form3" in qid for qid in ids), f"Expected xmlns-qualified id in {ids}"
+

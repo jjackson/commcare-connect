@@ -42,6 +42,7 @@ def extract_image_questions(app: dict) -> list[dict]:
     for module in app.get("modules", []):
         for form in module.get("forms", []):
             form_name = _get_name(form)
+            form_xmlns = form.get("xmlns", "")
             questions = form.get("questions", [])
 
             for q in questions:
@@ -58,9 +59,14 @@ def extract_image_questions(app: dict) -> list[dict]:
                 # Auto-detect hq_url_path
                 hq_url_path = _detect_hq_url_path(xform_path, questions)
 
-                # Use leaf ID when unique; fall back to full path on collision
+                # Use leaf ID when unique; fall back to full path, then xmlns-qualified path
                 leaf_id = _question_id(xform_path)
-                question_id = leaf_id if leaf_id not in seen_ids else image_path
+                if leaf_id not in seen_ids:
+                    question_id = leaf_id
+                elif image_path not in seen_ids:
+                    question_id = image_path
+                else:
+                    question_id = f"{form_xmlns}:{image_path}" if form_xmlns else image_path
                 seen_ids.add(question_id)
 
                 results.append(

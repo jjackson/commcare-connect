@@ -284,6 +284,13 @@ class AuditOfAuditsDataAccess:
         rows = []
         for run in runs:
             definition = def_map.get(run.definition_id)
+            # Skip runs whose definition doesn't match the template type filter.
+            # (opps_with_matching_defs ensures the opp has at least one matching
+            # definition, but the opp may also have non-matching definitions.)
+            if self.template_types and (
+                not definition or definition.template_type not in self.template_types
+            ):
+                continue
             linked_sessions = sessions_by_run.get(run.id, [])
             avg_pct_passed = _extract_avg_pct_passed(run, linked_sessions)
 

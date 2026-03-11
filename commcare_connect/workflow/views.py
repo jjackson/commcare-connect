@@ -359,31 +359,6 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 }
                 context["is_edit_mode"] = False
             else:
-                # Create new run (always creates a fresh run)
-                from datetime import datetime, timedelta, timezone
-
-                today = datetime.now(timezone.utc).date()
-                week_start = today - timedelta(days=today.weekday())
-                week_end = week_start + timedelta(days=6)
-
-                run = data_access.create_run(
-                    definition_id=definition_id,
-                    opportunity_id=opportunity_id,
-                    period_start=week_start.isoformat(),
-                    period_end=week_end.isoformat(),
-                    initial_state={"worker_states": {}},
-                )
-                run_data = {
-                    "id": run.id,
-                    "definition_id": definition_id,
-                    "opportunity_id": opportunity_id,
-                    "opportunity_name": labs_context.get("opportunity", {}).get("name"),
-                    "status": run.data.get("status", "in_progress"),
-                    "state": run.data.get("state", {}),
-                    "period_start": run.data.get("period_start"),
-                    "period_end": run.data.get("period_end"),
-                }
-                context["is_edit_mode"] = False
                 # No run_id and not edit mode — get() should have redirected.
                 # This branch only executes if opportunity_id was missing at
                 # get() time (no labs context), so show a friendly error.

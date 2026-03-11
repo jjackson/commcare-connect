@@ -1850,6 +1850,8 @@ class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
     def get(self, request, opp_id: int):
         labs_oauth = request.session.get("labs_oauth", {})
         access_token = labs_oauth.get("access_token", "")
+        if not access_token:
+            return JsonResponse({"error": "No OAuth token. Please log in to Connect Labs first."}, status=401)
 
         # Step 1: Resolve cc_domain + cc_app_id from Connect
         try:
