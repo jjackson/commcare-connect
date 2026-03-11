@@ -352,7 +352,8 @@ class TestPermissionManagement:
             {"user_id": target_user.id, "permissions": ["otp_access"]},
         )
         assert response.status_code == 200
-        target_user.refresh_from_db()
+        # Re-fetch to clear cached permissions
+        target_user = User.objects.get(pk=target_user.pk)
         assert target_user.has_perm("users.otp_access")
 
     def test_revoke_permission(self, admin_user, target_user, client):
