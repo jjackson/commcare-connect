@@ -168,13 +168,6 @@ class TestAcceptInviteView:
 
         assert response.status_code == 302
         assert response.url == reverse("organization:home", args=(organization.slug,))
-
-    def test_valid_invite_shows_success_message(self, client, user, organization):
-        membership = organization.memberships.first()
-        client.force_login(user)
-
-        response = client.get(self._url(organization.slug, membership.invite_id))
-
         messages = list(get_messages(response.wsgi_request))
         assert len(messages) == 1
         assert organization.slug in str(messages[0])
