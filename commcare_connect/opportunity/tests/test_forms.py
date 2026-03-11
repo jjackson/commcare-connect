@@ -809,4 +809,4 @@ def test_invite_form_rejects_ended_opportunity():
         opportunity=opportunity,
     )
     assert not form.is_valid()
-    assert "ended" in str(form.errors["users"]).lower()
+    assert "This opportunity has ended. You cannot invite more workers." in str(form.errors["users"])
