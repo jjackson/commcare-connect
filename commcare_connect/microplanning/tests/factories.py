@@ -1,4 +1,5 @@
 import random
+import uuid
 
 import factory
 from django.contrib.gis.geos import Point, Polygon
@@ -23,6 +24,10 @@ class WorkAreaFactory(DjangoModelFactory):
     opportunity = SubFactory(OpportunityFactory)
     slug = Sequence(lambda n: f"area-{n}")
     ward = Sequence(lambda n: f"ward-{n}")
+
+    @factory.lazy_attribute
+    def case_id(self):
+        return str(uuid.uuid4())
 
     @factory.lazy_attribute
     def centroid(self):
