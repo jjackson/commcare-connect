@@ -285,6 +285,14 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             initial=credential_issuer.delivery_level if credential_issuer else "",
         )
 
+    def clean_users(self):
+        user_data = self.cleaned_data.get("users")
+        if user_data and self.opportunity and self.opportunity.has_ended:
+            submitted_end_date = self.data.get("end_date")
+            if not submitted_end_date or datetime.date.fromisoformat(submitted_end_date) < now().date():
+                raise ValidationError(gettext("This opportunity has ended. You cannot invite more workers."))
+        return super().clean_users()
+
     def clean_active(self):
         active = self.cleaned_data["active"]
         if active and not self.currently_active:

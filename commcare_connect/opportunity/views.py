@@ -328,14 +328,14 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     def form_valid(self, form):
         opportunity = form.instance
         opportunity.modified_by = self.request.user.email
-        users = form.cleaned_data["users"]
-        if users:
-            add_connect_users.delay(users, form.instance.id)
-
         end_date = form.cleaned_data["end_date"]
         if end_date:
             opportunity.end_date = end_date
         response = super().form_valid(form)
+        users = form.cleaned_data["users"]
+        if users:
+            add_connect_users.delay(users, form.instance.id)
+
         return response
 
 
