@@ -784,8 +784,6 @@ class AuditDataAccess:
             image_rules = [r for r in related_fields if r.get("image_path")]
             if image_rules:
                 for visit_id_str, images in result.items():
-                    if images:
-                        continue  # Already has Connect blob images
                     visit_data = visit_dict_by_id.get(visit_id_str, {})
                     form_json = visit_data.get("form_json", {})
                     form_data = form_json.get("form", form_json)
@@ -797,6 +795,10 @@ class AuditDataAccess:
                     for rule in image_rules:
                         hq_url_path = rule.get("hq_url_path", "")
                         image_path = rule.get("image_path", "")
+
+                        # Skip if this image type is already present (e.g. from Connect blob)
+                        if any(img.get("question_id") == image_path for img in images):
+                            continue
 
                         # Strategy 1: pre-computed URL field in form JSON
                         hq_url = None

@@ -801,15 +801,17 @@
                                 <td class="py-3">
                                     <span class="text-sm font-medium text-gray-900">Run #{{ run.id }}</span>
                                     {% if workflow.template_type == "bulk_image_audit" %}
-                                    {% with img_type=run.state.config.image_type %}
-                                    {% if img_type %}
-                                    <div class="mt-0.5">
+                                    {% with img_types=run.state.config.selected_image_type_ids|default:run.state.config.image_type %}
+                                    {% if img_types %}
+                                    <div class="mt-0.5 flex flex-wrap gap-0.5">
+                                        {% for t in img_types %}
                                         <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
-                                            {% if img_type == "ors_photo" %}<i class="fa-solid fa-droplet mr-1"></i>ORS
-                                            {% elif img_type == "muac_photo" %}<i class="fa-solid fa-ruler mr-1"></i>MUAC
-                                            {% elif img_type == "scale_photo" %}<i class="fa-solid fa-weight-scale mr-1"></i>Scale
-                                            {% else %}{{ img_type }}{% endif %}
+                                            {% if t == "ors_photo" %}<i class="fa-solid fa-droplet mr-1"></i>ORS
+                                            {% elif t == "muac_photo" %}<i class="fa-solid fa-ruler mr-1"></i>MUAC
+                                            {% elif t == "scale_photo" %}<i class="fa-solid fa-weight-scale mr-1"></i>Scale
+                                            {% else %}{{ t }}{% endif %}
                                         </span>
+                                        {% endfor %}
                                     </div>
                                     {% endif %}
                                     {% endwith %}
@@ -872,7 +874,7 @@
                                 </td>
                                 {% if workflow.template_type == "bulk_image_audit" %}
                                 <td class="py-3 text-center">
-                                    {% with avg=run.state.avg_passed threshold=run.state.threshold|default:80 %}
+                                    {% with avg=run.state.avg_passed threshold=run.state.pass_threshold|default:80 %}
                                     {% if avg != "" and avg is not None %}
                                     <span class="text-sm font-medium {% if avg >= threshold %}text-green-700{% else %}text-red-700{% endif %}">
                                         {{ avg }}%
@@ -890,21 +892,21 @@
                                     {% endif %}
                                 </td>
                                 <td class="py-3 text-center">
-                                    {% if run.state.sample_percentage %}
+                                    {% if run.state.sample_percentage is not None and run.state.sample_percentage != "" %}
                                     <span class="text-sm text-gray-600">{{ run.state.sample_percentage }}%</span>
                                     {% else %}
                                     <span class="text-sm text-gray-400">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="py-3 text-center">
-                                    {% if run.state.images_reviewed %}
+                                    {% if run.state.images_reviewed is not None and run.state.images_reviewed != "" %}
                                     <span class="text-sm text-gray-600">{{ run.state.images_reviewed }}</span>
                                     {% else %}
                                     <span class="text-sm text-gray-400">&mdash;</span>
                                     {% endif %}
                                 </td>
                                 <td class="py-3 text-center">
-                                    {% if run.state.tasks_created %}
+                                    {% if run.state.tasks_created is not None and run.state.tasks_created != "" %}
                                     <span class="text-sm font-medium text-indigo-700">{{ run.state.tasks_created }}</span>
                                     {% else %}
                                     <span class="text-sm text-gray-400">&mdash;</span>

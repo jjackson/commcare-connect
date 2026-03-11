@@ -460,7 +460,7 @@ def task_bulk_create(request):
                 created_count += 1
                 created_tasks.append({"username": username, "id": task.id})
             except Exception as e:
-                errors.append(f"Failed to create task for FLW {flw_id}: {str(e)}")
+                errors.append(f"Failed to create task for FLW {flw_id}: {e!s}")
                 logger.error(f"Error creating task for FLW {flw_id}: {e}", exc_info=True)
 
         data_access.close()
