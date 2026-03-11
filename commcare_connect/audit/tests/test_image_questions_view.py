@@ -96,8 +96,8 @@ SAMPLE_APP = {
 
 
 @override_settings(**LABS_SETTINGS)
-def test_image_questions_returns_visible_images_only(labs_client):
-    """View returns image questions, filtering out always-hidden ones."""
+def test_image_questions_returns_all_images(labs_client):
+    """View returns all Image-type questions from the app."""
     opp_meta = {
         "cc_domain": "test-domain",
         "cc_app_id": "app-abc",
@@ -117,14 +117,16 @@ def test_image_questions_returns_visible_images_only(labs_client):
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
-    # Only ors_photo should be returned (vita_photo's ancestor has 1=2)
-    assert len(data) == 1
-    item = data[0]
-    assert item["id"] == "ors_photo"
-    assert item["label"] == "ORS Photo"
-    assert item["path"] == "ors_group/ors_photo"
-    assert item["hq_url_path"] == "ors_group/photo_link_ors"
-    assert item["form_name"] == "Health Service Delivery"
+    # Both image questions are returned (no always-false filtering)
+    assert len(data) == 2
+    ids = {item["id"] for item in data}
+    assert "ors_photo" in ids
+    assert "vita_photo" in ids
+    ors = next(item for item in data if item["id"] == "ors_photo")
+    assert ors["label"] == "ORS Photo"
+    assert ors["path"] == "ors_group/ors_photo"
+    assert ors["hq_url_path"] == "ors_group/photo_link_ors"
+    assert ors["form_name"] == "Health Service Delivery"
 
 
 @override_settings(**LABS_SETTINGS)

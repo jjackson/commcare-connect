@@ -440,6 +440,7 @@ def task_bulk_create(request):
 
         data_access = TaskDataAccess(user=request.user, request=request)
         created_count = 0
+        created_tasks = []
         errors = []
 
         for flw_id in flw_ids:
@@ -447,7 +448,7 @@ def task_bulk_create(request):
                 username = str(flw_id)
                 flw_name = flw_names.get(username, username)  # Use display name if provided
                 # Create task for each FLW
-                data_access.create_task(
+                task = data_access.create_task(
                     username=username,
                     flw_name=flw_name,
                     opportunity_id=opportunity_id,
@@ -457,13 +458,14 @@ def task_bulk_create(request):
                     creator_name=creator_name,
                 )
                 created_count += 1
+                created_tasks.append({"username": username, "id": task.id})
             except Exception as e:
                 errors.append(f"Failed to create task for FLW {flw_id}: {str(e)}")
                 logger.error(f"Error creating task for FLW {flw_id}: {e}", exc_info=True)
 
         data_access.close()
 
-        return JsonResponse({"success": True, "created_count": created_count, "errors": errors})
+        return JsonResponse({"success": True, "created_count": created_count, "tasks": created_tasks, "errors": errors})
 
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON"}, status=400)

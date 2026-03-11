@@ -138,10 +138,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             })
             .then(data => {
                 setImageQuestions(data);
-                // Default: select all returned types
-                if (selectedImageTypeIds.length === 0) {
-                    setSelectedImageTypeIds(data.map(q => q.id));
-                }
                 setImageQuestionsLoading(false);
             })
             .catch(err => {
@@ -278,7 +274,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setProgress({ status: 'starting', stage_name: 'Initializing', message: 'Submitting to task queue...' });
         setPhase('creating');
 
-        await onUpdateState({ phase: 'creating', config });
+        await onUpdateState({
+            phase: 'creating',
+            config,
+            sample_percentage: samplePct,
+            pass_threshold: threshold,
+            // Store the NM's username so it can be shown in the Audit of Audits
+            // admin report under "Run By". instance.username is the top-level
+            // username from the LabsRecord API response (the authenticated creator).
+            run_by: instance.username || null,
+        });
 
         const criteria = {
             audit_type: auditMode,
@@ -736,13 +741,10 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                                             className="mt-0.5 h-4 w-4 text-blue-600 rounded"
                                         />
                                         <div className="min-w-0">
-                                            <div className="text-sm font-medium text-gray-900">{q.label}</div>
-                                            <div className="text-xs text-gray-500 mt-0.5">
-                                                <span className="font-mono">{q.id}</span>
-                                                {q.form_name && (
-                                                    <span className="ml-2 text-gray-400">&bull; {q.form_name}</span>
-                                                )}
-                                            </div>
+                                            <div className="text-sm font-medium text-gray-900 font-mono">{q.id}</div>
+                                            {q.form_name && (
+                                                <div className="text-xs text-gray-500 mt-0.5">{q.form_name}</div>
+                                            )}
                                         </div>
                                     </label>
                                 );
@@ -923,6 +925,24 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 { month: 'short', day: 'numeric', year: 'numeric' })
             : '';
 
+        // Auto-redirect to the single session's bulk assessment view
+        React.useEffect(() => {
+            if (!loadingSessions && linkedSessions.length === 1) {
+                const s = linkedSessions[0];
+                window.location.href = '/audit/' + s.id + '/bulk/?opportunity_id=' + s.opportunity_id;
+            }
+        }, [loadingSessions, linkedSessions.length]);
+
+        // While loading or waiting for redirect, show spinner
+        if (loadingSessions || linkedSessions.length === 1) {
+            return (
+                <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+                    <i className="fa-solid fa-spinner fa-spin text-gray-400 text-2xl"></i>
+                    <p className="text-gray-500 mt-2 text-sm">Loading…</p>
+                </div>
+            );
+        }
+
         return (
             <div className="space-y-6">
                 {/* Completion banner */}
@@ -951,13 +971,8 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                     </div>
                 </div>
 
-                {/* Sessions table (read-only) */}
-                {!loadingSessions && <SessionsTable sessions={linkedSessions} readOnly={true} />}
-                {loadingSessions && (
-                    <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-                        <i className="fa-solid fa-spinner fa-spin text-gray-400"></i>
-                    </div>
-                )}
+                {/* Sessions table (read-only) for multi-session runs */}
+                <SessionsTable sessions={linkedSessions} readOnly={true} />
             </div>
         );
     };

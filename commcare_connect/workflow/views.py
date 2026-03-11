@@ -8,6 +8,7 @@ as LabsRecord objects with React component code for rendering.
 import json
 import logging
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse, StreamingHttpResponse
@@ -44,6 +45,16 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
         context["has_context"] = bool(labs_context.get("opportunity_id") or labs_context.get("program_id"))
         context["opportunity_id"] = labs_context.get("opportunity_id")
         context["opportunity_name"] = labs_context.get("opportunity_name")
+
+        # Restrict Create Workflow button to @dimagi.com users / allowlist
+        _email = getattr(self.request.user, "email", "") or ""
+        _username = getattr(self.request.user, "username", "") or ""
+        _allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])
+        context["is_dimagi"] = (
+            _email.endswith("@dimagi.com")
+            or _username.endswith("@dimagi.com")
+            or bool(_username and _username in _allowlist)
+        )
 
         # Get workflow definitions and their runs
         if context["has_context"]:
@@ -284,9 +295,24 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     )
                     logger.info(f"Synced render code for definition {definition_id} from template '{matched_template}'")
 
-            # Get render code
-            render_code = data_access.get_render_code(definition_id)
-            context["render_code"] = render_code.data.get("component_code") if render_code else None
+            # Get render code — in DEBUG mode, try template file first so local
+            # edits are reflected immediately without a manual sync step.
+            # Falls back to DB if no template name match (e.g. custom-named workflow).
+            if settings.DEBUG:
+                name_lower = definition.name.lower().replace(" ", "_")
+                live_code = None
+                for key, tmpl in TEMPLATES.items():
+                    if key == name_lower or tmpl["name"].lower() == definition.name.lower():
+                        live_code = tmpl.get("render_code")
+                        break
+                if live_code is not None:
+                    context["render_code"] = live_code
+                else:
+                    render_code = data_access.get_render_code(definition_id)
+                    context["render_code"] = render_code.data.get("component_code") if render_code else None
+            else:
+                render_code = data_access.get_render_code(definition_id)
+                context["render_code"] = render_code.data.get("component_code") if render_code else None
 
             # Get workers for the opportunity
             workers = data_access.get_workers(opportunity_id)
@@ -370,7 +396,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 "definition": definition.data,
                 "definition_id": definition.id,
                 "opportunity_id": opportunity_id,
-                "render_code": render_code.data.get("component_code") if render_code else None,
+                "render_code": context.get("render_code"),
                 "instance": run_data,
                 "is_edit_mode": is_edit_mode,
                 "workers": workers,
