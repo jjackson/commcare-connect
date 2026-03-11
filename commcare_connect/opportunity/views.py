@@ -1777,6 +1777,9 @@ def delete_user_invites(request, org_slug, opp_id):
 @require_POST
 @opportunity_required
 def resend_user_invites(request, org_slug, opp_id):
+    if request.opportunity.has_ended:
+        messages.error(request, _("This opportunity has ended. You cannot resend invites."))
+        return redirect("opportunity:detail", org_slug, opp_id)
     invite_ids = request.POST.getlist("user_invite_ids")
     if not invite_ids:
         return HttpResponseBadRequest()
@@ -1805,7 +1808,7 @@ def resend_user_invites(request, org_slug, opp_id):
     if valid_phone_numbers:
         users = User.objects.filter(phone_number__in=valid_phone_numbers)
         for user in users:
-            access, _ = OpportunityAccess.objects.get_or_create(user=user, opportunity=request.opportunity)
+            access, __ = OpportunityAccess.objects.get_or_create(user=user, opportunity=request.opportunity)
             invite_user.delay(user.id, access.pk)
             resent_count += 1
 
