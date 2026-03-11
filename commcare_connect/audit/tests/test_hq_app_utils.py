@@ -191,6 +191,16 @@ class TestExtractImageQuestions:
         result = extract_image_questions(app)
         assert result[0]["hq_url_path"] == ""
 
+    def test_hq_url_path_handles_null_calculate(self):
+        """DataBindOnly with calculate=None (not missing, but explicitly null) should not crash."""
+        q = _q("/data/link_field", "DataBindOnly")
+        q["calculate"] = None  # explicitly null, as some HQ apps return
+        app = _make_app(
+            [_make_form("form1", [_q("/data/my_photo", "Image", label="Photo"), q])]
+        )
+        result = extract_image_questions(app)
+        assert result[0]["hq_url_path"] == ""
+
     def test_collects_images_from_multiple_forms(self):
         app = _make_app(
             [
