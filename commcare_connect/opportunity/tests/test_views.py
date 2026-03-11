@@ -2003,5 +2003,8 @@ def test_resend_invites_redirects_for_ended_opportunity(client, org_user_member,
     client.force_login(org_user_member)
     url = reverse("opportunity:resend_user_invites", args=[organization.slug, opportunity.opportunity_id])
     response = client.post(url, data={"user_invite_ids": [1]})
-    assert response.status_code == 302
-    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+    assert response.status_code == 200
+    assert (
+        reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id])
+        in response.headers["HX-Redirect"]
+    )
