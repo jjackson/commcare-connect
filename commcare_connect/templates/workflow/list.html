@@ -48,12 +48,14 @@
             <div class="text-sm text-gray-500">
                 <span class="font-medium">Opportunity:</span> {{ opportunity_name|default:"Selected" }}
             </div>
+            {% if is_dimagi %}
             <button data-open-modal
                     type="button"
                     class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                 <i class="fa-solid fa-plus mr-2"></i>
                 Create Workflow
             </button>
+            {% endif %}
 
             <!-- Template Selector Modal -->
             <div x-show="showTemplateModal"
@@ -678,6 +680,13 @@
                                 <th class="py-2 text-left font-medium">Period</th>
                                 <th class="py-2 text-center font-medium">FLWs</th>
                                 <th class="py-2 text-left font-medium">Status</th>
+                                {% if workflow.template_type == "bulk_image_audit" %}
+                                <th class="py-2 text-center font-medium">Avg % Passed</th>
+                                <th class="py-2 text-center font-medium">Threshold</th>
+                                <th class="py-2 text-center font-medium">% Sampled</th>
+                                <th class="py-2 text-center font-medium">Images</th>
+                                <th class="py-2 text-center font-medium">Tasks</th>
+                                {% endif %}
                                 <th class="py-2 text-right font-medium">Actions</th>
                             </tr>
                         </thead>
@@ -791,6 +800,22 @@
                                 }">
                                 <td class="py-3">
                                     <span class="text-sm font-medium text-gray-900">Run #{{ run.id }}</span>
+                                    {% if workflow.template_type == "bulk_image_audit" %}
+                                    {% with img_types=run.state.config.selected_image_type_ids|default:run.state.config.image_type %}
+                                    {% if img_types %}
+                                    <div class="mt-0.5 flex flex-wrap gap-0.5">
+                                        {% for t in img_types %}
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                                            {% if t == "ors_photo" %}<i class="fa-solid fa-droplet mr-1"></i>ORS
+                                            {% elif t == "muac_photo" %}<i class="fa-solid fa-ruler mr-1"></i>MUAC
+                                            {% elif t == "scale_photo" %}<i class="fa-solid fa-weight-scale mr-1"></i>Scale
+                                            {% else %}{{ t }}{% endif %}
+                                        </span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
+                                    {% endif %}
                                 </td>
                                 <td class="py-3">
                                     <span class="text-sm text-gray-500">
@@ -835,11 +860,6 @@
                                                 </template>
                                             </span>
                                         </template>
-                                        <template x-if="jobStatus === 'completed'">
-                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                                                <i class="fa-solid fa-circle-check mr-1"></i> Job Done
-                                            </span>
-                                        </template>
                                         <template x-if="jobStatus === 'failed'">
                                             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
                                                 <i class="fa-solid fa-triangle-exclamation mr-1"></i> Job Failed
@@ -852,6 +872,47 @@
                                         </template>
                                     </div>
                                 </td>
+                                {% if workflow.template_type == "bulk_image_audit" %}
+                                <td class="py-3 text-center">
+                                    {% with avg=run.state.avg_passed threshold=run.state.pass_threshold|default:80 %}
+                                    {% if avg != "" and avg is not None %}
+                                    <span class="text-sm font-medium {% if avg >= threshold %}text-green-700{% else %}text-red-700{% endif %}">
+                                        {{ avg }}%
+                                    </span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </td>
+                                <td class="py-3 text-center">
+                                    {% if run.state.pass_threshold %}
+                                    <span class="text-sm text-gray-600">{{ run.state.pass_threshold }}%</span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 text-center">
+                                    {% if run.state.sample_percentage is not None and run.state.sample_percentage != "" %}
+                                    <span class="text-sm text-gray-600">{{ run.state.sample_percentage }}%</span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 text-center">
+                                    {% if run.state.images_reviewed is not None and run.state.images_reviewed != "" %}
+                                    <span class="text-sm text-gray-600">{{ run.state.images_reviewed }}</span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 text-center">
+                                    {% if run.state.tasks_created is not None and run.state.tasks_created != "" %}
+                                    <span class="text-sm font-medium text-indigo-700">{{ run.state.tasks_created }}</span>
+                                    {% else %}
+                                    <span class="text-sm text-gray-400">&mdash;</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
                                 <td class="py-3 text-right">
                                     <div class="flex items-center justify-end gap-2">
                                         <a href="{% url 'labs:workflow:run' workflow.definition.id %}?run_id={{ run.id }}"

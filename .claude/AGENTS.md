@@ -95,6 +95,40 @@ Structured audits of FLW visits with AI-powered reviews.
 - **AI review:** `audit/ai_review.py` runs validation agents on individual visits
 - **Uses:** `AnalysisPipeline` for visit data filtering
 
+#### Audit API Contracts (used by workflow templates)
+
+**Create async** `POST /audit/api/audit/create-async/`
+```json
+{ "opportunities": [{"id": 1, "name": "..."}], "criteria": {
+    "audit_type": "date_range|last_n_per_opp",
+    "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD",
+    "count_per_opp": 10, "sample_percentage": 100,
+    "related_fields": [{"image_path": "...", "filter_by_image": true}]
+  }, "workflow_run_id": 123 }
+```
+Response: `{"success": true, "task_id": "..."}`. Task result has `{"sessions": [{"id", "title", "visits", "images"}]}`.
+
+**Bulk data** `GET /audit/api/<session_id>/bulk-data/`
+Response: `{"assessments": [{id, visit_id, blob_id, question_id, opportunity_id, filename, result, notes, status, image_url, visit_date, entity_name, username, related_fields, ai_result, ai_notes}], ...}`
+Note: `opportunity_id` = `session.opportunity_id` (same for all assessments in a session). `status` = `"pass"|"fail"|"pending"`.
+
+**Save progress** `POST /audit/api/<session_id>/save/`
+FormData: `visit_results` = JSON string of `{visit_id: {assessments: {blob_id: {question_id, result, notes, ai_result, ai_notes}}}}`
+
+**Complete** `POST /audit/api/<session_id>/complete/`
+FormData: `overall_result` (`"pass"|"fail"`), `notes`, `kpi_notes` (can be `""`), `visit_results` (same shape as save).
+
+**AI Review** `POST /audit/api/<session_id>/ai-review/`
+JSON body (NOT FormData): `{"assessments": [{"visit_id", "blob_id", "reading"}], "agent_id": "scale_validation", "opportunity_id": <int>}`
+Response: `{"results": [{"visit_id", "blob_id", "ai_result": "match|no_match|error", "ai_notes": "..."}]}`
+Note: `opportunity_id` is **required**. Use `a.opportunity_id` from the assessment object (not `selected_opps[0].id`).
+
+**Opp search** `GET /audit/api/opportunities/search/?q=<query>`
+Response: `{"opportunities": [{"id", "name"}]}`
+
+**Workflow sessions** `GET /audit/api/workflow/<workflow_run_id>/sessions/`
+Response: `{"sessions": [{"id", ...}]}` — fallback for session_id discovery after async creation.
+
 ### `tasks/` — Task Management
 
 > See also: [`commcare_connect/tasks/README.md`](../commcare_connect/tasks/README.md) for data model details and testing guidance.
@@ -116,9 +150,53 @@ Data-driven workflows with custom React UIs and pipeline integration.
 - **DataAccess:** `WorkflowDataAccess`, `PipelineDataAccess` (both extend `BaseDataAccess`) in `workflow/data_access.py`
 - **Proxy models:** `WorkflowDefinitionRecord`, `WorkflowRenderCodeRecord`, `WorkflowRunRecord`, `WorkflowChatHistoryRecord`, `PipelineDefinitionRecord` (experiment=`"workflow"` / `"pipeline"`)
 - **Key views:** Workflow list (`/workflow/`), definition view, run view
-- **Templates:** Predefined workflow templates in `workflow/templates/` (audit_with_ai_review, performance_review, ocs_outreach)
+- **Templates:** Predefined workflow templates in `workflow/templates/` (audit_with_ai_review, bulk_image_audit, mbw_monitoring_v2, performance_review, ocs_outreach)
 - **Render code:** React components stored as LabsRecords, rendered dynamically in workflow runner
 - **Cross-app:** Can create audit sessions and tasks from workflow actions
+
+#### Workflow Template Anatomy
+
+Each template is a Python file in `workflow/templates/` that exports three dicts:
+
+```python
+DEFINITION = {
+    "name": str, "description": str, "version": 1,
+    "templateType": str,         # must match TEMPLATE["key"]
+    "statuses": [...],           # list of {id, label, color}
+    "config": {...},             # e.g. {"showSummaryCards": True}
+    "pipeline_sources": [],
+}
+
+RENDER_CODE = """function WorkflowUI({ definition, instance, workers,
+    pipelines, links, actions, onUpdateState }) {
+    // Full React JSX component — Babel standalone transpiles in-browser, no build step
+    // Inner components defined as const arrows INSIDE WorkflowUI to close over parent state
+    // Phase router at bottom: {phase === 'foo' && <FooPhase />}
+}"""
+
+TEMPLATE = {
+    "key": str,           # e.g. "bulk_image_audit" — unique, used for lookup
+    "name": str,
+    "description": str,
+    "icon": str,          # Font Awesome class e.g. "fa-images"
+    "color": str,         # Tailwind color e.g. "blue"
+    "definition": DEFINITION,
+    "render_code": RENDER_CODE,
+    "pipeline_schema": None,  # or dict for single pipeline; use "pipeline_schemas" list for multi
+}
+```
+
+**Registration:** `__init__.py` auto-discovers via `pkgutil.iter_modules`. Also has explicit re-exports at the bottom — **add new templates to both the `from . import` line and `__all__`**.
+
+**JSX-in-Python rules:**
+- Cannot use `"""` inside `RENDER_CODE` (Python string delimiter conflict)
+- Inner components must be defined BEFORE they are used (no hoisting)
+- State for child components is hoisted to outer `WorkflowUI` so it persists across re-renders
+- `onUpdateState(patch)` PATCH-merges into `run.data.state` on the server
+- Workflow props: `{ definition, instance, workers, pipelines, links, actions, onUpdateState }`
+- `actions.createAudit(payload)` → `POST /audit/api/audit/create-async/`
+- `actions.streamAuditProgress(task_id, onProgress, onComplete, onError)` → SSE stream
+- `actions.cancelAudit(task_id)` → cancel endpoint
 
 ### `ai/` — AI Agent Integration
 
