@@ -95,15 +95,24 @@ class WorkflowRunRecord(LocalLabsRecord):
 
     @property
     def period_start(self):
-        return self.data.get("period_start")
+        top = self.data.get("period_start")
+        if top:
+            return top
+        return self.data.get("state", {}).get("period_start")
 
     @property
     def period_end(self):
-        return self.data.get("period_end")
+        top = self.data.get("period_end")
+        if top:
+            return top
+        return self.data.get("state", {}).get("period_end")
 
     @property
     def status(self):
-        return self.data.get("status", "in_progress")
+        top = self.data.get("status")
+        if top:
+            return top
+        return self.data.get("state", {}).get("status", "in_progress")
 
     @property
     def state(self):
@@ -118,9 +127,13 @@ class WorkflowRunRecord(LocalLabsRecord):
         state = self.data.get("state", {})
         if "selected_workers" in state:
             selected = state.get("selected_workers", [])
-        else:
+            return len(selected) if isinstance(selected, list) else 0
+        if "selected_flws" in state:
             selected = state.get("selected_flws", [])
-        return len(selected) if isinstance(selected, list) else 0
+            return len(selected) if isinstance(selected, list) else 0
+        if "flw_count" in state:
+            return state.get("flw_count", 0)
+        return 0
 
 
 class WorkflowChatHistoryRecord(LocalLabsRecord):
@@ -693,6 +706,12 @@ class WorkflowDataAccess(BaseDataAccess):
         current_state = run.data.get("state", {})
         merged_state = {**current_state, **new_state}
         updated_data = {**run.data, "state": merged_state}
+
+        # Promote certain fields from state to top-level data so WorkflowRunRecord
+        # properties (which check top-level first) reflect the latest values.
+        for key in ("status", "period_start", "period_end"):
+            if key in new_state:
+                updated_data[key] = new_state[key]
 
         result = self.labs_api.update_record(
             record_id=run_id,

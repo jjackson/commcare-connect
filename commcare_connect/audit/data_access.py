@@ -98,12 +98,14 @@ class AuditCriteria:
                 {
                     "image_path": rf.get("image_path") or rf.get("imagePath", ""),
                     "field_path": rf.get("field_path") or rf.get("fieldPath", ""),
+                    "hq_url_path": rf.get("hq_url_path") or rf.get("hqUrlPath", ""),
                     "label": rf.get("label", ""),
                     "filter_by_image": rf.get("filter_by_image") or rf.get("filterByImage", False),
                     "filter_by_field": rf.get("filter_by_field") or rf.get("filterByField", False),
                 }
                 for rf in related_fields_raw
-                if (rf.get("image_path") or rf.get("imagePath")) and (rf.get("field_path") or rf.get("fieldPath"))
+                # Require image_path; field_path is optional (image-only filter rules are valid)
+                if rf.get("image_path") or rf.get("imagePath")
             ]
 
         return cls(
@@ -175,10 +177,17 @@ def filter_visits_for_audit(
     if criteria.selected_flw_user_ids and "username" in df.columns:
         df = df[df["username"].isin(criteria.selected_flw_user_ids)]
 
-    # Apply sample percentage
+    # Apply sample percentage — sample per FLW for equal representation, then shuffle
     if criteria.sample_percentage < 100 and len(df) > 0:
-        sample_size = max(1, int(len(df) * criteria.sample_percentage / 100))
-        df = df.sample(n=min(sample_size, len(df)), random_state=42)
+        if "username" in df.columns:
+            groups = []
+            for _, grp in df.groupby("username", dropna=False):
+                n = max(1, int(len(grp) * criteria.sample_percentage / 100))
+                groups.append(grp.sample(n=min(n, len(grp)), random_state=42))
+            df = pd.concat(groups).sample(frac=1, random_state=42)
+        else:
+            sample_size = max(1, int(len(df) * criteria.sample_percentage / 100))
+            df = df.sample(n=min(sample_size, len(df)), random_state=42)
 
     if return_visits:
         return df.to_dict("records")
@@ -737,6 +746,89 @@ class AuditDataAccess:
             if str(vid) not in result:
                 result[str(vid)] = []
 
+        # Build visit lookup once — shared by enrichment and fallback sections below
+        visit_dict_by_id = {str(v.get("id", "")): v for v in visit_dicts}
+
+        # Fetch cc_domain for building CommCareHQ attachment URLs (cached, ~1 API call per hour)
+        cc_domain = None
+        try:
+            from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
+
+            meta = fetch_opportunity_metadata(self.access_token, opp_id)
+            cc_domain = meta.get("cc_domain")
+        except Exception as e:
+            # Intentionally broad: cc_domain is optional for URL construction; any failure
+            # (network, missing key, unexpected format) should degrade gracefully, not block audit.
+            logger.debug(f"[ImageExtract] Could not fetch cc_domain for hq_url construction: {e}")
+
+        # Enrich Connect blob images with xform_id and build hq_url
+        hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
+        for visit_id_str, images in result.items():
+            visit_data = visit_dict_by_id.get(visit_id_str, {})
+            form_json = visit_data.get("form_json", {})
+            xform_id = form_json.get("id") or ""
+            for img in images:
+                img["xform_id"] = xform_id
+                if cc_domain and xform_id and img.get("name") and not img.get("hq_url"):
+                    img["hq_url"] = f"{hq_base}/a/{cc_domain}/api/form/attachment/{xform_id}/{img['name']}"
+
+        # Fallback: for visits with no Connect blobs, extract CommCareHQ URL images
+        # from form_json using related_fields rules.
+        # Strategy 1: use hq_url_path (pre-computed URL stored in form JSON)
+        # Strategy 2: extract filename from image_path, build HQ attachment URL
+        #   (used when hq_url_path is empty — e.g. dynamic image type discovery
+        #   can't resolve DataBindOnly XForm paths from the HQ app definition API)
+        if related_fields:
+            import hashlib
+
+            image_rules = [r for r in related_fields if r.get("image_path")]
+            if image_rules:
+                for visit_id_str, images in result.items():
+                    visit_data = visit_dict_by_id.get(visit_id_str, {})
+                    form_json = visit_data.get("form_json", {})
+                    form_data = form_json.get("form", form_json)
+                    xform_id = form_json.get("id") or ""
+                    username = visit_data.get("username") or ""
+                    # Use form.meta.timeEnd for actual submission time; fall back to visit_date (date only)
+                    visit_date = form_data.get("meta", {}).get("timeEnd") or visit_data.get("visit_date") or ""
+                    entity_name = visit_data.get("entity_name") or "No Entity"
+                    for rule in image_rules:
+                        hq_url_path = rule.get("hq_url_path", "")
+                        image_path = rule.get("image_path", "")
+
+                        # Skip if this image type is already present (e.g. from Connect blob)
+                        if any(img.get("question_id") == image_path for img in images):
+                            continue
+
+                        # Strategy 1: pre-computed URL field in form JSON
+                        hq_url = None
+                        if hq_url_path:
+                            extracted = self._extract_field_value(form_data, hq_url_path)
+                            if extracted and isinstance(extracted, str) and extracted.startswith("http"):
+                                hq_url = extracted
+
+                        # Strategy 2: build URL from filename stored at image_path
+                        if not hq_url and cc_domain and xform_id and image_path:
+                            filename = self._extract_field_value(form_data, image_path)
+                            if filename and isinstance(filename, str) and not filename.startswith("http"):
+                                hq_url = f"{hq_base}/a/{cc_domain}/api/form/attachment/{xform_id}/{filename}"
+
+                        if hq_url:
+                            blob_id = "hq_" + hashlib.sha256(hq_url.encode()).hexdigest()[:16]
+                            name = hq_url_path.split("/")[-1] if hq_url_path else image_path.split("/")[-1]
+                            images.append(
+                                {
+                                    "blob_id": blob_id,
+                                    "hq_url": hq_url,
+                                    "xform_id": xform_id,
+                                    "name": name,
+                                    "question_id": image_path,
+                                    "username": username,
+                                    "visit_date": visit_date,
+                                    "entity_name": entity_name,
+                                }
+                            )
+
         # Add related field values if rules provided
         if related_fields:
             if progress_callback:
@@ -773,25 +865,23 @@ class AuditDataAccess:
         if not filter_rules:
             return visit_images
 
+        image_filter_paths = [r.get("image_path", "") for r in filter_rules if r.get("filter_by_image")]
+        field_filter_rules = [r for r in filter_rules if r.get("filter_by_field")]
+
         filtered_result = {}
         for visit_id, images in visit_images.items():
             include_visit = True
 
-            for rule in filter_rules:
-                image_path = rule.get("image_path", "")
-                field_path = rule.get("field_path", "")
-                filter_by_image = rule.get("filter_by_image", False)
-                filter_by_field = rule.get("filter_by_field", False)
+            # OR logic: include visit if it has ANY of the required image types
+            if image_filter_paths:
+                question_ids = {img.get("question_id") for img in images}
+                if not any(p in question_ids for p in image_filter_paths):
+                    include_visit = False
 
-                # Check if this visit has the required image
-                if filter_by_image:
-                    has_matching_image = any(img.get("question_id") == image_path for img in images)
-                    if not has_matching_image:
-                        include_visit = False
-                        break
-
-                # Check if this visit has the required field value
-                if filter_by_field:
+            # AND logic: visit must satisfy every field filter rule
+            if include_visit:
+                for rule in field_filter_rules:
+                    field_path = rule.get("field_path", "")
                     has_field_value = False
                     for img in images:
                         for rf in img.get("related_fields", []):
@@ -1136,7 +1226,7 @@ class AuditDataAccess:
         opportunities: list[dict],
     ) -> dict:
         """Create an audit creation job record for tracking async creation."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         data = {
             "task_id": task_id,
@@ -1154,8 +1244,8 @@ class AuditDataAccess:
             },
             "result": None,
             "error": None,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
         record = self.labs_api.create_record(
@@ -1237,7 +1327,7 @@ class AuditDataAccess:
         error: str | None = None,
     ) -> dict | None:
         """Update an audit creation job record."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         from commcare_connect.labs.models import LocalLabsRecord
 
@@ -1267,7 +1357,7 @@ class AuditDataAccess:
             data["result"] = result
         if error is not None:
             data["error"] = error
-        data["updated_at"] = datetime.now().isoformat()
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         # Save
         updated = self.labs_api.update_record(

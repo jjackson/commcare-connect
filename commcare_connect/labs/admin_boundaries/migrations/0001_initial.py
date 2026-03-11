@@ -29,15 +29,30 @@ class Migration(migrations.Migration):
                     "name_local",
                     models.CharField(blank=True, help_text="Local/native name if available", max_length=255),
                 ),
-                ("parent_name", models.CharField(blank=True, help_text="Name of parent admin unit", max_length=255)),
                 (
                     "boundary_id",
-                    models.CharField(help_text="Unique ID from geoBoundaries (shapeID)", max_length=100, unique=True),
+                    models.CharField(help_text="Unique ID from source (shapeID or OSM ID)", max_length=100, unique=True),
                 ),
                 (
                     "geometry",
                     django.contrib.gis.db.models.fields.MultiPolygonField(
                         help_text="Boundary polygon in WGS84", srid=4326
+                    ),
+                ),
+                (
+                    "source",
+                    models.CharField(
+                        choices=[
+                            ("geoboundaries", "geoBoundaries"),
+                            ("osm", "OpenStreetMap"),
+                            ("grid3", "GRID3"),
+                            ("hdx", "HDX (OCHA COD)"),
+                            ("geopode", "GeoPoDe"),
+                        ],
+                        db_index=True,
+                        default="geoboundaries",
+                        help_text="Data source (geoBoundaries, OpenStreetMap, GRID3, HDX, or GeoPoDe)",
+                        max_length=20,
                     ),
                 ),
                 ("source_url", models.URLField(blank=True, help_text="URL where boundary data was downloaded from")),
@@ -49,9 +64,12 @@ class Migration(migrations.Migration):
             options={
                 "verbose_name": "Admin boundary",
                 "verbose_name_plural": "Admin boundaries",
-                "db_table": "solicitations_adminboundary",
+                "db_table": "labs_admin_boundary",
                 "ordering": ["iso_code", "admin_level", "name"],
-                "indexes": [models.Index(fields=["iso_code", "admin_level"], name="solicitatio_iso_cod_9b229e_idx")],
+                "indexes": [
+                    models.Index(fields=["iso_code", "admin_level"], name="labs_admin__iso_cod_6d6750_idx"),
+                    models.Index(fields=["source", "iso_code"], name="labs_admin__source_037f13_idx"),
+                ],
             },
         ),
     ]

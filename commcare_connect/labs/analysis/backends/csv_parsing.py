@@ -72,8 +72,24 @@ def _parse_images(raw_images: str) -> list:
     if not raw_images or pd.isna(raw_images):
         return []
 
+    # Try JSON first (handles null/true/false), then Python repr (single quotes)
     try:
-        return ast.literal_eval(raw_images)
+        parsed = json.loads(raw_images)
+        if isinstance(parsed, list):
+            return parsed
+        if parsed is None:
+            return []
+        return [parsed]
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    try:
+        parsed = ast.literal_eval(raw_images)
+        if isinstance(parsed, list):
+            return parsed
+        if parsed is None:
+            return []
+        return [parsed]
     except (ValueError, SyntaxError):
         return []
 

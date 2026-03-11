@@ -68,11 +68,13 @@ def extract_images_with_question_ids(visit_data: dict) -> list[dict]:
 
     # Extract visit-level metadata
     username = visit_data.get("username") or ""
-    visit_date = visit_data.get("visit_date") or ""
     entity_name = visit_data.get("entity_name") or "No Entity"
 
     # Build filename->path map in a SINGLE traversal (O(m) where m=tree size)
     form_data = form_json.get("form", form_json)
+
+    # Use form.meta.timeEnd for actual submission time; fall back to visit_date (date only)
+    visit_date = form_data.get("meta", {}).get("timeEnd") or visit_data.get("visit_date") or ""
     filename_map = _build_filename_map(form_data)
 
     # Now each lookup is O(1) instead of O(m)

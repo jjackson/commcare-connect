@@ -15,9 +15,13 @@
       <p class="text-xs opacity-75"
          x-text="(bulkStartDate && bulkEndDate) ? bulkStartDate + ' to ' + bulkEndDate : (loading ? 'Loading...' : '')"></p>
       <div class="flex gap-2 mt-2">
-        <a href="{% url 'audit:session_list' %}"
+        <a x-show="!backUrl" href="{% url 'audit:session_list' %}"
            class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
-          <- Back to List
+          &larr; Back to List
+        </a>
+        <a x-show="backUrl" :href="backUrl"
+           class="px-2 py-1 text-xs bg-white/20 hover:bg-white/30 text-white rounded transition-colors">
+          &larr; Back to Workflow
         </a>
       </div>
     </div>
@@ -105,19 +109,6 @@
     <div class="flex flex-wrap gap-4 items-center justify-between">
       <div class="flex flex-wrap gap-4 items-center">
         <div>
-          <label for="question-id-filter" class="block text-sm font-medium text-gray-700 mb-1">Assessment Type</label>
-          <select id="question-id-filter"
-                  x-model="selectedQuestionId"
-                  @change="applyFilters()"
-                  :disabled="loading"
-                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
-            <option value="">All Types</option>
-            <template x-for="questionId in questionIds" :key="questionId">
-              <option :value="questionId" x-text="questionId"></option>
-            </template>
-          </select>
-        </div>
-        <div>
           <label for="status-filter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
           <select id="status-filter"
                   x-model="selectedStatus"
@@ -128,6 +119,19 @@
             <option value="pending">Pending</option>
             <option value="pass">Passed</option>
             <option value="fail">Failed</option>
+          </select>
+        </div>
+        <div x-show="questionIds.length > 1">
+          <label for="image-type-filter" class="block text-sm font-medium text-gray-700 mb-1">Image Type</label>
+          <select id="image-type-filter"
+                  x-model="selectedQuestionId"
+                  @change="applyFilters()"
+                  :disabled="loading"
+                  class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-brand-indigo focus:border-brand-indigo disabled:bg-gray-100">
+            <option value="">All Types</option>
+            <template x-for="qid in questionIds" :key="qid">
+              <option :value="qid" x-text="formatQuestionId(qid)"></option>
+            </template>
           </select>
         </div>
         <div class="text-sm text-gray-600">
@@ -159,27 +163,24 @@
       </div>
       <div class="flex gap-2 items-center flex-wrap">
         <button @click="passAllPending()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-check mr-1"></i>Pass All Pending
         </button>
         <button @click="failAllPending()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-times mr-1"></i>Fail All Pending
         </button>
         <button @click="clearAllAssessments()"
-                :disabled="loading || bulkProcessing"
+                :disabled="isReadOnly || loading || bulkProcessing"
                 class="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium disabled:opacity-50">
           <i class="fa-solid fa-eraser mr-1"></i>Clear All Assessments
         </button>
-        <div class="border-l border-gray-300 h-8 mx-2"></div>
-        <!-- AI Review Section -->
-        <div class="flex gap-2 items-center">
-          <!-- AI Review Dropdown -->
-          <div class="relative" x-data="{ showAiMenu: false }">
+        <!-- AI Review section removed -->
+        <div class="hidden" x-data="{ showAiMenu: false }">
             <button @click="showAiMenu = !showAiMenu"
-                    :disabled="loading || bulkProcessing || bulkAiProcessing"
+                    :disabled="isReadOnly || loading || bulkProcessing || bulkAiProcessing"
                     class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-1">
               <i class="fa-solid fa-robot" :class="{'fa-spin': bulkAiProcessing}"></i>
               <span x-text="bulkAiProcessing ? ('AI: ' + aiProcessingStatus) : 'Run AI Review Agent'"></span>
@@ -203,7 +204,6 @@
                 </template>
               </div>
             </div>
-          </div>
           <!-- AI Result Action Buttons -->
           <template x-if="currentAgentActions && Object.keys(currentAgentActions).length > 0">
             <div class="flex gap-1 items-center">
@@ -335,7 +335,7 @@
             <!-- Metadata Section -->
             <div class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
               <span><i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span></span>
-              <a :href="visitDetailUrl(assessment.visit_id)"
+              <a :href="assessment.hq_url || visitDetailUrl(assessment.visit_id)"
                  target="_blank"
                  class="text-brand-indigo hover:underline">
                 <i class="fa-solid fa-hashtag mr-0.5"></i><span x-text="assessment.visit_id"></span>
@@ -404,6 +404,15 @@
                       class="flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors disabled:opacity-50">
                 <i class="fa-solid fa-times mr-1"></i>Fail
               </button>
+              <button @click="updateResult(result === 'incomplete' ? '' : 'incomplete')"
+                      :disabled="saving"
+                      :class="{
+                        'bg-gray-900 text-white shadow-sm': result === 'incomplete',
+                        'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800': result !== 'incomplete'
+                      }"
+                      class="flex-1 py-1.5 px-2 rounded text-xs font-medium transition-colors disabled:opacity-50">
+                <i class="fa-solid fa-circle-half-stroke mr-1"></i>Incomplete
+              </button>
             </div>
             <div x-data="{ showNotes: notes ? true : false }">
               <button @click="showNotes = !showNotes"
@@ -426,67 +435,69 @@
     </div>
   </template>
 
-  <!-- Visit Summary Table -->
-  <template x-if="!loading && !loadCancelled && !loadError && visitSummaries.length > 0">
+  <!-- FLW Summary Table -->
+  <template x-if="!loading && !loadCancelled && !loadError && flwSummaries.length > 0">
     <div class="bg-white rounded-lg shadow-sm p-4 mb-4">
       <h2 class="text-lg font-bold text-gray-900 mb-4">
-        <i class="fa-solid fa-list-check mr-2 text-brand-indigo"></i>Visit-Level Summary
+        <i class="fa-solid fa-users mr-2 text-brand-indigo"></i>FLW Summary
       </h2>
       <div class="overflow-x-auto">
-        <table class="table table-bordered mb-0 w-full text-sm">
+        <table class="w-full text-sm">
           <thead class="bg-gray-50">
             <tr>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Visit</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Assessments</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Passed</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Failed</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">FLW</th>
               <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Pending</th>
-              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Result</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pass</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Fail</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Incomplete</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">% Passed</th>
+              <th class="px-4 py-3 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <template x-for="visit in visitSummaries" :key="visit.visit_id">
+            <template x-for="flw in flwSummaries" :key="flw.username">
               <tr>
-                <td class="px-4 py-3">
-                  <a :href="visitDetailUrl(visit.visit_id)"
-                     target="_blank"
-                     class="text-sm font-medium text-brand-indigo hover:text-brand-deep-purple hover:underline"
-                     x-text="visit.visit_id"></a>
-                  <div class="text-xs text-gray-500" x-text="visit.visit_date"></div>
+                <td class="px-4 py-3 font-medium text-gray-900" x-text="flw.flw_name"></td>
+                <td class="px-4 py-3 text-center">
+                  <span :class="flw.pending > 0 ? 'text-orange-600 font-medium' : 'text-gray-400'"
+                        x-text="flw.pending"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium" x-text="visit.total_assessments"></span>
+                  <span class="text-green-600 font-medium" x-text="flw.passed"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-green-600" x-text="visit.passed_count"></span>
+                  <span class="text-red-600 font-medium" x-text="flw.failed"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-red-600" x-text="visit.failed_count"></span>
+                  <span class="text-orange-500 font-medium" x-text="flw.incomplete"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <span class="text-sm font-medium text-gray-600" x-text="visit.pending_count"></span>
+                  <span class="font-medium"
+                        :class="(flw.passed + flw.failed + flw.incomplete) > 0 && (flw.passed / (flw.passed + flw.failed + flw.incomplete) * 100) >= passThreshold ? 'text-green-600' : 'text-red-600'"
+                        x-text="(flw.passed + flw.failed + flw.incomplete) > 0 ? Math.round(flw.passed / (flw.passed + flw.failed + flw.incomplete) * 100) + '%' : '—'"></span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                  <div class="flex gap-2 justify-center">
-                    <button @click="setVisitResult(visit.visit_id, 'pass')"
-                            :disabled="loading || bulkProcessing"
-                            :class="{
-                              'bg-green-600 text-white': visitResults[visit.visit_id]?.result === 'pass' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'pass'),
-                              'bg-green-50 text-green-700 hover:bg-green-100 border border-green-300': visitResults[visit.visit_id]?.result !== 'pass' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'pass')
-                            }"
-                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                      <i class="fa-solid fa-check mr-1"></i>Pass
+                  <template x-if="isReadOnly">
+                    <template x-if="createdTaskFLWs.has(flw.username)">
+                      <a :href="'/tasks/' + flwTasks[flw.username] + '/edit/?opportunity_id=' + opportunityId"
+                         class="inline-flex items-center gap-1 px-2 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 transition-colors">
+                        <i class="fa-solid fa-circle-check"></i> Task Created
+                      </a>
+                    </template>
+                  </template>
+                  <template x-if="!isReadOnly">
+                    <button @click="!createdTaskFLWs.has(flw.username) && openTaskModal(flw)"
+                            :disabled="createdTaskFLWs.has(flw.username)"
+                            :class="createdTaskFLWs.has(flw.username)
+                              ? 'bg-red-50 text-red-600 border-red-200 cursor-not-allowed'
+                              : ((flw.passed + flw.failed + flw.incomplete) > 0 && (flw.passed / (flw.passed + flw.failed + flw.incomplete) * 100) >= passThreshold
+                                  ? 'bg-gray-100 text-gray-400 border-gray-200'
+                                  : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100')"
+                            class="inline-flex items-center gap-1 px-2 py-1 text-xs border rounded transition-colors">
+                      <i :class="createdTaskFLWs.has(flw.username) ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-plus'"></i>
+                      <span x-text="createdTaskFLWs.has(flw.username) ? 'Task Created' : 'Task'"></span>
                     </button>
-                    <button @click="setVisitResult(visit.visit_id, 'fail')"
-                            :disabled="loading || bulkProcessing"
-                            :class="{
-                              'bg-red-600 text-white': visitResults[visit.visit_id]?.result === 'fail' || (!visitResults[visit.visit_id]?.result && visit.suggested_result === 'fail'),
-                              'bg-red-50 text-red-700 hover:bg-red-100 border border-red-300': visitResults[visit.visit_id]?.result !== 'fail' && (visitResults[visit.visit_id]?.result || visit.suggested_result !== 'fail')
-                            }"
-                            class="px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50">
-                      <i class="fa-solid fa-times mr-1"></i>Fail
-                    </button>
-                  </div>
+                  </template>
                 </td>
               </tr>
             </template>
@@ -496,13 +507,51 @@
     </div>
   </template>
 
-  <!-- Complete Audit Section -->
+  <!-- Task Creation Modal -->
+  <template x-teleport="body">
+    <div x-show="taskModal.open" class="fixed inset-0 z-50 flex items-center justify-center"
+         @keydown.escape.window="taskModal.open = false">
+      <div class="absolute inset-0" @click="taskModal.open = false"></div>
+      <div class="relative bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 z-10">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          <i class="fa-solid fa-circle-plus mr-2 text-indigo-600"></i>Create Task
+        </h3>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">FLW</label>
+          <div class="text-sm text-gray-900 bg-gray-50 border border-gray-200 rounded px-3 py-2"
+               x-text="taskModal.flw ? (taskModal.flw.flw_name || taskModal.flw.username) : ''"></div>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <input type="text" x-model="taskModal.title"
+                 class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+          <textarea x-model="taskModal.description" rows="3"
+                    class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none"></textarea>
+        </div>
+        <div x-show="taskModal.error" class="mb-3 text-sm text-red-600" x-text="taskModal.error"></div>
+        <div class="flex justify-end gap-3">
+          <button @click="taskModal.open = false"
+                  class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+          <button @click="submitTaskModal()" :disabled="taskModal.saving || !taskModal.title.trim()"
+                  class="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2">
+            <i x-show="taskModal.saving" class="fa-solid fa-spinner fa-spin"></i>
+            <span x-text="taskModal.saving ? 'Saving…' : 'Create Task'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Complete Image Review Section -->
   <div class="bg-white rounded-lg shadow-sm mb-4"
        x-show="!loading && !loadCancelled && !loadError">
     <div class="p-6">
       <h2 class="text-xl font-bold text-brand-deep-purple mb-4 flex items-center gap-2">
         <i class="fa-solid fa-flag-checkered"></i>
-        Complete Audit
+        Complete Image Review
       </h2>
 
       {% if session.status == 'completed' %}
@@ -513,53 +562,39 @@
             Completed on {{ session.completed_at|date:"M d, Y \\a\\t H:i" }}
           </span>
         </div>
+        <p class="text-xs text-green-600 mt-1 ml-6">
+          <i class="fa-solid fa-lock mr-1"></i>
+          Pass/fail is read-only. Notes can still be updated and saved.
+        </p>
       </div>
       {% endif %}
 
+      <!-- Pending warning -->
+      <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4 flex items-center gap-2"
+           x-show="stats.pending > 0">
+        <i class="fa-solid fa-exclamation-triangle text-amber-600"></i>
+        <span class="text-sm text-amber-800">
+          <span class="font-medium" x-text="stats.pending"></span> image(s) still pending review.
+          Save progress now, or review all images before completing.
+        </span>
+      </div>
+
       <div class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            Overall Result
-          </label>
-          <div class="flex gap-4">
-            <label class="flex items-center cursor-pointer">
-              <input type="radio" x-model="overallResult" value="pass" class="mr-2">
-              <span class="px-4 py-2 bg-green-100 text-green-800 rounded font-medium">PASS</span>
-            </label>
-            <label class="flex items-center cursor-pointer">
-              <input type="radio" x-model="overallResult" value="fail" class="mr-2">
-              <span class="px-4 py-2 bg-red-100 text-red-800 rounded font-medium">FAIL</span>
-            </label>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            Overall Audit Notes
-          </label>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Notes</label>
           <textarea x-model="completionNotes"
-                    placeholder="Enter any additional notes about this audit..."
+                    placeholder="Enter any notes about this review..."
                     class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent"
                     rows="4"></textarea>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            KPI Notes
-          </label>
-          <textarea x-model="kpiNotes"
-                    placeholder="Enter KPI-related notes or reasons for failure..."
-                    class="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-brand-indigo focus:border-transparent"
-                    rows="3"></textarea>
-        </div>
-
         <div class="flex items-center gap-3">
-          <button @click="completeAudit()"
+          <button @click="saveImageReview()"
                   :disabled="submittingCompletion"
                   class="px-6 py-3 bg-brand-indigo hover:bg-brand-deep-purple text-white font-bold rounded-lg transition-colors flex items-center gap-2"
                   :class="submittingCompletion ? 'opacity-50 cursor-not-allowed' : ''">
             <i class="fa-solid fa-save"></i>
-            <span x-show="!submittingCompletion">Save</span>
+            <span x-show="!submittingCompletion" x-text="stats.pending > 0 ? 'Save Progress' : 'Complete Image Review'"></span>
             <span x-show="submittingCompletion" class="flex items-center gap-2">
               <i class="fa-solid fa-spinner fa-spin"></i>
               Saving...
@@ -652,12 +687,17 @@ const sessionId = {{ session.pk }};
 const opportunityId = {{ opportunity_id|default:"null" }};
 const connectUrl = '{{ connect_url|default:"https://connect.dimagi.com" }}';
 const orgSlug = '{{ org_slug|default:"" }}';
+const workflowRunId = {{ workflow_run_id|default:"null" }};
+const passThreshold = parseInt('{{ pass_threshold|default:"80" }}') || 80;
 
 function bulkAssessmentInterface() {
   return {
     selectedQuestionId: '{{ selected_question_id }}',
     selectedStatus: '{{ selected_status }}',
     widgetSize: 300,
+    passThreshold: passThreshold,
+    workflowRunId: workflowRunId,
+    backUrl: null,
     stats: {
       total: 0,
       pending: 0,
@@ -695,6 +735,10 @@ function bulkAssessmentInterface() {
     completionNotes: '{{ session.notes|default:""|escapejs }}',
     kpiNotes: '{{ session.kpi_notes|default:""|escapejs }}',
     submittingCompletion: false,
+    isReadOnly: '{{ session.status }}' === 'completed',
+    taskModal: { open: false, flw: null, title: '', description: '', saving: false, error: null },
+    createdTaskFLWs: new Set(),
+    flwTasks: {},
     allAssessments: [],
     assessments: [],
     questionIds: [],
@@ -713,9 +757,25 @@ function bulkAssessmentInterface() {
       }
       const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
       this.csrfToken = tokenInput ? tokenInput.value : '';
+      // Set back URL: workflow page if launched from workflow, else audit list
+      if (workflowRunId && opportunityId) {
+        this.backUrl = '/labs/workflow/?opportunity_id=' + opportunityId;
+      }
       this.updateUrlParams();
       this.fetchData();
       this.fetchAgents();
+      // Load persisted task info from workflow run state (for reopen)
+      if (workflowRunId) {
+        fetch('/labs/workflow/api/run/' + workflowRunId + '/')
+          .then(r => r.json())
+          .then(data => {
+            if (data.run && data.run.state && data.run.state.flw_tasks) {
+              this.flwTasks = data.run.state.flw_tasks;
+              this.createdTaskFLWs = new Set(Object.keys(data.run.state.flw_tasks));
+            }
+          })
+          .catch(() => {});
+      }
 
       // Warn user about unsaved changes
       window.addEventListener('beforeunload', (event) => {
@@ -813,6 +873,12 @@ function bulkAssessmentInterface() {
       this.loadError = null;
       this.fetchData();
     },
+    formatQuestionId(qid) {
+      return (qid || '')
+        .split('_')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    },
     applyFilters() {
       this.updateUrlParams();
       this.applyFiltersClientSide();
@@ -872,16 +938,33 @@ function bulkAssessmentInterface() {
         })
         .sort((a, b) => (a.visit_date_sort || '').localeCompare(b.visit_date_sort || ''));
     },
+    get flwSummaries() {
+      const flwMap = {};
+      this.allAssessments.forEach((a) => {
+        const key = a.username || 'Unknown';
+        if (!flwMap[key]) {
+          flwMap[key] = { username: key, flw_name: a.flw_name || key, passed: 0, failed: 0, incomplete: 0, pending: 0, total: 0 };
+        }
+        flwMap[key].total++;
+        if (a.result === 'pass') flwMap[key].passed++;
+        else if (a.result === 'fail') flwMap[key].failed++;
+        else if (a.result === 'incomplete') flwMap[key].incomplete++;
+        else flwMap[key].pending++;
+      });
+      return Object.values(flwMap).sort((a, b) => a.username.localeCompare(b.username));
+    },
     recalculateStats() {
       const total = this.allAssessments.length;
       const passCount = this.allAssessments.filter((a) => a.result === 'pass').length;
       const failCount = this.allAssessments.filter((a) => a.result === 'fail').length;
-      const pendingCount = total - passCount - failCount;
+      const incompleteCount = this.allAssessments.filter((a) => a.result === 'incomplete').length;
+      const pendingCount = total - passCount - failCount - incompleteCount;
       this.stats = {
         total,
         pending: pendingCount,
         pass: passCount,
         fail: failCount,
+        incomplete: incompleteCount,
       };
     },
     updateAssessmentLocal(visitId, blobId, questionId, resultValue, notesValue, aiResult, aiNotes) {
@@ -944,6 +1027,16 @@ function bulkAssessmentInterface() {
       return resultValue || '';
     },
     handleAssessmentUpdate(detail) {
+      // In read-only (completed) mode, block pass/fail changes
+      if (this.isReadOnly) {
+        if (detail.callback) {
+          const existing = this.allAssessments.find(
+            a => a.blob_id === detail.blobId && a.visit_id === detail.visitId
+          );
+          detail.callback(existing?.result || 'pending');
+        }
+        return;
+      }
       const normalized = this.updateAssessmentLocal(
         detail.visitId,
         detail.blobId,
@@ -968,11 +1061,62 @@ function bulkAssessmentInterface() {
         detail.aiNotes
       );
     },
+    openTaskModal(flw) {
+      this.taskModal = {
+        open: true,
+        flw,
+        title: 'Images for ' + (flw.flw_name || flw.username) + ' have failed to meet passing threshold…',
+        description: '',
+        saving: false,
+        error: null,
+      };
+    },
+    async submitTaskModal() {
+      if (!this.taskModal.title.trim()) return;
+      this.taskModal.saving = true;
+      this.taskModal.error = null;
+      try {
+        const resp = await fetch('/tasks/bulk-create/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrfToken },
+          body: JSON.stringify({
+            opportunity_id: opportunityId,
+            flw_ids: [this.taskModal.flw.username],
+            flw_names: { [this.taskModal.flw.username]: this.taskModal.flw.flw_name || this.taskModal.flw.username },
+            title: this.taskModal.title,
+            description: this.taskModal.description,
+          }),
+        });
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.error || 'Failed to create task');
+        const flwUsername = this.taskModal.flw.username;
+        const taskId = data.tasks && data.tasks[0] ? data.tasks[0].id : null;
+        if (!taskId) throw new Error('Task created but no task ID returned');
+        this.createdTaskFLWs = new Set([...this.createdTaskFLWs, flwUsername]);
+        this.flwTasks = { ...this.flwTasks, [flwUsername]: taskId };
+        if (workflowRunId) {
+          try {
+            await fetch('/labs/workflow/api/run/' + workflowRunId + '/state/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrfToken },
+              body: JSON.stringify({ state: {
+                tasks_created: this.createdTaskFLWs.size,
+                flw_tasks: this.flwTasks,
+              }}),
+            });
+          } catch (_) { /* non-critical, ignore */ }
+        }
+        this.taskModal.open = false;
+      } catch (e) {
+        this.taskModal.error = e.message;
+        this.taskModal.saving = false;
+      }
+    },
     passAllPending() {
       if (this.loading || this.bulkProcessing) {
         return;
       }
-      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
+      const pendingAssessments = this.assessments.filter((a) => !a.result || a.result === '');
       if (pendingAssessments.length === 0) {
         return;
       }
@@ -996,7 +1140,7 @@ function bulkAssessmentInterface() {
       if (this.loading || this.bulkProcessing) {
         return;
       }
-      const pendingAssessments = this.allAssessments.filter((a) => !a.result || a.result === '');
+      const pendingAssessments = this.assessments.filter((a) => !a.result || a.result === '');
       if (pendingAssessments.length === 0) {
         return;
       }
@@ -1020,7 +1164,7 @@ function bulkAssessmentInterface() {
       if (this.loading || this.bulkProcessing) {
         return;
       }
-      const assessedAssessments = this.allAssessments.filter((a) => a.result && a.result !== '');
+      const assessedAssessments = this.assessments.filter((a) => a.result && a.result !== '');
       if (assessedAssessments.length === 0) {
         return;
       }
@@ -1277,6 +1421,89 @@ function bulkAssessmentInterface() {
         window.location.href = '{% url "audit:session_list" %}';
       } catch (error) {
         alert('Error completing audit: ' + error.message);
+      } finally {
+        this.submittingCompletion = false;
+      }
+    },
+    async saveImageReview() {
+      // Called by the "Complete Image Review" / "Save Progress" button.
+      // If images still pending: save as in_progress (no redirect).
+      // If all images reviewed: complete the session and redirect to workflow.
+      if (this.submittingCompletion) return;
+      this.submittingCompletion = true;
+      try {
+        const hasPending = this.stats.pending > 0;
+        const formData = new FormData();
+        formData.append('visit_results', JSON.stringify(this.visitResults));
+        formData.append('csrfmiddlewaretoken', this.csrfToken);
+
+        if (hasPending) {
+          // Save progress only - keep in_progress status
+          const response = await fetch(this.saveUrl, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to save progress');
+          }
+          this.hasUnsavedChanges = false;
+          const redirectUrl = (workflowRunId && opportunityId)
+            ? '/labs/workflow/?opportunity_id=' + opportunityId
+            : '{% url "audit:session_list" %}';
+          window.location.href = redirectUrl;
+        } else {
+          // Complete the session
+          const overallResult = this.stats.fail > 0 ? 'fail' : 'pass';
+          formData.append('overall_result', overallResult);
+          formData.append('notes', this.completionNotes);
+          formData.append('kpi_notes', '');
+          const response = await fetch(this.completeUrl, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to complete review');
+          }
+          this.hasUnsavedChanges = false;
+
+          // Update workflow run state if launched from a workflow
+          if (workflowRunId) {
+            const totalAssessed = this.stats.pass + this.stats.fail + (this.stats.incomplete || 0);
+            const avgPassed = totalAssessed > 0 ? Math.round(this.stats.pass / totalAssessed * 100) : null;
+            try {
+              await fetch('/labs/workflow/api/run/' + workflowRunId + '/state/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': this.csrfToken,
+                },
+                body: JSON.stringify({
+                  state: {
+                    phase: 'completed',
+                    status: 'completed',
+                    avg_passed: avgPassed,
+                    flw_count: new Set(this.allAssessments.map(a => a.username)).size,
+                    period_start: this.bulkStartDate,
+                    period_end: this.bulkEndDate,
+                    completion: { completed_at: new Date().toISOString() },
+                  }
+                }),
+              });
+            } catch (e) {
+              console.warn('Failed to update workflow state:', e);
+            }
+          }
+
+          // Redirect to workflow or audit list
+          const redirectUrl = (workflowRunId && opportunityId)
+            ? '/labs/workflow/?opportunity_id=' + opportunityId
+            : '{% url "audit:session_list" %}';
+          window.location.href = redirectUrl;
+        }
+      } catch (error) {
+        alert('Error: ' + error.message);
       } finally {
         this.submittingCompletion = false;
       }

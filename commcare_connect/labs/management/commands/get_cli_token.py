@@ -61,9 +61,8 @@ class Command(BaseCommand):
         client_id = options.get("client_id") or getattr(settings, "CLI_OAUTH_CLIENT_ID", None)
         production_url = options.get("production_url") or getattr(settings, "CONNECT_PRODUCTION_URL", None)
 
-        # Only load client_secret if explicitly provided via command line
-        # For public clients (recommended for CLI), don't use client_secret - use PKCE instead
-        client_secret = options.get("client_secret")
+        # Load client_secret from command line or settings (required for confidential clients)
+        client_secret = options.get("client_secret") or getattr(settings, "CLI_OAUTH_CLIENT_SECRET", None)
 
         if not client_id:
             raise CommandError(
