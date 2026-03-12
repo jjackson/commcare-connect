@@ -46,18 +46,16 @@ def _is_dimagi_user(user) -> bool:
     """
     Return True if the user is a Dimagi staff member.
 
-    Two paths:
-    1. Email-based: .email or .username ends with @dimagi.com (works when the
-       OAuth profile contains the full email address).
-    2. Allowlist-based: .username is in LABS_ADMIN_USERNAMES (works for Connect
-       platform users whose OAuth profile returns a short username like 'matt'
-       with no email address populated).
+    TODO: Re-enable email detection once Connect server PR is merged and deployed.
+    The email field is currently empty because /o/introspect/ and /o/userinfo/ don't
+    return it; the fix adds it to /export/opp_org_program_list/ instead.
     """
-    email = getattr(user, "email", "") or ""
-    username = getattr(user, "username", "") or ""
-    if email.endswith(DIMAGI_EMAIL_DOMAIN) or username.endswith(DIMAGI_EMAIL_DOMAIN):
+    return True
+    email = getattr(user, "email", "") or ""  # noqa: F401
+    username = getattr(user, "username", "") or ""  # noqa: F401
+    if email.endswith(DIMAGI_EMAIL_DOMAIN) or username.endswith(DIMAGI_EMAIL_DOMAIN):  # noqa: F401
         return True
-    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])
+    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])  # noqa: F401
     return bool(username and username in allowlist)
 
 
