@@ -19,12 +19,14 @@ Most production apps have been removed from this codebase. The remaining non-lab
 | App              | Purpose                                                               | Key files                                                                        |
 | ---------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `labs/`          | Core infrastructure: OAuth, API client, middleware, analysis pipeline | `integrations/connect/api_client.py`, `models.py`, `middleware.py`, `context.py` |
-| `audit/`         | Quality assurance review of FLW visits                                | `data_access.py`, `ai_review.py`, `tasks.py`                                     |
+| `audit/`         | Quality assurance review of FLW visits, HQ image questions            | `data_access.py`, `ai_review.py`, `tasks.py`, `hq_app_utils.py`, `views.py`     |
 | `tasks/`         | Task management for FLW follow-ups                                    | `data_access.py` (simplest example of the pattern)                               |
 | `workflow/`      | Configurable workflow engine with React UIs and pipelines             | `data_access.py` (most complex), `templates/`                                    |
 | `ai/`            | AI agent integration via pydantic-ai, SSE streaming                   | `agents/`, `views.py` (AIStreamView)                                             |
 | `solicitations/` | RFP management (scoped by program, not opportunity)                   | `data_access.py`, `models.py`                                                    |
+| `solicitations_new/` | Next-gen solicitations with API views, forms, and MCP tools       | `data_access.py`, `api_views.py`, `mcp_tools.py`, `forms.py`                    |
 | `coverage/`      | Delivery unit mapping from CommCare HQ (separate OAuth)               | `data_access.py`, `data_loader.py`                                               |
+| `custom_analysis/` | Program-specific analysis dashboards (audit_of_audits, chc_nutrition, kmc, mbw, rutf) | Each sub-app has `data_access.py`, `views.py`, `urls.py`     |
 
 ### Retained Non-Labs Apps (Models + Migrations Only)
 
@@ -36,11 +38,13 @@ Most production apps have been removed from this codebase. The remaining non-lab
 | `program/`       | Program model definitions and migrations                              |
 | `commcarehq/`    | Minimal — just `HQServer` model + migrations (needed by FKs)          |
 
-**Cross-app connections:** Workflow can create audits and tasks. AI agents modify workflows and solicitations. Coverage is standalone.
+**Cross-app connections:** Workflow can create audits and tasks. AI agents modify workflows and solicitations. `custom_analysis/audit_of_audits` reads audit and organization data. Coverage is standalone.
 
 ## Workflow Engine
 
 Templates are single Python files in `workflow/templates/` exporting DEFINITION (statuses, config), RENDER_CODE (React JSX string transpiled by Babel), and optionally PIPELINE_SCHEMAS (CommCare form field extraction). The registry auto-discovers them. Pipeline schemas map CommCare form JSON paths to extracted fields with aggregations and transforms. Render code receives `{definition, instance, workers, pipelines, links, actions, onUpdateState}` as props.
+
+**Existing templates:** `audit_with_ai_review`, `bulk_image_audit`, `kmc_flw_flags`, `kmc_longitudinal`, `kmc_project_metrics`, `mbw_monitoring_v2`, `ocs_outreach`, `performance_review`, `sam_followup`
 
 Use the MCP server's `get_form_json_paths` tool to discover correct field paths when building pipeline schemas.
 
@@ -97,3 +101,4 @@ A local MCP server (`tools/commcare_mcp/`) gives Claude access to CommCare appli
 - **[.claude/AGENTS.md](.claude/AGENTS.md)** — Full architecture reference: per-app details, API endpoints, data access patterns, common mistakes
 - **[docs/LABS_ARCHITECTURE.md](docs/LABS_ARCHITECTURE.md)** — Architecture diagrams, data flow, cross-app dependency matrix, decision tree
 - **[pr_guidelines.md](pr_guidelines.md)** — Pull request best practices
+- **[docs/plans/](docs/plans/)** — Design documents and implementation plans for features built in this environment
