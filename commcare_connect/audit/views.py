@@ -29,6 +29,7 @@ from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.sse_streaming import CeleryTaskStreamView
+from commcare_connect.labs.integrations.commcare.api_client import CommCareDataAccess
 from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
 
 logger = logging.getLogger(__name__)
@@ -676,17 +677,17 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
             return HttpResponse(f"Image not found: {e}", status=404)
 
 
-def _get_commcarehq_auth_header(request) -> tuple:
+def _get_commcarehq_auth_header(request, domain: str = "") -> tuple:
     """Return (auth_header, source) for CommCare HQ API calls, or (None, error_msg).
 
     Priority:
-    1. CommCare OAuth Bearer token from session (Labs overview Authorize button)
+    1. CommCare OAuth Bearer token — via CommCareDataAccess which auto-refreshes if expired
+       (same pattern used by MBW Dashboard and CHC analysis pipeline that work on the server)
     2. API key from settings (COMMCARE_API_KEY + COMMCARE_USERNAME — local dev fallback)
     """
-    commcare_oauth = request.session.get("commcare_oauth", {})
-    cc_access_token = commcare_oauth.get("access_token", "")
-    if cc_access_token:
-        return f"Bearer {cc_access_token}", "oauth"
+    data_access = CommCareDataAccess(request=request, domain=domain)
+    if data_access.check_token_valid():
+        return f"Bearer {data_access.access_token}", "oauth"
 
     api_key = getattr(settings, "COMMCARE_API_KEY", "")
     username = getattr(settings, "COMMCARE_USERNAME", "")
