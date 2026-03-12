@@ -322,10 +322,10 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     model = Opportunity
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
-    activate_events = []
+    active_history_events = []
 
     def get(self, *args, **kwargs):
-        self.activate_events = (
+        self.active_history_events = (
             OpportunityActiveEvent.objects.filter(pgh_obj=self.get_object())
             .select_related("pgh_context")
             .order_by("-pgh_created_at")
@@ -350,13 +350,13 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["active_events"] = self.activate_events
+        context["active_events"] = self.active_history_events
         return context
 
     def get_form_kwargs(self, *args, **kwargs):
         form_kwargs = super().get_form_kwargs(*args, **kwargs)
-        if self.activate_events:
-            form_kwargs.update({"latest_activate_event": self.activate_events[0]})
+        if self.active_history_events:
+            form_kwargs.update({"latest_active_history_event": self.active_history_events[0]})
         return form_kwargs
 
 

@@ -141,7 +141,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         ]
 
     def __init__(self, *args, **kwargs):
-        self.latest_activate_event = kwargs.pop("latest_activate_event", None)
+        self.latest_active_history_event = kwargs.pop("latest_active_history_event", None)
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
@@ -170,7 +170,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                     ),
                     HTML(
                         "{% load i18n %}"
-                        "{% with latest_active_event=form.latest_activate_event %}"
+                        "{% with latest_active_event=form.latest_active_history_event %}"
                         '{% include "opportunity/partials/active_toggle_metadata.html" %}'
                         "{% endwith %}"
                     ),
