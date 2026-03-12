@@ -6,7 +6,7 @@ import pytest
 from django.utils.timezone import now
 from waffle.testutils import override_switch
 
-from commcare_connect.connect_id_client.models import ConnectIdUser
+from commcare_connect.connect_id_client.models import ConnectIdUser, Message
 from commcare_connect.flags.switch_names import AUTOMATED_INVOICES_MONTHLY
 from commcare_connect.opportunity.models import (
     BlobMeta,
@@ -24,8 +24,10 @@ from commcare_connect.opportunity.tasks import (
     auto_deactivate_ended_opportunities,
     download_user_visit_attachments,
     generate_automated_service_delivery_invoice,
+    notify_user_for_scored_assessment,
 )
 from commcare_connect.opportunity.tests.factories import (
+    AssessmentFactory,
     CompletedModuleFactory,
     CompletedWorkFactory,
     LearnModuleFactory,
@@ -363,3 +365,24 @@ class TestAutoDeactivateEndedOpportunities:
             deactivation_event.pgh_context.metadata["action"]
             == "commcare_connect.opportunity.tasks.auto_deactivate_ended_opportunities"
         )
+
+
+@mock.patch("commcare_connect.opportunity.tasks.send_message")
+def test_notify_user_for_scored_assessment(send_message_patch):
+    assessment = AssessmentFactory()
+    notify_user_for_scored_assessment(assessment.pk)
+    assert send_message_patch.call_count == 1
+    send_message_patch.assert_called_with(
+        Message(
+            usernames=[assessment.user.username],
+            data={
+                "action": "ccc_generic_opportunity",
+                "key": "scored_assessment",
+                "opportunity_status": "learn",
+                "opportunity_id": str(assessment.opportunity.id),
+                "opportunity_uuid": str(assessment.opportunity.opportunity_id),
+                "title": "Update on your Assessment",
+                "body": f"Assessment for opportunity '{assessment.opportunity.name}' scored, check your status",
+            },
+        )
+    )

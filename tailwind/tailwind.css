@@ -570,7 +570,7 @@
     @apply text-brand-deep-purple mt-4 text-lg font-medium;
   }
 
-  .htmx-request .loading-indicator {
+  .htmx-request.loading-indicator {
     @apply pointer-events-auto opacity-100;
   }
 }
