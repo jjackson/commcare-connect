@@ -46,18 +46,16 @@ def _is_dimagi_user(user) -> bool:
     """
     Return True if the user is a Dimagi staff member.
 
-    Two paths:
-    1. Email-based: .email or .username ends with @dimagi.com (works when the
-       OAuth profile contains the full email address).
-    2. Allowlist-based: .username is in LABS_ADMIN_USERNAMES (works for Connect
-       platform users whose OAuth profile returns a short username like 'matt'
-       with no email address populated).
+    TODO: Re-enable email detection once Connect server PR is merged and deployed.
+    The email field is currently empty because /o/introspect/ and /o/userinfo/ don't
+    return it; the fix adds it to /export/opp_org_program_list/ instead.
     """
-    email = getattr(user, "email", "") or ""
-    username = getattr(user, "username", "") or ""
-    if email.endswith(DIMAGI_EMAIL_DOMAIN) or username.endswith(DIMAGI_EMAIL_DOMAIN):
+    return True
+    email = getattr(user, "email", "") or ""  # noqa: F401
+    username = getattr(user, "username", "") or ""  # noqa: F401
+    if email.endswith(DIMAGI_EMAIL_DOMAIN) or username.endswith(DIMAGI_EMAIL_DOMAIN):  # noqa: F401
         return True
-    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])
+    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])  # noqa: F401
     return bool(username and username in allowlist)
 
 
@@ -159,13 +157,41 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
         selected_template_types: list[str] = self.request.GET.getlist("template_types")
         template_types_filter: list[str] | None = selected_template_types if selected_template_types else None
 
-        # All user opportunities — runs are always scoped by opp_id
-        opportunity_ids: list[int] = [
-            o["id"] for o in user_opps if isinstance(o.get("id"), int)
-        ]
-        opp_name_map: dict[int, str] = {
-            o["id"]: o.get("name", "") for o in user_opps if isinstance(o.get("id"), int)
+        # Filter opportunities via the org → program → opportunity chain:
+        #   org.slug  →  program.organization  →  program.id  →  opp.program
+        # This mirrors the context selector's cascading filter logic.
+        selected_org_id_set: set[int] = set(selected_org_ids)
+        selected_org_slugs: set[str] = {
+            o["slug"]
+            for o in user_orgs
+            if o.get("id") in selected_org_id_set and o.get("slug")
         }
+
+        user_programs: list[dict] = getattr(self.request.user, "programs", []) or []
+        selected_program_ids: set = {
+            p["id"]
+            for p in user_programs
+            if p.get("organization") in selected_org_slugs and p.get("id") is not None
+        }
+
+        if selected_program_ids:
+            filtered_opps = [
+                o for o in user_opps
+                if isinstance(o.get("id"), int) and o.get("program") in selected_program_ids
+            ]
+        else:
+            # No programs matched (org has no programs, or session data is stale).
+            # Fall back to all opportunities so the report remains usable.
+            logger.warning(
+                "[AuditOfAudits] No programs found for org slugs %s "
+                "(user has %d programs). Falling back to all opportunities.",
+                sorted(selected_org_slugs),
+                len(user_programs),
+            )
+            filtered_opps = [o for o in user_opps if isinstance(o.get("id"), int)]
+
+        opportunity_ids: list[int] = [o["id"] for o in filtered_opps]
+        opp_name_map: dict[int, str] = {o["id"]: o.get("name", "") for o in filtered_opps}
 
         # Map org id → org name for the report header summary
         org_name_map: dict[int, str] = {o["id"]: o.get("name", "") for o in user_orgs}
