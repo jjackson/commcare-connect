@@ -123,13 +123,15 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                 context["definitions"] = definitions  # Keep for backwards compatibility
                 context["available_templates"] = list_templates()
             except Exception as e:
-                logger.error(f"Failed to load workflow definitions: {e}")
+                logger.error(f"Failed to load workflow definitions: {e}", exc_info=True)
                 context["workflows"] = []
                 context["definitions"] = []
+                context["available_templates"] = list_templates()
                 context["error"] = str(e)
         else:
             context["workflows"] = []
             context["definitions"] = []
+            context["available_templates"] = list_templates()
 
         return context
 
