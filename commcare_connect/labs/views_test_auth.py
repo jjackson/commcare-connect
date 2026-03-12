@@ -55,6 +55,15 @@ def test_auth_view(request):
     if not org_data:
         return JsonResponse({"error": "Failed to fetch organization data"}, status=500)
 
+    # org_data now includes a 'user' object with email and commcare_username.
+    # For Dimagi staff the CommCareHQ username IS their @dimagi.com address, so
+    # use it as a fallback when OAuth introspection didn't return an email.
+    if not profile_data.get("email"):
+        user_info = org_data.get("user", {})
+        email = user_info.get("email") or user_info.get("commcare_username", "")
+        if email:
+            profile_data["email"] = email
+
     # Convert expires_at from ISO string to timestamp
     if "expires_at" in token_data and isinstance(token_data["expires_at"], str):
         expires_at = datetime.fromisoformat(token_data["expires_at"]).timestamp()

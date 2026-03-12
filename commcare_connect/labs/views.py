@@ -144,19 +144,20 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
         else:
             coverage_url = "/coverage/?config=chc_nutrition"
 
-        # Dimagi staff check — same logic as audit_of_audits/views.py _is_dimagi_user().
-        # Tasks and Workflows are open to all authenticated users.
-        # Everything else (Audit, Solicitations, all Custom Analysis) is Dimagi-only.
-        from django.conf import settings as _settings
-
-        _u_email = getattr(self.request.user, "email", "") or ""
-        _u_username = getattr(self.request.user, "username", "") or ""
-        _labs_admins = getattr(_settings, "LABS_ADMIN_USERNAMES", [])
-        _is_dimagi = (
-            _u_email.endswith("@dimagi.com")
-            or _u_username.endswith("@dimagi.com")
-            or (_u_username and _u_username in _labs_admins)
-        )
+        # TODO: Re-enable email detection once Connect server PR is merged and deployed.
+        # The email field is currently empty because /o/introspect/ and /o/userinfo/ don't
+        # return it; the fix adds it to /export/opp_org_program_list/ instead.
+        # Original check (restore by replacing the next line and un-commenting the block):
+        #   from django.conf import settings as _settings
+        #   _u_email = getattr(self.request.user, "email", "") or ""
+        #   _u_username = getattr(self.request.user, "username", "") or ""
+        #   _labs_admins = getattr(_settings, "LABS_ADMIN_USERNAMES", [])
+        #   _is_dimagi = (
+        #       _u_email.endswith("@dimagi.com")
+        #       or _u_username.endswith("@dimagi.com")
+        #       or (_u_username and _u_username in _labs_admins)
+        #   )
+        _is_dimagi = True
 
         # ── Labs projects ──────────────────────────────────────────────────────
         # Tasks + Workflows: visible to all authenticated users.
