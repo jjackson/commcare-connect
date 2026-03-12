@@ -677,10 +677,12 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
 
 
 class CommCareHQImageProxyView(LoginRequiredMixin, View):
-    """Proxy CommCareHQ form attachment images using API key auth.
+    """Proxy CommCareHQ form attachment images using the user's CommCare OAuth token.
 
     Used for opportunities where photos are stored as CommCareHQ attachments
     (photo_link_ors, muac_photo_link) rather than Connect blobs.
+
+    Requires the user to have authorized CommCare on the Labs overview page.
     """
 
     def get(self, request):
@@ -704,19 +706,29 @@ class CommCareHQImageProxyView(LoginRequiredMixin, View):
         except Exception:
             return HttpResponse("Invalid URL", status=400)
 
-        api_key = getattr(settings, "COMMCARE_API_KEY", "")
-        username = getattr(settings, "COMMCARE_USERNAME", "")
-        if not api_key or not username:
-            logger.error("[HQImageProxy] COMMCARE_API_KEY / COMMCARE_USERNAME not configured")
-            return HttpResponse("CommCareHQ credentials not configured", status=503)
+        # Use the user's CommCare OAuth token (authorized via Labs overview page)
+        commcare_oauth = request.session.get("commcare_oauth", {})
+        cc_access_token = commcare_oauth.get("access_token", "")
+        if not cc_access_token:
+            logger.warning("[HQImageProxy] No CommCare OAuth token in session")
+            return HttpResponse(
+                "CommCare not authorized. Please authorize CommCare on the Labs overview page.",
+                status=401,
+            )
 
         try:
             resp = httpx.get(
                 hq_url,
-                headers={"Authorization": f"ApiKey {username}:{api_key}"},
+                headers={"Authorization": f"Bearer {cc_access_token}"},
                 timeout=30.0,
                 follow_redirects=True,
             )
+            if resp.status_code == 401:
+                logger.warning(f"[HQImageProxy] CommCare token rejected (401) for {hq_url}")
+                return HttpResponse(
+                    "CommCare token expired. Please re-authorize CommCare on the Labs overview page.",
+                    status=401,
+                )
             resp.raise_for_status()
             content_type = resp.headers.get("content-type", "image/jpeg")
             return HttpResponse(resp.content, content_type=content_type)
@@ -1871,20 +1883,29 @@ class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
             )
 
         # Step 2: Fetch app definition from CommCare HQ
+        # Use the user's CommCare OAuth token (authorized via Labs overview page)
         hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
-        api_key = getattr(settings, "COMMCARE_API_KEY", "")
-        username = getattr(settings, "COMMCARE_USERNAME", "")
-        if not api_key or not username:
-            logger.error("[ImageQuestions] COMMCARE_API_KEY / COMMCARE_USERNAME not configured")
-            return JsonResponse({"error": "CommCare HQ credentials not configured"}, status=500)
+        commcare_oauth = request.session.get("commcare_oauth", {})
+        cc_access_token = commcare_oauth.get("access_token", "")
+        if not cc_access_token:
+            logger.warning("[ImageQuestions] No CommCare OAuth token in session")
+            return JsonResponse(
+                {"error": "CommCare not authorized. Please authorize CommCare on the Labs overview page."},
+                status=401,
+            )
 
         hq_url = f"{hq_base}/a/{cc_domain}/api/v0.5/application/{cc_app_id}/"
         try:
             resp = httpx.get(
                 hq_url,
-                headers={"Authorization": f"ApiKey {username}:{api_key}"},
+                headers={"Authorization": f"Bearer {cc_access_token}"},
                 timeout=30.0,
             )
+            if resp.status_code == 401:
+                return JsonResponse(
+                    {"error": "CommCare token expired. Please re-authorize CommCare on the Labs overview page."},
+                    status=401,
+                )
             resp.raise_for_status()
             app = resp.json()
         except Exception as e:

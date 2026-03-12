@@ -132,8 +132,16 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         setImageQuestionsLoading(true);
         setImageQuestionsError(null);
         fetch('/audit/api/opportunity/' + oppId + '/image-questions/')
-            .then(r => {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
+            .then(async r => {
+                if (!r.ok) {
+                    // Try to get a descriptive error from the JSON response body
+                    let msg = 'HTTP ' + r.status;
+                    try {
+                        const errData = await r.json();
+                        if (errData.error) msg = errData.error;
+                    } catch (_) {}
+                    throw new Error(msg);
+                }
                 return r.json();
             })
             .then(data => {
