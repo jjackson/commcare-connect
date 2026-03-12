@@ -322,6 +322,7 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     model = Opportunity
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
+    activate_events = []
 
     def get(self, *args, **kwargs):
         self.activate_events = (
@@ -354,7 +355,8 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
 
     def get_form_kwargs(self, *args, **kwargs):
         form_kwargs = super().get_form_kwargs(*args, **kwargs)
-        form_kwargs.update({"latest_activate_event": self.activate_events[0]})
+        if self.activate_events:
+            form_kwargs.update({"latest_activate_event": self.activate_events[0]})
         return form_kwargs
 
 

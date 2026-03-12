@@ -140,8 +140,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             "delivery_type",
         ]
 
-    def __init__(self, latest_activate_event, *args, **kwargs):
-        self.latest_activate_event = latest_activate_event
+    def __init__(self, *args, **kwargs):
+        self.latest_activate_event = kwargs.pop("latest_activate_event", None)
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
