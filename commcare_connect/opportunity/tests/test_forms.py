@@ -661,7 +661,7 @@ class TestAutomatedPaymentInvoiceForm:
         assert invoice.title is None
         mock_link_invoice.assert_not_called()
 
-    @patch("commcare_connect.opportunity.forms.link_invoice_to_completed_works")
+    @patch("commcare_connect.opportunity.forms.forms.link_invoice_to_completed_works")
     def test_service_delivery_form(self, mock_link_invoice, valid_opportunity):
         ExchangeRateFactory()
 
