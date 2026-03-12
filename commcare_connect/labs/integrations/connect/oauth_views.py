@@ -185,14 +185,16 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
                 headers={"Authorization": f"Bearer {access_token}"},
                 timeout=10,
             )
-            if userinfo_response.status_code == 200:
-                userinfo_data = userinfo_response.json()
-                email = userinfo_data.get("email", "")
-                if email:
-                    profile_data["email"] = email
-                    logger.debug(f"Got email from userinfo endpoint for user: {profile_data.get('username')}")
-        except Exception as e:
-            logger.warning(f"Failed to fetch email from userinfo endpoint: {e}")
+            userinfo_response.raise_for_status()
+            userinfo_data = userinfo_response.json()
+            email = userinfo_data.get("email", "")
+            if email:
+                profile_data["email"] = email
+                logger.debug(f"Got email from userinfo endpoint for user: {profile_data.get('username')}")
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Userinfo endpoint returned {e.response.status_code} for user {profile_data.get('username')}")
+        except httpx.RequestError as e:
+            logger.warning(f"Failed to reach userinfo endpoint: {e}")
 
     # Calculate token expiration
     expires_in = token_json.get("expires_in", 1209600)  # Default 2 weeks
