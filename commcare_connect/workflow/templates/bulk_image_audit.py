@@ -152,6 +152,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const [progress, setProgress] = React.useState(null);
     const [taskId, setTaskId] = React.useState(null);
     const cleanupRef = React.useRef(null);
+    const cancelledRef = React.useRef(false); // Set when user cancels before taskId is known
 
     // Cleanup SSE on unmount
     React.useEffect(() => {
@@ -251,6 +252,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // ── Create handler ───────────────────────────────────────────────────────
     const handleCreate = async () => {
+        cancelledRef.current = false; // Reset cancellation flag for new creation attempt
         if (selectedOpps.length === 0) return;
         if (selectedImageTypeIds.length === 0) return;
 
@@ -307,6 +309,18 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
             if (result.success && result.task_id) {
                 setTaskId(result.task_id);
+
+                // If user cancelled while we were waiting for task creation, cancel it now
+                if (cancelledRef.current) {
+                    cancelledRef.current = false;
+                    await actions.cancelAudit(result.task_id).catch(() => {});
+                    onUpdateState({
+                        phase: 'config',
+                        active_job: { job_id: result.task_id, status: 'cancelled' },
+                    }).catch(() => {});
+                    return;
+                }
+
                 onUpdateState({
                     active_job: {
                         job_id: result.task_id,
@@ -375,10 +389,25 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
 
     // ── Cancel handler ───────────────────────────────────────────────────────
     const handleCancel = async () => {
-        if (!taskId || isCancelling) return;
+        if (isCancelling) return;
         setIsCancelling(true);
         if (cleanupRef.current) { cleanupRef.current(); cleanupRef.current = null; }
         setIsRunning(false);
+
+        if (!taskId) {
+            // Task hasn't been created yet ("Submitting to task queue..." phase).
+            // Set a flag so handleCreate cancels it as soon as it gets a taskId.
+            cancelledRef.current = true;
+            setProgress({ status: 'cancelled', message: 'Audit creation cancelled' });
+            setPhase('config');
+            try {
+                await onUpdateState({ phase: 'config' });
+            } finally {
+                setIsCancelling(false);
+            }
+            return;
+        }
+
         try {
             await actions.cancelAudit(taskId);
         } catch (e) { /* ignore */ }

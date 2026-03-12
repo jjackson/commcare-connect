@@ -157,13 +157,49 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
         selected_template_types: list[str] = self.request.GET.getlist("template_types")
         template_types_filter: list[str] | None = selected_template_types if selected_template_types else None
 
-        # All user opportunities — runs are always scoped by opp_id
-        opportunity_ids: list[int] = [
-            o["id"] for o in user_opps if isinstance(o.get("id"), int)
-        ]
-        opp_name_map: dict[int, str] = {
-            o["id"]: o.get("name", "") for o in user_opps if isinstance(o.get("id"), int)
+        # Filter opportunities via the org → program → opportunity chain:
+        #   org.slug  →  program.organization  →  program.id  →  opp.program
+        # This mirrors the context selector's cascading filter logic.
+        selected_org_id_set: set[int] = set(selected_org_ids)
+        selected_org_slugs: set[str] = {
+            o["slug"]
+            for o in user_orgs
+            if o.get("id") in selected_org_id_set and o.get("slug")
         }
+
+        user_programs: list[dict] = getattr(self.request.user, "programs", []) or []
+        selected_program_ids: set = {
+            p["id"]
+            for p in user_programs
+            if p.get("organization") in selected_org_slugs and p.get("id") is not None
+        }
+
+        if selected_program_ids:
+            filtered_opps = [
+                o for o in user_opps
+                if isinstance(o.get("id"), int) and o.get("program") in selected_program_ids
+            ]
+        elif selected_org_slugs:
+            # Org slugs resolved but no programs matched — org may legitimately have no programs.
+            # Fall back to all opportunities so the report remains usable.
+            logger.warning(
+                "[AuditOfAudits] No programs found for org slugs %s "
+                "(user has %d programs). Falling back to all opportunities.",
+                sorted(selected_org_slugs),
+                len(user_programs),
+            )
+            filtered_opps = [o for o in user_opps if isinstance(o.get("id"), int)]
+        else:
+            # Selected org IDs didn't resolve to any known org in this session.
+            # Return empty rather than leaking all opportunities.
+            logger.warning(
+                "[AuditOfAudits] Selected org IDs %s not found in user orgs (session may be stale).",
+                selected_org_ids,
+            )
+            filtered_opps = []
+
+        opportunity_ids: list[int] = [o["id"] for o in filtered_opps]
+        opp_name_map: dict[int, str] = {o["id"]: o.get("name", "") for o in filtered_opps}
 
         # Map org id → org name for the report header summary
         org_name_map: dict[int, str] = {o["id"]: o.get("name", "") for o in user_orgs}
