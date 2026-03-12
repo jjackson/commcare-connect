@@ -53,8 +53,6 @@ from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User, UserCredential
 
-from .layout import ActiveToggleMetadata
-
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
 CHECKBOX_CLASS = "simple-toggle"
@@ -148,7 +146,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         self.opportunity = self.instance
 
         self.fields["users"].required = False
-
         layout_fields = [
             Row(
                 HTML(
@@ -171,7 +168,12 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                         css_class=CHECKBOX_CLASS,
                         wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
                     ),
-                    ActiveToggleMetadata(self.latest_active_toggle_event),
+                    HTML(
+                        "{% load i18n %}"
+                        "{% with latest_active_event=form.latest_active_toggle_event %}"
+                        '{% include "opportunity/partials/active_toggle_metadata.html" %}'
+                        "{% endwith %}"
+                    ),
                     Field(
                         "is_test",
                         css_class=CHECKBOX_CLASS,
