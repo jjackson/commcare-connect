@@ -176,6 +176,24 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Could not retrieve your profile from Connect. Please try again.")
         return redirect("labs:oauth_initiate")
 
+    # If email wasn't returned by introspection (not a standard RFC 7662 field),
+    # fall back to the OIDC userinfo endpoint which does include email.
+    if not profile_data.get("email"):
+        try:
+            userinfo_response = httpx.get(
+                f"{settings.CONNECT_PRODUCTION_URL}/o/userinfo/",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+            if userinfo_response.status_code == 200:
+                userinfo_data = userinfo_response.json()
+                email = userinfo_data.get("email", "")
+                if email:
+                    profile_data["email"] = email
+                    logger.debug(f"Got email from userinfo endpoint for user: {profile_data.get('username')}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch email from userinfo endpoint: {e}")
+
     # Calculate token expiration
     expires_in = token_json.get("expires_in", 1209600)  # Default 2 weeks
     expires_at = timezone.now() + datetime.timedelta(seconds=expires_in)
