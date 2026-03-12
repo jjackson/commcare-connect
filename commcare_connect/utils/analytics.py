@@ -110,4 +110,6 @@ def _get_ga_session_id(request):
 
 
 def _is_dimagi_user(request):
-    return getattr(request.user, "email", "").endswith("@dimagi.com")
+    # TODO: Re-enable once Connect server PR is merged (email not yet available from OAuth).
+    return True
+    return getattr(request.user, "email", "").endswith("@dimagi.com")  # noqa: F401

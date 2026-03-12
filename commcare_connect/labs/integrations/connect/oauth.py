@@ -93,8 +93,7 @@ def introspect_token(access_token: str, client_id: str, client_secret: str, prod
             "last_name": introspect_data.get("family_name", ""),
         }
 
-        logger.debug(f"Token introspection successful for user: {profile_data.get('username')}")
-        logger.debug(f"Introspection data fields: {list(introspect_data.keys())}")
+        logger.info(f"Token introspection successful for user: {profile_data.get('username')}")
         return profile_data
 
     except httpx.HTTPError as e:
