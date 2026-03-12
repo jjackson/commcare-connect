@@ -676,13 +676,37 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
             return HttpResponse(f"Image not found: {e}", status=404)
 
 
+def _get_commcarehq_auth_header(request) -> tuple:
+    """Return (auth_header, source) for CommCare HQ API calls, or (None, error_msg).
+
+    Priority:
+    1. CommCare OAuth Bearer token from session (Labs overview Authorize button)
+    2. API key from settings (COMMCARE_API_KEY + COMMCARE_USERNAME — local dev fallback)
+    """
+    commcare_oauth = request.session.get("commcare_oauth", {})
+    cc_access_token = commcare_oauth.get("access_token", "")
+    if cc_access_token:
+        return f"Bearer {cc_access_token}", "oauth"
+
+    api_key = getattr(settings, "COMMCARE_API_KEY", "")
+    username = getattr(settings, "COMMCARE_USERNAME", "")
+    if api_key and username:
+        return f"ApiKey {username}:{api_key}", "apikey"
+
+    return None, (
+        "CommCare not authorized. Please authorize CommCare on the Labs overview page, "
+        "or configure COMMCARE_API_KEY / COMMCARE_USERNAME for local development."
+    )
+
+
 class CommCareHQImageProxyView(LoginRequiredMixin, View):
-    """Proxy CommCareHQ form attachment images using the user's CommCare OAuth token.
+    """Proxy CommCareHQ form attachment images via CommCare OAuth token or API key fallback.
 
     Used for opportunities where photos are stored as CommCareHQ attachments
     (photo_link_ors, muac_photo_link) rather than Connect blobs.
 
-    Requires the user to have authorized CommCare on the Labs overview page.
+    Uses CommCare OAuth session token (from Labs overview Authorize button) with
+    automatic fallback to COMMCARE_API_KEY for local development.
     """
 
     def get(self, request):
@@ -706,30 +730,29 @@ class CommCareHQImageProxyView(LoginRequiredMixin, View):
         except Exception:
             return HttpResponse("Invalid URL", status=400)
 
-        # Use the user's CommCare OAuth token (authorized via Labs overview page)
-        commcare_oauth = request.session.get("commcare_oauth", {})
-        cc_access_token = commcare_oauth.get("access_token", "")
-        if not cc_access_token:
-            logger.warning("[HQImageProxy] No CommCare OAuth token in session")
-            return HttpResponse(
-                "CommCare not authorized. Please authorize CommCare on the Labs overview page.",
-                status=401,
-            )
+        auth_header, source = _get_commcarehq_auth_header(request)
+        if not auth_header:
+            logger.warning(f"[HQImageProxy] No CommCare credentials available: {source}")
+            return HttpResponse(source, status=401)
 
         try:
             resp = httpx.get(
                 hq_url,
-                headers={"Authorization": f"Bearer {cc_access_token}"},
+                headers={"Authorization": auth_header},
                 timeout=30.0,
                 follow_redirects=True,
             )
             if resp.status_code == 401:
-                logger.warning(f"[HQImageProxy] CommCare token rejected (401) for {hq_url}")
+                logger.warning(f"[HQImageProxy] CommCare auth rejected (401) via {source} for {hq_url}")
                 return HttpResponse(
-                    "CommCare token expired. Please re-authorize CommCare on the Labs overview page.",
+                    "CommCare token expired or invalid. Please re-authorize CommCare on the Labs overview page.",
                     status=401,
                 )
-            resp.raise_for_status()
+            if not resp.is_success:
+                logger.error(
+                    f"[HQImageProxy] HQ returned {resp.status_code} via {source} for {hq_url}: {resp.text[:200]}"
+                )
+                return HttpResponse(f"HQ returned {resp.status_code}", status=resp.status_code)
             content_type = resp.headers.get("content-type", "image/jpeg")
             return HttpResponse(resp.content, content_type=content_type)
         except Exception as e:
@@ -1883,34 +1906,40 @@ class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
             )
 
         # Step 2: Fetch app definition from CommCare HQ
-        # Use the user's CommCare OAuth token (authorized via Labs overview page)
+        # Use v1 application API (supports OAuth Bearer tokens; v0.5 does not).
+        # Falls back to COMMCARE_API_KEY for local development.
         hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
-        commcare_oauth = request.session.get("commcare_oauth", {})
-        cc_access_token = commcare_oauth.get("access_token", "")
-        if not cc_access_token:
-            logger.warning("[ImageQuestions] No CommCare OAuth token in session")
-            return JsonResponse(
-                {"error": "CommCare not authorized. Please authorize CommCare on the Labs overview page."},
-                status=401,
-            )
+        auth_header, source = _get_commcarehq_auth_header(request)
+        if not auth_header:
+            logger.warning(f"[ImageQuestions] No CommCare credentials available: {source}")
+            return JsonResponse({"error": source}, status=401)
 
-        hq_url = f"{hq_base}/a/{cc_domain}/api/v0.5/application/{cc_app_id}/"
+        hq_url = f"{hq_base}/a/{cc_domain}/api/application/v1/{cc_app_id}/"
         try:
             resp = httpx.get(
                 hq_url,
-                headers={"Authorization": f"Bearer {cc_access_token}"},
+                headers={"Authorization": auth_header},
                 timeout=30.0,
             )
             if resp.status_code == 401:
                 return JsonResponse(
-                    {"error": "CommCare token expired. Please re-authorize CommCare on the Labs overview page."},
+                    {"error": "CommCare token expired or invalid. Please re-authorize CommCare on the Labs overview page."},
                     status=401,
                 )
-            resp.raise_for_status()
+            if not resp.is_success:
+                logger.error(
+                    f"[ImageQuestions] HQ returned {resp.status_code} via {source} for app {cc_app_id} "
+                    f"in domain {cc_domain}: {resp.text[:200]}"
+                )
+                return JsonResponse(
+                    {"error": f"CommCare HQ returned {resp.status_code} for app definition. "
+                              f"Check that CommCare is authorized and the app exists in domain '{cc_domain}'."},
+                    status=502,
+                )
             app = resp.json()
         except Exception as e:
             logger.error(f"[ImageQuestions] Failed to fetch HQ app {cc_app_id}: {e}")
-            return JsonResponse({"error": "Failed to fetch app definition from CommCare HQ"}, status=502)
+            return JsonResponse({"error": f"Failed to fetch app definition from CommCare HQ: {e}"}, status=502)
 
         # Step 3: Extract image questions
         questions = extract_image_questions(app)
