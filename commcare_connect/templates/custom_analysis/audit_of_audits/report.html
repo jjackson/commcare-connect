@@ -157,9 +157,6 @@
             <th class="px-4 py-3 text-right cursor-pointer select-none hover:bg-gray-100 transition-colors" onclick="sortTable('avg_passed')" data-col="avg_passed">
               Avg % Passed <span class="sort-icon text-gray-300 ml-0.5">⇅</span>
             </th>
-            <th class="px-4 py-3 text-right cursor-pointer select-none hover:bg-gray-100 transition-colors" onclick="sortTable('passing')" data-col="passing">
-              Passing % <span class="sort-icon text-gray-300 ml-0.5">⇅</span>
-            </th>
             <th class="px-4 py-3 text-right cursor-pointer select-none hover:bg-gray-100 transition-colors" onclick="sortTable('images')" data-col="images">
               Images <span class="sort-icon text-gray-300 ml-0.5">⇅</span>
             </th>
@@ -301,20 +298,6 @@
               {% endif %}
             </td>
 
-            {# Passing % — percentage of FLW sessions with overall_result == "pass" #}
-            <td class="px-4 py-3 text-right">
-              {% if row.pct_passing is not None %}
-              <span class="text-xs font-semibold tabular-nums
-                {% if row.pct_passing >= 80 %}text-green-600
-                {% elif row.pct_passing >= 60 %}text-yellow-600
-                {% else %}text-red-600{% endif %}">
-                {{ row.pct_passing }}%
-              </span>
-              {% else %}
-              <span class="text-gray-300">—</span>
-              {% endif %}
-            </td>
-
             {# Images reviewed #}
             <td class="px-4 py-3 text-right">
               {% if row.images_reviewed is not None %}
@@ -396,7 +379,6 @@
       case 'status':     return row.dataset.status || '';
       case 'pct_sampled':return numVal(row, 'pctSampled');
       case 'avg_passed': return numVal(row, 'avgPassed');
-      case 'passing':    return numVal(row, 'passing');
       case 'images':     return numVal(row, 'images');
       case 'tasks':      return numVal(row, 'tasks');
       default:           return '';

@@ -137,6 +137,13 @@
         <i class="fa-solid fa-user mr-2"></i>
         Logged in as <span class="font-semibold">{{ user.username }}</span>
       </p>
+      <p class="text-xs text-gray-500 mb-1">
+        name: <span class="font-mono">{{ user.name|default:"(empty)" }}</span>
+        &nbsp;|&nbsp;
+        username: <span class="font-mono">{{ user.username|default:"(empty)" }}</span>
+        &nbsp;|&nbsp;
+        email: <span class="font-mono">{{ user.email|default:"(empty)" }}</span>
+      </p>
       <div class="flex items-center justify-center gap-4 text-xs text-gray-500">
         <span><i class="fa-solid fa-building mr-1"></i> {{ user.organizations|length }} organizations</span>
         <span class="text-gray-300">|</span>
