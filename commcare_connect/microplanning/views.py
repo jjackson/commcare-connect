@@ -148,7 +148,6 @@ def import_status(request, org_slug, opp_id):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
 @require_POST
 def cluster_work_areas(request, org_slug, opp_id):
     redirect_url = reverse(
@@ -187,7 +186,6 @@ def cluster_work_areas(request, org_slug, opp_id):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
 def clustering_status(request, org_slug, opp_id):
     task_id = request.GET.get("clustering_task_id", None)
 
