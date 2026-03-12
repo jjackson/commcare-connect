@@ -9,7 +9,7 @@ import pgtrigger.migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("pghistory", "0007_auto_20250421_0444"),
-        ("opportunity", "0114_paymentinvoice_invoice_ticket_link"),
+        ("opportunity", "0115_uservisit_work_area"),
     ]
 
     operations = [
@@ -24,20 +24,6 @@ class Migration(migrations.Migration):
             options={
                 "abstract": False,
             },
-        ),
-        pgtrigger.migrations.AddTrigger(
-            model_name="opportunity",
-            trigger=pgtrigger.compiler.Trigger(
-                name="insert_insert",
-                sql=pgtrigger.compiler.UpsertTriggerSql(
-                    func='INSERT INTO "opportunity_opportunityactiveevent" ("active", "pgh_context_id", "pgh_created_at", "pgh_label", "pgh_obj_id") VALUES (NEW."active", _pgh_attach_context(), NOW(), \'insert\', NEW."id"); RETURN NULL;',
-                    hash="6d38c02102ca7532956ae38c748313dfd7aa6805",
-                    operation="INSERT",
-                    pgid="pgtrigger_insert_insert_6d667",
-                    table="opportunity_opportunity",
-                    when="AFTER",
-                ),
-            ),
         ),
         pgtrigger.migrations.AddTrigger(
             model_name="opportunity",

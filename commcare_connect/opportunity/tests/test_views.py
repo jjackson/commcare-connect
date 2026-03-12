@@ -1992,7 +1992,7 @@ class TestOpportunityEditActiveHistory:
 
         assert response.status_code == 200
         assert "active_events" in response.context
-        assert len(response.context["active_events"]) == 2
+        assert len(response.context["active_events"]) == 1
         event_toggling_inactive = response.context["active_events"].filter(active=False).first()
         assert event_toggling_inactive is not None
 

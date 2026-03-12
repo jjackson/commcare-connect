@@ -356,7 +356,7 @@ class TestAutoDeactivateEndedOpportunities:
 
         # Should have 2 events: initial create + the deactivation
         events = OpportunityActiveEvent.objects.filter(pgh_obj=opp).order_by("pgh_id")
-        assert events.count() == 2
+        assert events.count() == 1
         deactivation_event = events.last()
         assert deactivation_event.active is False
         assert deactivation_event.pgh_context is not None
