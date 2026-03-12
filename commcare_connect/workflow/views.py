@@ -64,6 +64,8 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
 
         # Get workflow definitions and their runs
         if context["has_context"]:
+            data_access = None
+            pipeline_access = None
             try:
                 from commcare_connect.workflow.data_access import PipelineDataAccess
 
@@ -118,18 +120,24 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                         }
                     )
 
-                pipeline_access.close()
                 context["workflows"] = workflows_with_runs
                 context["definitions"] = definitions  # Keep for backwards compatibility
                 context["available_templates"] = list_templates()
             except Exception as e:
-                logger.error(f"Failed to load workflow definitions: {e}")
+                logger.error(f"Failed to load workflow definitions: {e}", exc_info=True)
                 context["workflows"] = []
                 context["definitions"] = []
+                context["available_templates"] = list_templates()
                 context["error"] = str(e)
+            finally:
+                if pipeline_access is not None:
+                    pipeline_access.close()
+                if data_access is not None:
+                    data_access.close()
         else:
             context["workflows"] = []
             context["definitions"] = []
+            context["available_templates"] = list_templates()
 
         return context
 
