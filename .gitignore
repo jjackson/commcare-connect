@@ -353,7 +353,9 @@ commcare_connect/custom_analysis/rutf/examples/
 !.elasticbeanstalk/*.global.yml
 .worktrees/
 
+# Claude
 .claude
+docs/superpowers/plans/
 
 # Debug/screenshot images in root directory
 /*.png

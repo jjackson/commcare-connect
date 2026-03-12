@@ -10,7 +10,8 @@ def page_settings(request):
 
 def gtm_context(request):
     """Provide Google Tag Manager context variables to templates."""
-    is_dimagi = request.user.is_authenticated and (request.user.email and request.user.email.endswith("@dimagi.com"))
+    # TODO: Re-enable once Connect server PR is merged (email not yet available from OAuth).
+    is_dimagi = request.user.is_authenticated  # temporarily treat all logged-in users as dimagi for GTM
     user_id = request.user.id if request.user.is_authenticated else None
     return {
         "GTM_VARS_JSON": {

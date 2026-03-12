@@ -236,6 +236,7 @@ __all__ = [
     "performance_review",
     "ocs_outreach",
     "audit_with_ai_review",
+    "bulk_image_audit",
     "mbw_monitoring_v2",
     "kmc_longitudinal",
     "kmc_flw_flags",

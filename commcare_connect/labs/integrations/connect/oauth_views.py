@@ -192,6 +192,16 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
             "You may need to log out and try again.",
         )
 
+    # org_data now includes a 'user' object with email and commcare_username.
+    # For Dimagi staff the CommCareHQ username IS their @dimagi.com address, so
+    # use it as a fallback when OAuth introspection didn't return an email.
+    if org_data and not profile_data.get("email"):
+        user_info = org_data.get("user", {})
+        email = user_info.get("email") or user_info.get("commcare_username", "")
+        if email:
+            profile_data["email"] = email
+            logger.debug(f"Resolved email from org data for user: {profile_data.get('username')}")
+
     # Store OAuth data in session (NO database writes)
     request.session["labs_oauth"] = {
         "access_token": access_token,

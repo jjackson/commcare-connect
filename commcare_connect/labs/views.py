@@ -144,22 +144,25 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
         else:
             coverage_url = "/coverage/?config=chc_nutrition"
 
-        # Define labs projects with descriptions
-        context["labs_projects"] = [
-            {
-                "name": "Audit",
-                "url": "/audit/",
-                "icon": "fa-clipboard-check",
-                "description": "Data quality auditing tools for program monitoring",
-                "color": "blue",
-            },
-            {
-                "name": "Solicitations",
-                "url": "/solicitations/",
-                "icon": "fa-file-contract",
-                "description": "RFP management system for posting Solicitations and receiving responses",
-                "color": "indigo",
-            },
+        # TODO: Re-enable email detection once Connect server PR is merged and deployed.
+        # The email field is currently empty because /o/introspect/ and /o/userinfo/ don't
+        # return it; the fix adds it to /export/opp_org_program_list/ instead.
+        # Original check (restore by replacing the next line and un-commenting the block):
+        #   from django.conf import settings as _settings
+        #   _u_email = getattr(self.request.user, "email", "") or ""
+        #   _u_username = getattr(self.request.user, "username", "") or ""
+        #   _labs_admins = getattr(_settings, "LABS_ADMIN_USERNAMES", [])
+        #   _is_dimagi = (
+        #       _u_email.endswith("@dimagi.com")
+        #       or _u_username.endswith("@dimagi.com")
+        #       or (_u_username and _u_username in _labs_admins)
+        #   )
+        _is_dimagi = True
+
+        # ── Labs projects ──────────────────────────────────────────────────────
+        # Tasks + Workflows: visible to all authenticated users.
+        # Audit + Solicitations: Dimagi staff only.
+        _open_labs_projects = [
             {
                 "name": "Tasks",
                 "url": "/tasks/",
@@ -175,54 +178,77 @@ class LabsOverviewView(LoginRequiredMixin, TemplateView):
                 "color": "amber",
             },
         ]
-
-        # Define custom analysis projects with descriptions
-        context["custom_analysis_projects"] = [
+        _dimagi_labs_projects = [
             {
-                "name": "Coverage",
-                "url": "/coverage/",
-                "icon": "fa-map-marked-alt",
-                "description": "Geographic coverage analysis and mapping for Service Areas and Delivery Units",
-                "color": "green",
-                "buttons": [
-                    {
-                        "label": "CHC Nutrition View",
-                        "url": coverage_url,
-                    },
-                    {
-                        "label": "Generic View",
-                        "url": "/coverage/",
-                    },
-                ],
-            },
-            {
-                "name": "CHC Nutrition",
-                "url": "/custom_analysis/chc_nutrition/",
-                "icon": "fa-heartbeat",
-                "description": "Nutrition and health metrics analysis for the Child Health Campaign",
-                "color": "rose",
-            },
-            {
-                "name": "KMC Timeline",
-                "url": "/custom_analysis/kmc/children/",
-                "icon": "fa-baby",
-                "description": "Individual child timelines for Kangaroo Mother Care programs",
+                "name": "Audit",
+                "url": "/audit/",
+                "icon": "fa-clipboard-check",
+                "description": "Data quality auditing tools for program monitoring",
                 "color": "blue",
             },
             {
-                "name": "MBW GPS Analysis",
-                "url": "/custom_analysis/mbw/gps/",
-                "icon": "fa-location-dot",
-                "description": "GPS distance metrics and travel analysis for Mother Baby Wellness",
-                "color": "emerald",
-            },
-            {
-                "name": "RUTF Timeline",
-                "url": "/custom_analysis/rutf/children/",
-                "icon": "fa-weight-scale",
-                "description": "SAM follow-up tracking with MUAC measurements for malnutrition programs",
-                "color": "orange",
+                "name": "Solicitations",
+                "url": "/solicitations/",
+                "icon": "fa-file-contract",
+                "description": "RFP management system for posting Solicitations and receiving responses",
+                "color": "indigo",
             },
         ]
+        context["labs_projects"] = (
+            _dimagi_labs_projects + _open_labs_projects if _is_dimagi else _open_labs_projects
+        )
+
+        # ── Custom Analysis projects — all Dimagi staff only ──────────────────
+        if _is_dimagi:
+            context["custom_analysis_projects"] = [
+                {
+                    "name": "Coverage",
+                    "url": "/coverage/",
+                    "icon": "fa-map-marked-alt",
+                    "description": "Geographic coverage analysis and mapping for Service Areas and Delivery Units",
+                    "color": "green",
+                    "buttons": [
+                        {"label": "CHC Nutrition View", "url": coverage_url},
+                        {"label": "Generic View", "url": "/coverage/"},
+                    ],
+                },
+                {
+                    "name": "CHC Nutrition",
+                    "url": "/custom_analysis/chc_nutrition/",
+                    "icon": "fa-heartbeat",
+                    "description": "Nutrition and health metrics analysis for the Child Health Campaign",
+                    "color": "rose",
+                },
+                {
+                    "name": "KMC Timeline",
+                    "url": "/custom_analysis/kmc/children/",
+                    "icon": "fa-baby",
+                    "description": "Individual child timelines for Kangaroo Mother Care programs",
+                    "color": "blue",
+                },
+                {
+                    "name": "MBW GPS Analysis",
+                    "url": "/custom_analysis/mbw/gps/",
+                    "icon": "fa-location-dot",
+                    "description": "GPS distance metrics and travel analysis for Mother Baby Wellness",
+                    "color": "emerald",
+                },
+                {
+                    "name": "RUTF Timeline",
+                    "url": "/custom_analysis/rutf/children/",
+                    "icon": "fa-weight-scale",
+                    "description": "SAM follow-up tracking with MUAC measurements for malnutrition programs",
+                    "color": "orange",
+                },
+                {
+                    "name": "Audit of Audits",
+                    "url": "/custom_analysis/audit_of_audits/",
+                    "icon": "fa-magnifying-glass-chart",
+                    "description": "Cross-opportunity admin report of all workflow runs and audit sessions",
+                    "color": "purple",
+                },
+            ]
+        else:
+            context["custom_analysis_projects"] = []
 
         return context

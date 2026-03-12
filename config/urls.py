@@ -38,6 +38,10 @@ urlpatterns = [
         "custom_analysis/rutf/",
         include("commcare_connect.custom_analysis.rutf.urls", namespace="rutf"),
     ),
+    path(
+        "custom_analysis/audit_of_audits/",
+        include("commcare_connect.custom_analysis.audit_of_audits.urls", namespace="audit_of_audits"),
+    ),
     path("ai/", include("commcare_connect.ai.urls", namespace="ai")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 

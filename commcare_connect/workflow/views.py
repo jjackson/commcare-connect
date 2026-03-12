@@ -25,6 +25,22 @@ from commcare_connect.workflow.templates import list_templates
 logger = logging.getLogger(__name__)
 
 
+def _is_dimagi_user(user) -> bool:
+    """Return True if the user is a @dimagi.com staff member or in the local dev allowlist."""
+    # TODO: Re-enable email detection once Connect server PR is merged and deployed.
+    # The email field is currently empty because /o/introspect/ and /o/userinfo/ don't
+    # return it; the fix adds it to /export/opp_org_program_list/ instead.
+    return True
+    email = getattr(user, "email", "") or ""  # noqa: F401
+    username = getattr(user, "username", "") or ""  # noqa: F401
+    allowlist = getattr(settings, "LABS_ADMIN_USERNAMES", [])  # noqa: F401
+    return (
+        email.endswith("@dimagi.com")
+        or username.endswith("@dimagi.com")
+        or bool(username and username in allowlist)
+    )
+
+
 class WorkflowTemplateListAPIView(LoginRequiredMixin, View):
     """API endpoint to list available workflow templates."""
 
@@ -47,8 +63,13 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
         context["opportunity_id"] = labs_context.get("opportunity_id")
         context["opportunity_name"] = labs_context.get("opportunity_name")
 
+        # Restrict Create Workflow button to @dimagi.com users / allowlist
+        context["is_dimagi"] = _is_dimagi_user(self.request.user)
+
         # Get workflow definitions and their runs
         if context["has_context"]:
+            data_access = None
+            pipeline_access = None
             try:
                 from commcare_connect.workflow.data_access import PipelineDataAccess
 
@@ -103,18 +124,24 @@ class WorkflowListView(LoginRequiredMixin, TemplateView):
                         }
                     )
 
-                pipeline_access.close()
                 context["workflows"] = workflows_with_runs
                 context["definitions"] = definitions  # Keep for backwards compatibility
                 context["available_templates"] = list_templates()
             except Exception as e:
-                logger.error(f"Failed to load workflow definitions: {e}")
+                logger.error(f"Failed to load workflow definitions: {e}", exc_info=True)
                 context["workflows"] = []
                 context["definitions"] = []
+                context["available_templates"] = list_templates()
                 context["error"] = str(e)
+            finally:
+                if pipeline_access is not None:
+                    pipeline_access.close()
+                if data_access is not None:
+                    data_access.close()
         else:
             context["workflows"] = []
             context["definitions"] = []
+            context["available_templates"] = list_templates()
 
         return context
 
@@ -288,9 +315,24 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                         f"Synced render code for definition {definition_id} from template '{matched_template}'"
                     )
 
-            # Get render code
-            render_code = data_access.get_render_code(definition_id)
-            context["render_code"] = render_code.data.get("component_code") if render_code else None
+            # Get render code — in DEBUG mode, try template file first so local
+            # edits are reflected immediately without a manual sync step.
+            # Falls back to DB if no template name match (e.g. custom-named workflow).
+            if settings.DEBUG:
+                name_lower = definition.name.lower().replace(" ", "_")
+                live_code = None
+                for key, tmpl in TEMPLATES.items():
+                    if key == name_lower or tmpl["name"].lower() == definition.name.lower():
+                        live_code = tmpl.get("render_code")
+                        break
+                if live_code is not None:
+                    context["render_code"] = live_code
+                else:
+                    render_code = data_access.get_render_code(definition_id)
+                    context["render_code"] = render_code.data.get("component_code") if render_code else None
+            else:
+                render_code = data_access.get_render_code(definition_id)
+                context["render_code"] = render_code.data.get("component_code") if render_code else None
 
             # Get workers for the opportunity
             workers = data_access.get_workers(opportunity_id)
@@ -299,9 +341,9 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
             # Get or create run based on mode
             if is_edit_mode:
                 # Edit mode: create temporary run (not persisted)
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
 
-                today = datetime.now().date()
+                today = datetime.now(timezone.utc).date()
                 week_start = today - timedelta(days=today.weekday())
                 week_end = week_start + timedelta(days=6)
 
@@ -309,6 +351,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "id": 0,  # Temporary ID
                     "definition_id": definition_id,
                     "opportunity_id": opportunity_id,
+                    "opportunity_name": labs_context.get("opportunity", {}).get("name"),
                     "status": "preview",
                     "state": {"worker_states": {}},
                     "period_start": week_start.isoformat(),
@@ -325,6 +368,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                     "id": run.id,
                     "definition_id": definition_id,
                     "opportunity_id": opportunity_id,
+                    "opportunity_name": labs_context.get("opportunity", {}).get("name"),
                     "status": run.data.get("status", "in_progress"),
                     "state": run.data.get("state", {}),
                     "period_start": run.data.get("period_start"),
@@ -347,7 +391,7 @@ class WorkflowRunView(LoginRequiredMixin, TemplateView):
                 "definition": definition.data,
                 "definition_id": definition.id,
                 "opportunity_id": opportunity_id,
-                "render_code": render_code.data.get("component_code") if render_code else None,
+                "render_code": context.get("render_code"),
                 "instance": run_data,
                 "is_edit_mode": is_edit_mode,
                 "workers": workers,
@@ -808,10 +852,16 @@ def get_run_api(request, run_id):
 
 @login_required
 @require_POST
+@login_required
+@require_POST
 def create_workflow_from_template_view(request):
     """Create a workflow from a template."""
     from django.contrib import messages
+    from django.core.exceptions import PermissionDenied
     from django.shortcuts import redirect
+
+    if not _is_dimagi_user(request.user):
+        raise PermissionDenied
 
     template_key = request.POST.get("template", "performance_review")
 

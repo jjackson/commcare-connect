@@ -413,6 +413,8 @@ DJANGO_TABLES2_TABLE_ATTRS = {
 # ------------------------------------------------------------------------------
 # HQ integration settings
 COMMCARE_HQ_URL = env("COMMCARE_HQ_URL", default="https://staging.commcarehq.org")
+COMMCARE_API_KEY = env("COMMCARE_API_KEY", default="")
+COMMCARE_USERNAME = env("COMMCARE_USERNAME", default="")
 
 # ConnectID integration settings
 CONNECTID_URL = env("CONNECTID_URL", default="http://localhost:8080")
@@ -442,6 +444,14 @@ OAUTH2_PROVIDER_APPLICATION_MODEL = "oauth2_provider.Application"
 CONNECT_PRODUCTION_URL = env("CONNECT_PRODUCTION_URL", default="https://connect.dimagi.com")
 CONNECT_OAUTH_CLIENT_ID = env("CONNECT_OAUTH_CLIENT_ID", default="")
 CONNECT_OAUTH_CLIENT_SECRET = env("CONNECT_OAUTH_CLIENT_SECRET", default="")
+
+# Labs admin allowlist — LOCAL DEV ONLY fallback for Connect test accounts that
+# have no email address configured (e.g. username='matt', email='').
+# In production, Dimagi staff are identified automatically by their @dimagi.com
+# email returned from Connect OAuth introspection — no config needed there.
+# Only set this in your local .env if your dev Connect account has no email.
+# Example: LABS_ADMIN_USERNAMES=matt
+LABS_ADMIN_USERNAMES = env.list("LABS_ADMIN_USERNAMES", default=[])
 
 # Open Chat Studio OAuth (for OCS API access)
 OCS_URL = env("OCS_URL", default="https://www.openchatstudio.com")
