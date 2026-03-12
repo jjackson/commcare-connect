@@ -179,8 +179,8 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
                 o for o in user_opps
                 if isinstance(o.get("id"), int) and o.get("program") in selected_program_ids
             ]
-        else:
-            # No programs matched (org has no programs, or session data is stale).
+        elif selected_org_slugs:
+            # Org slugs resolved but no programs matched — org may legitimately have no programs.
             # Fall back to all opportunities so the report remains usable.
             logger.warning(
                 "[AuditOfAudits] No programs found for org slugs %s "
@@ -189,6 +189,14 @@ class AuditOfAuditsView(LoginRequiredMixin, DimagiUserRequiredMixin, TemplateVie
                 len(user_programs),
             )
             filtered_opps = [o for o in user_opps if isinstance(o.get("id"), int)]
+        else:
+            # Selected org IDs didn't resolve to any known org in this session.
+            # Return empty rather than leaking all opportunities.
+            logger.warning(
+                "[AuditOfAudits] Selected org IDs %s not found in user orgs (session may be stale).",
+                selected_org_ids,
+            )
+            filtered_opps = []
 
         opportunity_ids: list[int] = [o["id"] for o in filtered_opps]
         opp_name_map: dict[int, str] = {o["id"]: o.get("name", "") for o in filtered_opps}
