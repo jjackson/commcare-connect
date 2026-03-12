@@ -354,3 +354,6 @@ commcare_connect/custom_analysis/rutf/examples/
 .worktrees/
 
 .claude
+
+# Debug/screenshot images in root directory
+/*.png
