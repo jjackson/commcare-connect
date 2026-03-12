@@ -82,19 +82,21 @@ def introspect_token(access_token: str, client_id: str, client_secret: str, prod
             logger.warning("Token is not active")
             return None
 
-        # Extract user profile from introspection response
-        # Note: introspection doesn't return user_id, only username
-        # We use 0 as placeholder since we don't use ID for anything critical
+        # Extract user profile from introspection response.
+        # sub may contain the CommCareHQ username (e.g. mtheis@dimagi.com for Dimagi staff).
+        # Use it as an email fallback if it looks like an email address.
+        sub = introspect_data.get("sub", "")
+        sub_email = sub if "@" in str(sub) else ""
+
         profile_data = {
-            "id": introspect_data.get("user_id") or introspect_data.get("sub") or 0,
+            "id": introspect_data.get("user_id") or sub or 0,
             "username": introspect_data.get("username"),
-            "email": introspect_data.get("email", ""),
+            "email": introspect_data.get("email", "") or sub_email,
             "first_name": introspect_data.get("given_name", ""),
             "last_name": introspect_data.get("family_name", ""),
         }
 
-        logger.debug(f"Token introspection successful for user: {profile_data.get('username')}")
-        logger.debug(f"Introspection data fields: {list(introspect_data.keys())}")
+        logger.info(f"Token introspection successful for user: {profile_data.get('username')}")
         return profile_data
 
     except httpx.HTTPError as e:

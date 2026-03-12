@@ -176,26 +176,6 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
         messages.error(request, "Could not retrieve your profile from Connect. Please try again.")
         return redirect("labs:oauth_initiate")
 
-    # If email wasn't returned by introspection (not a standard RFC 7662 field),
-    # fall back to the OIDC userinfo endpoint which does include email.
-    if not profile_data.get("email"):
-        try:
-            userinfo_response = httpx.get(
-                f"{settings.CONNECT_PRODUCTION_URL}/o/userinfo/",
-                headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10,
-            )
-            userinfo_response.raise_for_status()
-            userinfo_data = userinfo_response.json()
-            email = userinfo_data.get("email", "")
-            if email:
-                profile_data["email"] = email
-                logger.debug(f"Got email from userinfo endpoint for user: {profile_data.get('username')}")
-        except httpx.HTTPStatusError as e:
-            logger.warning(f"Userinfo endpoint returned {e.response.status_code} for user {profile_data.get('username')}")
-        except httpx.RequestError as e:
-            logger.warning(f"Failed to reach userinfo endpoint: {e}")
-
     # Calculate token expiration
     expires_in = token_json.get("expires_in", 1209600)  # Default 2 weeks
     expires_at = timezone.now() + datetime.timedelta(seconds=expires_in)
@@ -211,6 +191,16 @@ def labs_oauth_callback(request: HttpRequest) -> HttpResponse:
             "Could not load your organizations and opportunities from Connect. "
             "You may need to log out and try again.",
         )
+
+    # org_data now includes a 'user' object with email and commcare_username.
+    # For Dimagi staff the CommCareHQ username IS their @dimagi.com address, so
+    # use it as a fallback when OAuth introspection didn't return an email.
+    if org_data and not profile_data.get("email"):
+        user_info = org_data.get("user", {})
+        email = user_info.get("email") or user_info.get("commcare_username", "")
+        if email:
+            profile_data["email"] = email
+            logger.debug(f"Resolved email from org data for user: {profile_data.get('username')}")
 
     # Store OAuth data in session (NO database writes)
     request.session["labs_oauth"] = {
