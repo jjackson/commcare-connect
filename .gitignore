@@ -358,3 +358,5 @@ commcare_connect/custom_analysis/rutf/examples/
 docs/superpowers/plans/ 
  
  
+# Debug/screenshot images in root directory
+/*.png
