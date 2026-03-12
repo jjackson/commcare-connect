@@ -32,7 +32,6 @@ from commcare_connect.opportunity.models import (
     InvoiceStatus,
     Opportunity,
     OpportunityAccess,
-    OpportunityActiveEvent,
     OpportunityClaim,
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
@@ -141,7 +140,8 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             "delivery_type",
         ]
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, latest_activate_event, *args, **kwargs):
+        self.latest_activate_event = latest_activate_event
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
@@ -170,7 +170,7 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                     ),
                     HTML(
                         "{% load i18n %}"
-                        "{% with latest_active_event=form.latest_active_toggle_event %}"
+                        "{% with latest_active_event=form.latest_activate_event %}"
                         '{% include "opportunity/partials/active_toggle_metadata.html" %}'
                         "{% endwith %}"
                     ),
@@ -267,15 +267,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             if self.instance.end_date:
                 self.initial["end_date"] = self.instance.end_date.isoformat()
             self.currently_active = self.instance.active
-
-    @property
-    def latest_active_toggle_event(self):
-        return (
-            OpportunityActiveEvent.objects.filter(pgh_obj=self.opportunity)
-            .select_related("pgh_context")
-            .order_by("-pgh_created_at")
-            .first()
-        )
 
     def add_credential_fields(self):
         credential_issuer = None
