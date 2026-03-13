@@ -25,7 +25,8 @@ class WorkAreaGrouper:
     Adjacency Detection:
     - Two work areas are considered adjacent if they share a boundary
     - OR if they are within buffer_distance meters of each other
-    - Adjacency is computed in EPSG:3857 (Web Mercator) for accurate distance calculations
+    - Adjacency is computed in EPSG:3857 (Web Mercator) for approximate distance calculations.
+      Web Mercator is not an equidistant projection, so buffer_distance is approximate.
 
     Clustering Strategy:
     - Work areas are processed in a deterministic order (sorted by centroid coordinates)
@@ -44,6 +45,8 @@ class WorkAreaGrouper:
     Note:
         - Only work areas without an existing work_area_group are processed
         - Work areas from different wards are never grouped together
+        - If a single work area's building_count exceeds max_buildings, it is still
+          placed in its own group (the constraint cannot be satisfied in this case)
     """
 
     def __init__(
