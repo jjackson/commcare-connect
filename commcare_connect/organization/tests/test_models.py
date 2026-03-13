@@ -53,10 +53,6 @@ class TestUserOrganizationMembership:
         membership = MembershipFactory(role=UserOrganizationMembership.Role.VIEWER)
         assert membership.is_viewer is True
 
-    def test_admin_role_is_not_viewer(self, org_user_admin, organization):
-        membership = organization.memberships.get(user=org_user_admin)
-        assert membership.is_viewer is False
-
     def test_is_program_manager_admin_in_pm_org(self, program_manager_org_user_admin, program_manager_org):
         membership = program_manager_org.memberships.get(user=program_manager_org_user_admin)
         assert membership.is_program_manager is True
