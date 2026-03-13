@@ -54,6 +54,7 @@ class WorkAreaGrouper:
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
         self.buffer_distance = buffer_distance
+        self.transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
 
     def cluster_work_areas(self):
         work_areas = self._prepare_data()
@@ -114,13 +115,11 @@ class WorkAreaGrouper:
             ).update(work_area_group=work_area_group)
 
     def _build_adjacency(self, ward_data: dict, tolerance: float = 1e-6) -> dict:
-        adjacency = {wa_id: [] for wa_id in ward_data.keys()}
-
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+        adjacency = {wa_id: set() for wa_id in ward_data.keys()}
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
-            transformed_geoms[wa_id] = transform(transformer.transform, wa["boundary"])
+            transformed_geoms[wa_id] = transform(self.transformer.transform, wa["boundary"])
 
         wa_ids_list = list(transformed_geoms.keys())
         geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
@@ -140,12 +139,12 @@ class WorkAreaGrouper:
 
                 shared = shared_paths(geom.boundary, candidate_geom.boundary)
                 if shared.length > tolerance:
-                    adjacency[work_area_id].append(neighbour_id)
+                    adjacency[work_area_id].add(neighbour_id)
                     continue
 
                 dist = geom.distance(candidate_geom)
                 if dist <= self.buffer_distance:
-                    adjacency[work_area_id].append(neighbour_id)
+                    adjacency[work_area_id].add(neighbour_id)
 
         return adjacency
 
