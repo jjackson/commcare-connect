@@ -23,14 +23,12 @@ from django.utils.dateparse import parse_datetime
 from django.views.generic import DetailView, TemplateView, View
 from django_tables2 import SingleTableView
 
+from commcare_connect.audit.analysis_config import extract_images_with_question_ids
 from commcare_connect.audit.data_access import AuditDataAccess
-from commcare_connect.audit.hq_app_utils import extract_image_questions
 from commcare_connect.audit.models import AuditSessionRecord
 from commcare_connect.audit.tables import AuditTable
 from commcare_connect.labs.analysis.data_access import get_flw_names_for_opportunity
 from commcare_connect.labs.analysis.sse_streaming import CeleryTaskStreamView
-from commcare_connect.labs.integrations.commcare.api_client import CommCareDataAccess
-from commcare_connect.workflow.templates.mbw_monitoring.data_fetchers import fetch_opportunity_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -473,20 +471,12 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                         "question_id": img["question_id"],
                         "filename": img["name"],
                         "related_fields": img.get("related_fields", []),
-                        "hq_url": img.get("hq_url"),
                     }
                     for img in images_metadata
                 }
 
-                def build_image_url(blob_id: str, hq_url: str | None = None) -> str:
-                    if hq_url:
-                        from urllib.parse import quote
-
-                        proxy_url = reverse("audit:audit_image_hq")
-                        return f"{proxy_url}?url={quote(hq_url, safe='')}"
-                    # Use Connect API image endpoint
-                    url = reverse("audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id})
-                    return url
+                def build_image_url(blob_id: str) -> str:
+                    return reverse("audit:audit_image_connect", kwargs={"opp_id": opportunity_id, "blob_id": blob_id})
 
                 for blob_id, metadata in blob_metadata.items():
                     question_id = metadata.get("question_id") or ""
@@ -497,9 +487,10 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
 
                     # Use counter to ensure unique IDs even if same visit appears multiple times
                     assessment_counter += 1
+                    assessment_id = str(assessment_counter) + ":" + str(visit_id) + ":" + str(blob_id)
                     all_assessments.append(
                         {
-                            "id": f"{assessment_counter}:{visit_id}:{blob_id}",
+                            "id": assessment_id,
                             "visit_id": visit_id,
                             "blob_id": blob_id,
                             "question_id": question_id,
@@ -507,8 +498,7 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "result": result_value,
                             "notes": assessment_data.get("notes", ""),
                             "status": status_value,
-                            "image_url": build_image_url(blob_id, metadata.get("hq_url")),
-                            "hq_url": metadata.get("hq_url") or "",
+                            "image_url": build_image_url(blob_id),
                             "visit_date": visit_date_display,
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
@@ -532,9 +522,10 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
 
                     # Use counter to ensure unique IDs
                     assessment_counter += 1
+                    assessment_id = str(assessment_counter) + ":" + str(visit_id) + ":" + str(blob_id)
                     all_assessments.append(
                         {
-                            "id": f"{assessment_counter}:{visit_id}:{blob_id}",
+                            "id": assessment_id,
                             "visit_id": visit_id,
                             "blob_id": blob_id,
                             "question_id": question_id,
@@ -543,7 +534,6 @@ class ExperimentBulkAssessmentDataView(LoginRequiredMixin, View):
                             "notes": assessment_data.get("notes", ""),
                             "status": status_value,
                             "image_url": build_image_url(blob_id),
-                            "hq_url": "",
                             "visit_date": visit_date_display,
                             "visit_date_sort": visit_date_sort,
                             "entity_name": entity_name,
@@ -656,7 +646,8 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
 
                 # Return as image response
                 response = HttpResponse(image_content, content_type="image/jpeg")
-                response["Content-Disposition"] = f'inline; filename="{blob_id}.jpg"'
+                disposition = 'inline; filename="' + blob_id + '.jpg"'
+                response["Content-Disposition"] = disposition
                 return response
 
             finally:
@@ -667,90 +658,6 @@ class ExperimentAuditImageConnectView(LoginRequiredMixin, View):
 
             print(f"[ERROR] Image fetch failed for blob_id={blob_id}, opp_id={opp_id}")
             print(f"[ERROR] {traceback.format_exc()}")
-            return HttpResponse(f"Image not found: {e}", status=404)
-
-
-def _get_commcarehq_auth_header(request, domain: str = "") -> tuple:
-    """Return (auth_header, source) for CommCare HQ API calls, or (None, error_msg).
-
-    Priority:
-    1. CommCare OAuth Bearer token — via CommCareDataAccess which auto-refreshes if expired
-       (same pattern used by MBW Dashboard and CHC analysis pipeline that work on the server)
-    2. API key from settings (COMMCARE_API_KEY + COMMCARE_USERNAME — local dev fallback)
-    """
-    data_access = CommCareDataAccess(request=request, domain=domain)
-    if data_access.check_token_valid():
-        return f"Bearer {data_access.access_token}", "oauth"
-
-    api_key = getattr(settings, "COMMCARE_API_KEY", "")
-    username = getattr(settings, "COMMCARE_USERNAME", "")
-    if api_key and username:
-        return f"ApiKey {username}:{api_key}", "apikey"
-
-    return None, (
-        "CommCare not authorized. Please authorize CommCare on the Labs overview page, "
-        "or configure COMMCARE_API_KEY / COMMCARE_USERNAME for local development."
-    )
-
-
-class CommCareHQImageProxyView(LoginRequiredMixin, View):
-    """Proxy CommCareHQ form attachment images via CommCare OAuth token or API key fallback.
-
-    Used for opportunities where photos are stored as CommCareHQ attachments
-    (photo_link_ors, muac_photo_link) rather than Connect blobs.
-
-    Uses CommCare OAuth session token (from Labs overview Authorize button) with
-    automatic fallback to COMMCARE_API_KEY for local development.
-    """
-
-    def get(self, request):
-        from urllib.parse import urlparse
-
-        hq_url = request.GET.get("url", "")
-        if not hq_url:
-            return HttpResponse("Missing url parameter", status=400)
-
-        # Security: only proxy CommCareHQ attachment URLs
-        try:
-            parsed = urlparse(hq_url)
-            commcarehq_host = urlparse(settings.COMMCARE_HQ_URL).netloc
-            if parsed.netloc not in (commcarehq_host, "www.commcarehq.org"):
-                return HttpResponse("Invalid URL host", status=400)
-            # Restrict to attachment paths only (e.g. /a/<domain>/api/form/attachment/...)
-            import re
-
-            if not re.match(r"^/a/[^/]+/api/form/attachment/", parsed.path):
-                return HttpResponse("Invalid URL path", status=400)
-        except Exception:
-            return HttpResponse("Invalid URL", status=400)
-
-        auth_header, source = _get_commcarehq_auth_header(request)
-        if not auth_header:
-            logger.warning(f"[HQImageProxy] No CommCare credentials available: {source}")
-            return HttpResponse(source, status=401)
-
-        try:
-            resp = httpx.get(
-                hq_url,
-                headers={"Authorization": auth_header},
-                timeout=30.0,
-                follow_redirects=True,
-            )
-            if resp.status_code == 401:
-                logger.warning(f"[HQImageProxy] CommCare auth rejected (401) via {source} for {hq_url}")
-                return HttpResponse(
-                    "CommCare token expired or invalid. Please re-authorize CommCare on the Labs overview page.",
-                    status=401,
-                )
-            if not resp.is_success:
-                logger.error(
-                    f"[HQImageProxy] HQ returned {resp.status_code} via {source} for {hq_url}: {resp.text[:200]}"
-                )
-                return HttpResponse(f"HQ returned {resp.status_code}", status=resp.status_code)
-            content_type = resp.headers.get("content-type", "image/jpeg")
-            return HttpResponse(resp.content, content_type=content_type)
-        except Exception as e:
-            logger.error(f"[HQImageProxy] Failed to fetch {hq_url}: {e}")
             return HttpResponse(f"Image not found: {e}", status=404)
 
 
@@ -1865,76 +1772,53 @@ class AIReviewAPIView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(e)}, status=500)
 
 
-class OpportunityImageQuestionsAPIView(LoginRequiredMixin, View):
-    """Return Image-type questions from the opportunity's deliver app on CommCare HQ.
+class OpportunityImageTypesAPIView(LoginRequiredMixin, View):
+    """Discover image types from Connect blob data by sampling visits.
 
-    Fetches the app definition from HQ, extracts Image questions, filters out
-    always-hidden questions (ancestors with trivially-false relevant conditions),
-    and auto-detects associated HQ URL fields.
+    Fetches a sample of visits with images and extracts unique question_id
+    values (the form_json paths that identify each image type).
 
     GET /audit/api/opportunity/<opp_id>/image-questions/
-    Response: [{id, label, path, hq_url_path, form_name}, ...]
+    Response: [{id, label}, ...]
     """
 
+    SAMPLE_SIZE = 200
+
     def get(self, request, opp_id: int):
-        labs_oauth = request.session.get("labs_oauth", {})
-        access_token = labs_oauth.get("access_token", "")
-        if not access_token:
-            return JsonResponse({"error": "No OAuth token. Please log in to Connect Labs first."}, status=401)
-
-        # Step 1: Resolve cc_domain + cc_app_id from Connect
+        data_access = None
         try:
-            meta = fetch_opportunity_metadata(access_token, opp_id)
+            data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
+
+            # Fetch slim visits (no form_json) to get IDs
+            slim_visits = data_access.fetch_visits_slim(opportunity_id=opp_id)
+            if not slim_visits:
+                return JsonResponse([], safe=False)
+
+            # Sample visit IDs
+            sample = slim_visits[: self.SAMPLE_SIZE]
+            visit_ids = [v["id"] for v in sample if v.get("id")]
+            if not visit_ids:
+                return JsonResponse([], safe=False)
+
+            # Fetch full visits with form_json and images
+            full_visits = data_access.fetch_visits_for_ids(visit_ids, opportunity_id=opp_id)
+
+            # Extract unique question_ids across all sampled visits
+            seen_question_ids = set()
+            for visit in full_visits:
+                images = extract_images_with_question_ids(visit)
+                for img in images:
+                    qid = img.get("question_id")
+                    if qid:
+                        seen_question_ids.add(qid)
+
+            # Build response: id is the full path, label is the last segment
+            result = [{"id": qid, "label": qid.rsplit("/", 1)[-1], "path": qid} for qid in sorted(seen_question_ids)]
+            return JsonResponse(result, safe=False)
+
         except Exception as e:
-            logger.error(f"[ImageQuestions] Failed to fetch opportunity {opp_id} metadata: {e}")
-            return JsonResponse({"error": "Failed to fetch opportunity metadata"}, status=502)
-
-        cc_domain = meta.get("cc_domain", "")
-        cc_app_id = meta.get("cc_app_id", "")
-        # cc_domain is validated by fetch_opportunity_metadata (raises ValueError if missing),
-        # but cc_app_id can be None when the opportunity has no deliver/learn app yet.
-        if not cc_domain or not cc_app_id:
-            return JsonResponse(
-                {"error": f"Opportunity {opp_id} is missing CommCare domain or app ID"},
-                status=400,
-            )
-
-        # Step 2: Fetch app definition from CommCare HQ
-        # Use v1 application API (supports OAuth Bearer tokens; v0.5 does not).
-        # Falls back to COMMCARE_API_KEY for local development.
-        hq_base = settings.COMMCARE_HQ_URL.rstrip("/")
-        auth_header, source = _get_commcarehq_auth_header(request)
-        if not auth_header:
-            logger.warning(f"[ImageQuestions] No CommCare credentials available: {source}")
-            return JsonResponse({"error": source}, status=401)
-
-        hq_url = f"{hq_base}/a/{cc_domain}/api/application/v1/{cc_app_id}/"
-        try:
-            resp = httpx.get(
-                hq_url,
-                headers={"Authorization": auth_header},
-                timeout=30.0,
-            )
-            if resp.status_code == 401:
-                return JsonResponse(
-                    {"error": "CommCare token expired or invalid. Please re-authorize CommCare on the Labs overview page."},
-                    status=401,
-                )
-            if not resp.is_success:
-                logger.error(
-                    f"[ImageQuestions] HQ returned {resp.status_code} via {source} for app {cc_app_id} "
-                    f"in domain {cc_domain}: {resp.text[:200]}"
-                )
-                return JsonResponse(
-                    {"error": f"CommCare HQ returned {resp.status_code} for app definition. "
-                              f"Check that CommCare is authorized and the app exists in domain '{cc_domain}'."},
-                    status=502,
-                )
-            app = resp.json()
-        except Exception as e:
-            logger.error(f"[ImageQuestions] Failed to fetch HQ app {cc_app_id}: {e}")
-            return JsonResponse({"error": f"Failed to fetch app definition from CommCare HQ: {e}"}, status=502)
-
-        # Step 3: Extract image questions
-        questions = extract_image_questions(app)
-        return JsonResponse(questions, safe=False)
+            logger.error(f"[ImageTypes] Failed to discover image types for opp {opp_id}: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+        finally:
+            if data_access:
+                data_access.close()

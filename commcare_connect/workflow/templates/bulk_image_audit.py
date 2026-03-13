@@ -2,7 +2,7 @@
 Bulk Image Audit Workflow Template.
 
 Single-opportunity image review with per-FLW pass/fail summary.
-Image types are discovered dynamically from the CommCare HQ app definition.
+Image types are discovered dynamically from Connect blob data.
 """
 
 DEFINITION = {
@@ -123,7 +123,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
         }
     }, []);
 
-    // Fetch image question types from CommCare HQ on mount
+    // Fetch image question types from Connect data on mount
     React.useEffect(() => {
         const oppId = instance.opportunity_id;
         if (!oppId) return;
@@ -303,7 +303,6 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
             sample_percentage: samplePct,
             related_fields: selectedTypes.map(t => ({
                 image_path: t.path,
-                hq_url_path: t.hq_url_path || null,
                 filter_by_image: true,
             })),
         };
@@ -722,7 +721,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
     const ConfigPhase = () => (
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-6">
 
-            {/* Image types (dynamic, from CommCare HQ) */}
+            {/* Image types (dynamic, from Connect data) */}
             <div>
                 <h3 className="text-sm font-medium text-gray-700 mb-3">
                     <i className="fa-solid fa-image mr-2 text-gray-400"></i>
@@ -731,7 +730,7 @@ RENDER_CODE = """function WorkflowUI({ definition, instance, workers, pipelines,
                 {imageQuestionsLoading && (
                     <div className="flex items-center gap-2 text-sm text-blue-600 p-3 bg-blue-50 rounded-lg">
                         <i className="fa-solid fa-spinner fa-spin"></i>
-                        <span>Loading image types from CommCare...</span>
+                        <span>Loading image types...</span>
                     </div>
                 )}
                 {imageQuestionsError && (

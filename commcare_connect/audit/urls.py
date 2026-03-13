@@ -15,7 +15,7 @@ urlpatterns = [
     # API endpoints
     path(
         "api/opportunity/<int:opp_id>/image-questions/",
-        views.OpportunityImageQuestionsAPIView.as_view(),
+        views.OpportunityImageTypesAPIView.as_view(),
         name="opportunity_image_questions",
     ),
     path(
@@ -83,11 +83,6 @@ urlpatterns = [
         "image/<int:opp_id>/<str:blob_id>/",
         views.ExperimentAuditImageConnectView.as_view(),
         name="audit_image_connect",
-    ),
-    path(
-        "hq-image/",
-        views.CommCareHQImageProxyView.as_view(),
-        name="audit_image_hq",
     ),
     # Workflow integration endpoints
     path(

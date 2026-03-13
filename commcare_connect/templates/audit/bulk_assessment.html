@@ -335,7 +335,7 @@
             <!-- Metadata Section -->
             <div class="text-xs text-gray-500 flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
               <span><i class="fa-solid fa-calendar mr-1"></i><span x-text="assessment.visit_date"></span></span>
-              <a :href="assessment.hq_url || visitDetailUrl(assessment.visit_id)"
+              <a :href="visitDetailUrl(assessment.visit_id)"
                  target="_blank"
                  class="text-brand-indigo hover:underline">
                 <i class="fa-solid fa-hashtag mr-0.5"></i><span x-text="assessment.visit_id"></span>
