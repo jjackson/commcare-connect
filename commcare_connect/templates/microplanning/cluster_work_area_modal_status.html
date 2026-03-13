@@ -1,4 +1,4 @@
-{% load i18n static %}
+{% load i18n %}
 <button type="button" disabled class="button button-md primary-dark">{% translate "Create Groups" %}</button>
 <div id='clustering-status' class='mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center'
     hx-get="{% url 'microplanning:clustering_status' request.org.slug request.opportunity.opportunity_id %}?clustering_task_id={{ clustering_task_id }}"

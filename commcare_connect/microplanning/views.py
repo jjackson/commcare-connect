@@ -16,7 +16,6 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.safestring import mark_safe
 from django.utils.timezone import localdate
 from django.utils.translation import gettext as _
 from django.views import View
@@ -278,7 +277,7 @@ def clustering_status(request, org_slug, opp_id):
         try:
             uuid.UUID(task_id)
         except (ValueError, TypeError):
-            return redirect("microplanning:microplanning_home", org_slug, opp_id)
+            return redirect("microplanning:microplanning_home", org_slug=org_slug, opp_id=opp_id)
 
         task = AsyncResult(task_id)
         task_meta = task._get_task_meta()
@@ -299,12 +298,11 @@ def clustering_status(request, org_slug, opp_id):
             # non-refreshing div to show final status.
             return HttpResponse(status=HTTPStatus.NO_CONTENT)
 
-        html = (
-            '<div id="clustering-status" class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center">'
-            f"<i class='fa-solid {icon} text-xl'></i><span>{message}</span>"
-            "</div>"
+        return render(
+            request,
+            "microplanning/cluster_work_area_final_status.html",
+            context={"icon": icon, "message": message},
         )
-        return HttpResponse(mark_safe(html), status=HTTPStatus.OK)
 
     redirect_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
     return HttpResponse(headers={"HX-Redirect": redirect_url})
