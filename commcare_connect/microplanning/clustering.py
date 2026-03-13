@@ -1,6 +1,7 @@
 from collections import defaultdict, deque
 from uuid import uuid4
 
+from django.db import transaction
 from pyproj import Transformer
 from shapely import shared_paths, unary_union, wkb
 from shapely.ops import transform
@@ -96,23 +97,27 @@ class WorkAreaGrouper:
                 group_id = str(uuid4())
                 work_area_groups[(ward, group_id)].update(cluster)
 
-        for key, work_area_ids in work_area_groups.items():
-            ward, group_id = key
-            combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
-            group_boundary = combined_work_area_boundary.convex_hull.wkt
-            group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
-            work_area_group = WorkAreaGroup.objects.create(
-                opportunity_id=self.opportunity_id,
-                ward=ward,
-                name=group_id,
-                boundary=group_boundary,
-                building_count=group_building_count,
-            )
-            WorkArea.objects.filter(
-                id__in=work_area_ids,
-                opportunity=self.opportunity_id,
-                work_area_group__isnull=True,
-            ).update(work_area_group=work_area_group)
+        with transaction.atomic():
+            for key, work_area_ids in work_area_groups.items():
+                ward, group_id = key
+                combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
+                hull = combined_work_area_boundary.convex_hull
+                if hull.geom_type != "Polygon":
+                    hull = hull.buffer(1e-6)
+                group_boundary = hull.wkt
+                group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
+                work_area_group = WorkAreaGroup.objects.create(
+                    opportunity_id=self.opportunity_id,
+                    ward=ward,
+                    name=group_id,
+                    boundary=group_boundary,
+                    building_count=group_building_count,
+                )
+                WorkArea.objects.filter(
+                    id__in=work_area_ids,
+                    opportunity=self.opportunity_id,
+                    work_area_group__isnull=True,
+                ).update(work_area_group=work_area_group)
 
     def _build_adjacency(self, ward_data: dict, tolerance: float = 1e-6) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
