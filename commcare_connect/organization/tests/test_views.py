@@ -86,7 +86,7 @@ class TestOrganizationHomeView:
 
         assert response.status_code == 200
         organization.refresh_from_db()
-        assert organization.program_manager is False
+        assert not organization.program_manager
 
     def test_program_manager_updates_with_permission(self, client, org_user_admin, organization):
         organization.program_manager = False
@@ -103,7 +103,7 @@ class TestOrganizationHomeView:
 
         assert response.status_code == 200
         organization.refresh_from_db()
-        assert organization.program_manager is True
+        assert organization.program_manager
 
 
 @pytest.mark.django_db
