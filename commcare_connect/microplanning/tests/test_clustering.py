@@ -4,7 +4,6 @@ from django.contrib.gis.geos import Point, Polygon
 from commcare_connect.microplanning.clustering import WorkAreaGrouper
 from commcare_connect.microplanning.models import SRID, WorkArea, WorkAreaGroup
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory
-from commcare_connect.opportunity.tests.factories import OpportunityFactory
 
 
 @pytest.mark.django_db
@@ -82,9 +81,7 @@ class TestWorkAreaGrouper:
         for group in work_area_groups:
             assert group.building_count <= 150
 
-    def test_cluster_multiple_wards_separately(self):
-        opportunity = OpportunityFactory()
-
+    def test_cluster_multiple_wards_separately(self, opportunity):
         # Create work areas in two different wards
         ward1_areas = self.create_adjacent_work_areas(opportunity, ward="ward-1", start_x=77.0, slug_prefix="w1")
         ward2_areas = self.create_adjacent_work_areas(opportunity, ward="ward-2", start_x=78.0, slug_prefix="w2")
