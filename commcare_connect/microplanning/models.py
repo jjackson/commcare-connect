@@ -23,9 +23,9 @@ class WorkAreaGroup(geo_models.Model):
     opportunity = geo_models.ForeignKey(Opportunity, on_delete=geo_models.CASCADE)
     assigned_user = geo_models.ForeignKey(OpportunityAccess, null=True, blank=True, on_delete=geo_models.SET_NULL)
     ward = geo_models.SlugField(max_length=255)
-    name = geo_models.CharField(
-        max_length=255,
-    )
+    name = geo_models.CharField(max_length=255)
+    boundary = geo_models.PolygonField(srid=SRID, null=True, blank=True)
+    building_count = geo_models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [geo_models.UniqueConstraint(fields=["name", "opportunity"], name="unique_name_per_opportunity")]
@@ -53,6 +53,8 @@ class WorkArea(geo_models.Model):
         choices=WorkAreaStatus.choices,
         default=WorkAreaStatus.UNASSIGNED,
     )
+    case_id = geo_models.UUIDField(null=True, blank=True, unique=True)
+    case_properties = geo_models.JSONField(default=dict, null=True, blank=True)
 
     class Meta:
         constraints = [geo_models.UniqueConstraint(fields=["slug", "opportunity"], name="unique_slug_per_opportunity")]

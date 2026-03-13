@@ -1,8 +1,9 @@
 from collections import defaultdict, deque
 from uuid import uuid4
 
+from django.db import transaction
 from pyproj import Transformer
-from shapely import shared_paths, wkb
+from shapely import shared_paths, unary_union, wkb
 from shapely.ops import transform
 from shapely.strtree import STRtree
 
@@ -24,7 +25,8 @@ class WorkAreaGrouper:
     Adjacency Detection:
     - Two work areas are considered adjacent if they share a boundary
     - OR if they are within buffer_distance meters of each other
-    - Adjacency is computed in EPSG:3857 (Web Mercator) for accurate distance calculations
+    - Adjacency is computed in EPSG:3857 (Web Mercator) for approximate distance calculations.
+      Web Mercator is not an equidistant projection, so buffer_distance is approximate.
 
     Clustering Strategy:
     - Work areas are processed in a deterministic order (sorted by centroid coordinates)
@@ -43,6 +45,8 @@ class WorkAreaGrouper:
     Note:
         - Only work areas without an existing work_area_group are processed
         - Work areas from different wards are never grouped together
+        - If a single work area's building_count exceeds max_buildings, it is still
+          placed in its own group (the constraint cannot be satisfied in this case)
     """
 
     def __init__(
@@ -54,6 +58,7 @@ class WorkAreaGrouper:
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
         self.buffer_distance = buffer_distance
+        self.transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
 
     def cluster_work_areas(self):
         work_areas = self._prepare_data()
@@ -95,25 +100,34 @@ class WorkAreaGrouper:
                 group_id = str(uuid4())
                 work_area_groups[(ward, group_id)].update(cluster)
 
-        for key, work_area_ids in work_area_groups.items():
-            ward, group_id = key
-            work_area_group = WorkAreaGroup.objects.create(
-                opportunity_id=self.opportunity_id, ward=ward, name=group_id
-            )
-            WorkArea.objects.filter(
-                id__in=work_area_ids,
-                opportunity=self.opportunity_id,
-                work_area_group__isnull=True,
-            ).update(work_area_group=work_area_group)
+        with transaction.atomic():
+            for key, work_area_ids in work_area_groups.items():
+                ward, group_id = key
+                combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
+                hull = combined_work_area_boundary.convex_hull
+                if hull.geom_type != "Polygon":
+                    hull = hull.buffer(1e-6)
+                group_boundary = hull.wkt
+                group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
+                work_area_group = WorkAreaGroup.objects.create(
+                    opportunity_id=self.opportunity_id,
+                    ward=ward,
+                    name=group_id,
+                    boundary=group_boundary,
+                    building_count=group_building_count,
+                )
+                WorkArea.objects.filter(
+                    id__in=work_area_ids,
+                    opportunity=self.opportunity_id,
+                    work_area_group__isnull=True,
+                ).update(work_area_group=work_area_group)
 
     def _build_adjacency(self, ward_data: dict, tolerance: float = 1e-6) -> dict:
-        adjacency = {wa_id: [] for wa_id in ward_data.keys()}
-
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+        adjacency = {wa_id: set() for wa_id in ward_data.keys()}
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
-            transformed_geoms[wa_id] = transform(transformer.transform, wa["geometry"])
+            transformed_geoms[wa_id] = transform(self.transformer.transform, wa["boundary"])
 
         wa_ids_list = list(transformed_geoms.keys())
         geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
@@ -133,12 +147,12 @@ class WorkAreaGrouper:
 
                 shared = shared_paths(geom.boundary, candidate_geom.boundary)
                 if shared.length > tolerance:
-                    adjacency[work_area_id].append(neighbour_id)
+                    adjacency[work_area_id].add(neighbour_id)
                     continue
 
                 dist = geom.distance(candidate_geom)
                 if dist <= self.buffer_distance:
-                    adjacency[work_area_id].append(neighbour_id)
+                    adjacency[work_area_id].add(neighbour_id)
 
         return adjacency
 
@@ -179,12 +193,17 @@ class WorkAreaGrouper:
 
     def _prepare_data(self):
         work_areas = {}
-        for wa in WorkArea.objects.filter(opportunity_id=self.opportunity_id, work_area_group__isnull=True):
+        work_area_qs = WorkArea.objects.filter(
+            opportunity_id=self.opportunity_id,
+            work_area_group__isnull=True,
+            building_count__gt=0,
+        )
+        for wa in work_area_qs.iterator():
             work_areas[wa.id] = {
                 "id": wa.id,
                 "ward": wa.ward,
                 "centroid": wkb.loads(bytes(wa.centroid.wkb)),
-                "geometry": wkb.loads(bytes(wa.boundary.wkb)),
+                "boundary": wkb.loads(bytes(wa.boundary.wkb)),
                 "building_count": wa.building_count,
             }
         return work_areas
