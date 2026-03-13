@@ -84,13 +84,8 @@
                                 <span class="text-gray-400 text-sm">{{ request.org_membership.role }}</span>
                             {% endif %}
                         </li>
-                        <li class="p-2 text-left">
-                            <a class="block p-2 hover:bg-gray-100 rounded cursor-pointer" href="{% url 'account_email' %}">
-                              <p class="text-brand-deep-purple">{% translate "Profile" %}</p>
-                            </a>
-                        </li>
                         <li class="p-2">
-                          <a class="cursor-pointer" href="{% url 'account_logout' %}">
+                          <a class="cursor-pointer" href="{% url 'labs:logout' %}">
                             <div class="bg-brand-indigo text-white px-8 py-2 rounded-lg shadow-md hover:bg-blue-800 transition">
                               {% translate "Logout" %}
                             </div>
@@ -102,12 +97,8 @@
         </div>
         {% else %}
         <div class="flex items-center gap-x-4">
-          {% if ACCOUNT_ALLOW_REGISTRATION %}
-            <a id="sign-up-link" class="text-brand-deep-purple font-medium"
-               href="{% url 'account_signup' %}">{% translate "Sign Up" %}</a>
-          {% endif %}
             <a id="log-in-link" class="text-brand-deep-purple font-medium"
-             href="{% url 'account_login' %}">{% translate "Sign In" %}</a>
+             href="{% url 'labs:login' %}">{% translate "Sign In" %}</a>
         </div>
         {% endif %}
     </div>
