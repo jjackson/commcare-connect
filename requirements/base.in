@@ -38,7 +38,7 @@ django-pghistory
 # Deployment
 # ------------------------------------------------------------------------------
 gunicorn[gevent]
-psycopg2
+psycopg2-binary
 django-storages[boto3]
 django-anymail[amazon-ses]
 

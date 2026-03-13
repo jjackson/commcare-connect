@@ -225,6 +225,8 @@ ply==3.11
     # via jsonpath-ng
 prompt-toolkit==3.0.39
     # via click-repl
+psycopg2-binary==2.9.6
+    # via -r requirements/base.in
 pycparser==2.21
     # via cffi
 pydyf==0.12.1
