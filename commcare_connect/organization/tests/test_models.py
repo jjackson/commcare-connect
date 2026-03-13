@@ -1,4 +1,5 @@
 import pytest
+from django.db import IntegrityError
 
 from commcare_connect.organization.models import LLOEntity, UserOrganizationMembership
 from commcare_connect.users.tests.factories import MembershipFactory, OrganizationFactory
@@ -12,6 +13,12 @@ class TestLLOEntity:
     def test_str_with_short_name(self):
         entity = LLOEntity(name="World Health Organization", short_name="WHO")
         assert str(entity) == "World Health Organization (WHO)"
+
+    @pytest.mark.django_db
+    def test_name_must_be_unique(self):
+        LLOEntity.objects.create(name="Unique LLO")
+        with pytest.raises(IntegrityError):
+            LLOEntity.objects.create(name="Unique LLO")
 
 
 @pytest.mark.django_db
