@@ -43,20 +43,20 @@ class TestOrganization:
 class TestUserOrganizationMembership:
     def test_admin_role_is_admin(self, org_user_admin, organization):
         membership = organization.memberships.get(user=org_user_admin)
-        assert membership.is_admin is True
+        assert membership.is_admin
 
     def test_member_role_is_not_admin(self, org_user_member, organization):
         membership = organization.memberships.get(user=org_user_member)
-        assert membership.is_admin is False
+        assert not membership.is_admin
 
     def test_viewer_role_is_viewer(self):
         membership = MembershipFactory(role=UserOrganizationMembership.Role.VIEWER)
-        assert membership.is_viewer is True
+        assert membership.is_viewer
 
     def test_is_program_manager_admin_in_pm_org(self, program_manager_org_user_admin, program_manager_org):
         membership = program_manager_org.memberships.get(user=program_manager_org_user_admin)
-        assert membership.is_program_manager is True
+        assert membership.is_program_manager
 
     def test_is_program_manager_member_in_pm_org(self, program_manager_org_user_member, program_manager_org):
         membership = program_manager_org.memberships.get(user=program_manager_org_user_member)
-        assert membership.is_program_manager is False
+        assert not membership.is_program_manager
