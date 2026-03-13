@@ -25,7 +25,7 @@ They want an end-to-end demo of how Connect could serve as their regranting plat
 
 | Module | What |
 |--------|------|
-| **solicitations_new** (enhance existing) | Solicitation management, response collection, review/scoring, award action |
+| **solicitations_new** (enhance existing) | Get input on initial grant, collect feedback, distribute solicitations to groups that meet specific criteria, response collection, set scoring parameters, review submissions, score submissions, send RFP/follow-up questions, award action |
 | **funder_dashboard** (new) | Fund portfolio view, aggregated KPIs, drill-down into programs |
 
 ### In scope (Production Connect — minimal changes)
@@ -61,7 +61,7 @@ Organization (PM: Baobob Institute)
 - `llo_entity_id` (references the funder's Connect org *Open question: do we need a specific different entity for a Funder"*)
 - `program_ids[]` (references Connect Program IDs)
 - `delivery_types[]` (references Connect Delivery Types)
-- `status`: active | closed
+- `status`: draft | active | closed
 
 **SolicitationRecord** (exists in solicitations_new)
 - `fund_id` (reference to FundRecord)
@@ -71,7 +71,7 @@ Organization (PM: Baobob Institute)
 - `status`: draft | active | closed | awarded
 - `questions`: JSON array of custom questions
 - `application_deadline`, `expected_start_date`, `expected_end_date`
-- `estimated_scale`, `contact_email`
+- `estimated_scale`, `contact_email`, `contact_name`, `contact_title`
 
 **ResponseRecord** (exists in solicitations_new)
 - `solicitation_id`, (`llo_entity_id`, `llo_entity_name` exist in data model, to be connected after changes on Connect prod to allow creation from new users — populated on account creation)
@@ -87,8 +87,7 @@ Organization (PM: Baobob Institute)
 
 ## End-to-End User Journey
 
-### Phase 1: Fund & Solicitation Setup (Funder in Labs)
-
+### Phase 0: Fund & Initial Solicitation Feedback (Funder in Labs)
 ```
 Baobob Institute logs into Labs
   → **(An LLO Entity is manually created for them for Demo)**
@@ -97,8 +96,17 @@ Baobob Institute logs into Labs
   → Creates SolicitationRecord (RFP for Kangaroo Mother Care)
     - Defines custom questions (org capacity, geographic coverage, prior experience, proposed budget)
     - Sets deadline, scope of work
-  → Publishes solicitation (status: active)
+  → Publishes draft solicitation (status: draft)
+```
+
+### Phase 1: Solicitation Publication (Funder in Labs)
+
+```
+Baobob Institute logs into Labs
+  → Publishes active solicitation (status: active)
   → Solicitation appears on public listing (no login required)
+  → Send email notification to LLOs meeting specific criteria for FundRecord
+  → Creates evaluation criteria
 ```
 
 ### Phase 2: Response & Self-Registration (Local Org in Connect + Labs)
@@ -131,6 +139,8 @@ Funder views responses in solicitations_new
   → Scores responses (1-100 scale)
   → Adds review notes and recommendation
   → Ranks responses
+  → Clicks "Follow up" on selected respondents
+  → Sends RFP / follow-up questions to selected respondents
   → Clicks "Award" on selected respondents
   → Inputs the reward_budget & llo_entity_id for each grantee awarded.  Can be one or more.
 ```
@@ -331,12 +341,13 @@ Answer: Matt has a KMC demo app he can use.
 The demo could walk through the full journey:
 
 1. **"Here's your fund"** — Show Funder Dashboard with the fund and programs configured
-2. **"Post a solicitation"** — Create an RFP for partners, define questions, publish
-3. **"Local orgs apply"** — Show a local org discovering the RFP, creating an account, submitting a response
-4. **"Select your grantees"** — Review responses, score, award winners
-5. **"Opportunity setup"** — Show what an existing Opportunity looks like.  Discuss how could be automatically created upon award.
-6. **"Grantees deliver"** — Show an NM managing their opportunity, FLWs delivering services (can use pre-loaded data)
-7. **"Verify and pay"** — Show verification, invoice approval, payment tracking
-8. **"Monitor everything"** — Return to Funder Dashboard showing real-time portfolio metrics
+2. **"Set up the solicitation"** — Create a FundRecord, link programs, define solicitation questions and evaluation criteria
+3. **"Publish and notify"** — Publish solicitation, send email notifications to eligible LLOs
+4. **"Local orgs apply"** — Show a local org discovering the RFP, creating an account, submitting a response
+5. **"Select your grantees"** — Review responses, score, award winners
+6. **"Opportunity setup"** — Show what an existing Opportunity looks like.  Discuss how could be automatically created upon award.
+7. **"Grantees deliver"** — Show an NM managing their opportunity, FLWs delivering services (can use pre-loaded data)
+8. **"Verify and pay"** — Show verification, invoice approval, payment tracking
+9. **"Monitor everything"** — Return to Funder Dashboard showing real-time portfolio metrics
 
 This tells the complete story of how a funder would use Connect as their regranting platform.
