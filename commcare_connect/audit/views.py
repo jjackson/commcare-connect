@@ -1782,7 +1782,7 @@ class OpportunityImageTypesAPIView(LoginRequiredMixin, View):
     Response: [{id, label}, ...]
     """
 
-    SAMPLE_SIZE = 200
+    BATCH_SIZE = 10
 
     def get(self, request, opp_id: int):
         data_access = None
@@ -1794,23 +1794,28 @@ class OpportunityImageTypesAPIView(LoginRequiredMixin, View):
             if not slim_visits:
                 return JsonResponse([], safe=False)
 
-            # Sample visit IDs
-            sample = slim_visits[: self.SAMPLE_SIZE]
-            visit_ids = [v["id"] for v in sample if v.get("id")]
+            visit_ids = [v["id"] for v in slim_visits if v.get("id")]
             if not visit_ids:
                 return JsonResponse([], safe=False)
 
-            # Fetch full visits with form_json and images
-            full_visits = data_access.fetch_visits_for_ids(visit_ids, opportunity_id=opp_id)
-
-            # Extract unique question_ids across all sampled visits
+            # Fetch in small batches, stop once image types stabilize
             seen_question_ids = set()
-            for visit in full_visits:
-                images = extract_images_with_question_ids(visit)
-                for img in images:
-                    qid = img.get("question_id")
-                    if qid:
-                        seen_question_ids.add(qid)
+            for i in range(0, min(len(visit_ids), 50), self.BATCH_SIZE):
+                batch_ids = visit_ids[i : i + self.BATCH_SIZE]
+                full_visits = data_access.fetch_visits_for_ids(batch_ids, opportunity_id=opp_id)
+
+                new_ids_found = False
+                for visit in full_visits:
+                    images = extract_images_with_question_ids(visit)
+                    for img in images:
+                        qid = img.get("question_id")
+                        if qid and qid not in seen_question_ids:
+                            seen_question_ids.add(qid)
+                            new_ids_found = True
+
+                # If this batch found no new types, we've likely seen them all
+                if not new_ids_found and seen_question_ids:
+                    break
 
             # Build response: id is the full path, label is the last segment
             result = [{"id": qid, "label": qid.rsplit("/", 1)[-1], "path": qid} for qid in sorted(seen_question_ids)]
