@@ -1,6 +1,9 @@
-"""Tests for OpportunityImageTypesAPIView (Connect-based image type discovery)."""
+"""Tests for OpportunityImageTypesAPIView (streaming CSV image type discovery)."""
+import csv
+import io
+import json
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.test import Client, override_settings
@@ -30,7 +33,44 @@ LABS_SETTINGS = dict(
     IS_LABS_ENVIRONMENT=True,
     MIDDLEWARE=LABS_MIDDLEWARE,
     LOGIN_URL="/labs/login/",
+    CONNECT_PRODUCTION_URL="https://connect.example.com",
 )
+
+CSV_COLUMNS = ["id", "form_json", "images", "username"]
+
+
+def _build_csv_line(fields):
+    """Write a single CSV row using Python's csv module for correct quoting."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(fields)
+    return buf.getvalue().rstrip("\r\n")
+
+
+def _build_csv_lines(rows):
+    """Build properly-quoted CSV lines from a list of dicts with id/form_json/images/username."""
+    lines = [_build_csv_line(CSV_COLUMNS)]
+    for row in rows:
+        fields = [
+            row.get("id", ""),
+            json.dumps(row.get("form_json", {})),
+            json.dumps(row.get("images", [])),
+            row.get("username", "user1"),
+        ]
+        lines.append(_build_csv_line(fields))
+    return lines
+
+
+def _mock_stream_context(lines):
+    """Create a mock httpx.stream context manager that yields lines."""
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.iter_lines.return_value = iter(lines)
+
+    mock_cm = MagicMock()
+    mock_cm.__enter__ = MagicMock(return_value=mock_response)
+    mock_cm.__exit__ = MagicMock(return_value=False)
+    return mock_cm
 
 
 @pytest.fixture
@@ -49,31 +89,25 @@ def labs_client(db):
 
 @override_settings(**LABS_SETTINGS)
 def test_image_types_returns_unique_question_ids(labs_client):
-    """View returns unique question_ids discovered from sampled Connect visits."""
-    sample_visits = [
+    """View returns unique question_ids discovered from streamed CSV rows."""
+    rows = [
         {
             "id": 1,
             "form_json": {"form": {"group": {"photo_a": "img1.jpg"}}},
             "images": [{"blob_id": "b1", "name": "img1.jpg"}],
             "username": "user1",
-            "entity_name": "Entity1",
-            "visit_date": "2024-01-01",
         },
         {
             "id": 2,
             "form_json": {"form": {"group": {"photo_b": "img2.jpg"}}},
             "images": [{"blob_id": "b2", "name": "img2.jpg"}],
             "username": "user2",
-            "entity_name": "Entity2",
-            "visit_date": "2024-01-02",
         },
     ]
+    lines = _build_csv_lines(rows)
+    mock_cm = _mock_stream_context(lines)
 
-    with patch("commcare_connect.audit.views.AuditDataAccess") as MockDA:
-        mock_da = MockDA.return_value
-        mock_da.fetch_visits_slim.return_value = [{"id": 1}, {"id": 2}]
-        mock_da.fetch_visits_for_ids.return_value = sample_visits
-
+    with patch("commcare_connect.audit.views.httpx.stream", return_value=mock_cm):
         response = labs_client.get("/audit/api/opportunity/42/image-questions/")
 
     assert response.status_code == 200
@@ -94,13 +128,52 @@ def test_image_types_requires_auth():
 
 
 @override_settings(**LABS_SETTINGS)
-def test_image_types_empty_opportunity(labs_client):
-    """Returns empty list when no visits exist."""
-    with patch("commcare_connect.audit.views.AuditDataAccess") as MockDA:
-        mock_da = MockDA.return_value
-        mock_da.fetch_visits_slim.return_value = []
+def test_image_types_empty_csv(labs_client):
+    """Returns empty list when CSV has no header."""
+    mock_cm = _mock_stream_context([])
 
+    with patch("commcare_connect.audit.views.httpx.stream", return_value=mock_cm):
         response = labs_client.get("/audit/api/opportunity/42/image-questions/")
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+@override_settings(**LABS_SETTINGS)
+def test_image_types_no_images_column(labs_client):
+    """Returns empty list when CSV has no images column."""
+    header_no_images = _build_csv_line(["id", "form_json", "username"])
+    data_row = _build_csv_line([1, "{}", "user1"])
+    lines = [header_no_images, data_row]
+    mock_cm = _mock_stream_context(lines)
+
+    with patch("commcare_connect.audit.views.httpx.stream", return_value=mock_cm):
+        response = labs_client.get("/audit/api/opportunity/42/image-questions/")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@override_settings(**LABS_SETTINGS)
+def test_image_types_skips_rows_without_images(labs_client):
+    """Rows with empty images are skipped; only rows with images contribute."""
+    rows = [
+        {"id": 1, "form_json": {}, "images": [], "username": "user1"},
+        {"id": 2, "form_json": {}, "images": [], "username": "user2"},
+        {
+            "id": 3,
+            "form_json": {"form": {"group": {"photo_a": "img1.jpg"}}},
+            "images": [{"blob_id": "b1", "name": "img1.jpg"}],
+            "username": "user3",
+        },
+    ]
+    lines = _build_csv_lines(rows)
+    mock_cm = _mock_stream_context(lines)
+
+    with patch("commcare_connect.audit.views.httpx.stream", return_value=mock_cm):
+        response = labs_client.get("/audit/api/opportunity/42/image-questions/")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == "group/photo_a"

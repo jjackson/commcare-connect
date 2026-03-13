@@ -1775,55 +1775,103 @@ class AIReviewAPIView(LoginRequiredMixin, View):
 class OpportunityImageTypesAPIView(LoginRequiredMixin, View):
     """Discover image types from Connect blob data by sampling visits.
 
-    Fetches a sample of visits with images and extracts unique question_id
-    values (the form_json paths that identify each image type).
+    Streams the visit CSV from Connect and reads just the first few rows
+    that have images, then disconnects. This avoids downloading the full
+    dataset (which can be 50k+ visits) just to learn a few image field names.
 
     GET /audit/api/opportunity/<opp_id>/image-questions/
-    Response: [{id, label}, ...]
+    Response: [{id, label, path}, ...]
     """
 
-    BATCH_SIZE = 10
+    MAX_ROWS = 200
+    STABLE_THRESHOLD = 50
 
     def get(self, request, opp_id: int):
-        data_access = None
+        import csv
+        import io
+
+        labs_oauth = request.session.get("labs_oauth", {})
+        access_token = labs_oauth.get("access_token", "")
+        if not access_token:
+            return JsonResponse({"error": "No OAuth token"}, status=401)
+
+        url = f"{settings.CONNECT_PRODUCTION_URL}" f"/export/opportunity/{opp_id}/user_visits/?images=true"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Encoding": "gzip, deflate",
+        }
+
+        seen_question_ids = set()
+        rows_with_images = 0
+
         try:
-            data_access = AuditDataAccess(opportunity_id=opp_id, request=request)
+            with httpx.stream("GET", url, headers=headers, timeout=60.0) as response:
+                response.raise_for_status()
+                lines = response.iter_lines()
+                header_line = next(lines, None)
+                if not header_line:
+                    return JsonResponse([], safe=False)
 
-            # Fetch slim visits (no form_json) to get IDs
-            slim_visits = data_access.fetch_visits_slim(opportunity_id=opp_id)
-            if not slim_visits:
-                return JsonResponse([], safe=False)
+                reader_fields = next(csv.reader(io.StringIO(header_line)))
+                form_json_idx = None
+                images_idx = None
+                for i, field in enumerate(reader_fields):
+                    if field == "form_json":
+                        form_json_idx = i
+                    elif field == "images":
+                        images_idx = i
 
-            visit_ids = [v["id"] for v in slim_visits if v.get("id")]
-            if not visit_ids:
-                return JsonResponse([], safe=False)
+                if images_idx is None:
+                    return JsonResponse([], safe=False)
 
-            # Fetch in small batches, stop once image types stabilize
-            seen_question_ids = set()
-            for i in range(0, min(len(visit_ids), 50), self.BATCH_SIZE):
-                batch_ids = visit_ids[i : i + self.BATCH_SIZE]
-                full_visits = data_access.fetch_visits_for_ids(batch_ids, opportunity_id=opp_id)
+                row_count = 0
+                for line in lines:
+                    row_count += 1
+                    if row_count > self.MAX_ROWS:
+                        break
 
-                new_ids_found = False
-                for visit in full_visits:
-                    images = extract_images_with_question_ids(visit)
-                    for img in images:
+                    row = next(csv.reader(io.StringIO(line)))
+
+                    images_raw = row[images_idx] if images_idx < len(row) else ""
+                    if not images_raw or images_raw == "[]":
+                        continue
+
+                    try:
+                        images = json.loads(images_raw)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+
+                    if not images:
+                        continue
+
+                    form_json_raw = (
+                        row[form_json_idx] if form_json_idx is not None and form_json_idx < len(row) else ""
+                    )
+                    try:
+                        form_json = json.loads(form_json_raw) if form_json_raw else {}
+                    except (json.JSONDecodeError, ValueError):
+                        form_json = {}
+
+                    visit_data = {"images": images, "form_json": form_json}
+                    extracted = extract_images_with_question_ids(visit_data)
+                    new_found = False
+                    for img in extracted:
                         qid = img.get("question_id")
                         if qid and qid not in seen_question_ids:
                             seen_question_ids.add(qid)
-                            new_ids_found = True
+                            new_found = True
 
-                # If this batch found no new types, we've likely seen them all
-                if not new_ids_found and seen_question_ids:
-                    break
+                    rows_with_images += 1
+                    if not new_found and rows_with_images >= self.STABLE_THRESHOLD:
+                        break
 
-            # Build response: id is the full path, label is the last segment
-            result = [{"id": qid, "label": qid.rsplit("/", 1)[-1], "path": qid} for qid in sorted(seen_question_ids)]
-            return JsonResponse(result, safe=False)
-
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            logger.error(f"[ImageTypes] Connect API returned {status} for opp {opp_id}")
+            return JsonResponse({"error": f"Connect API error: {status}"}, status=502)
         except Exception as e:
             logger.error(f"[ImageTypes] Failed to discover image types for opp {opp_id}: {e}")
             return JsonResponse({"error": str(e)}, status=500)
-        finally:
-            if data_access:
-                data_access.close()
+
+        result = [{"id": qid, "label": qid.rsplit("/", 1)[-1], "path": qid} for qid in sorted(seen_question_ids)]
+        return JsonResponse(result, safe=False)
