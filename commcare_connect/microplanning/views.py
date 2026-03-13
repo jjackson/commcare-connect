@@ -175,7 +175,7 @@ def cluster_work_areas(request, org_slug, opp_id):
         "microplanning/cluster_work_area_modal_status.html",
         context={"clustering_task_id": task.id},
     )
-    response.headers = {"HX-Push-Url": redirect_url}
+    response.headers["HX-Push-Url"] = redirect_url
     return response
 
 
