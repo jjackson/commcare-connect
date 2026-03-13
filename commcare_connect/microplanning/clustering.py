@@ -191,7 +191,7 @@ class WorkAreaGrouper:
             work_area_group__isnull=True,
             building_count__gt=0,
         )
-        for wa in work_area_qs:
+        for wa in work_area_qs.iterator():
             work_areas[wa.id] = {
                 "id": wa.id,
                 "ward": wa.ward,
