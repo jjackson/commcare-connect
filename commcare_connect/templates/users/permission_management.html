@@ -11,16 +11,18 @@
               hx-target="#results"
               hx-swap="innerHTML"
               class="flex items-end gap-4">
-            <div class="flex-1">
+            <div class="flex-1 input-group">
                 <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
                     {% translate "User Email" %}
                 </label>
-                <input type="email"
-                       name="email"
-                       id="email"
-                       placeholder="user@example.com"
-                       required
-                       class="w-full rounded-md border-gray-300 shadow-sm focus:border-brand-deep-purple focus:ring-brand-deep-purple sm:text-sm">
+                <div class="simple-input">
+                    <input type="email"
+                           name="email"
+                           id="email"
+                           placeholder="user@example.com"
+                           required>
+                    <i class="fa-solid fa-envelope"></i>
+                </div>
             </div>
             <button type="submit" class="button button-md primary-dark">
                 {% translate "Search" %}
