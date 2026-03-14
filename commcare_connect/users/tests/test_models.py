@@ -6,6 +6,7 @@ from commcare_connect.users.models import ConnectIDUserLink, User, UserCredentia
 from commcare_connect.users.tests.factories import ConnectIdUserLinkFactory
 
 
+@pytest.mark.django_db
 class TestUser:
     def test_get_absolute_url(self, user: User):
         assert user.get_absolute_url() == "/accounts/email/"
@@ -18,17 +19,14 @@ class TestUser:
         user = User(username="alice")
         assert str(user) == "alice"
 
-
-@pytest.mark.django_db
-class TestUserShowInternalFeatures:
-    def test_user_with_no_permissions(self, user):
+    def test_show_internal_features_without_permissions(self, user):
         assert not user.show_internal_features
 
     @pytest.mark.parametrize(
         "codename",
         ["otp_access", "demo_users_access", "kpi_report_access", "all_org_access", "product_features_access"],
     )
-    def test_user_with_internal_permission(self, user, codename):
+    def test_show_internal_features_with_permission(self, user, codename):
         perm = Permission.objects.get(codename=codename)
         user.user_permissions.add(perm)
         user = User.objects.get(pk=user.pk)
