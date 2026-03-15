@@ -15,7 +15,7 @@ The opportunity app is the core domain of CommCare Connect. It manages paid prog
 
 ## User Journey
 
-```
+```text
 Invited → Accepted → Learning → Claimed → Delivering → Paid
 ```
 
@@ -70,7 +70,7 @@ Two levels of auto-approval can be enabled per opportunity:
 
 ## Model Relationships
 
-```
+```text
 Organization
   └── Opportunity
         ├── CommCareApp (learn_app, deliver_app)
