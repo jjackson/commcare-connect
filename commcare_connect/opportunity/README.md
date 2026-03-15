@@ -74,19 +74,19 @@ Two levels of auto-approval can be enabled per opportunity:
 Organization
   └── Opportunity
         ├── CommCareApp (learn_app, deliver_app)
+        │     ├── LearnModule
+        │     └── DeliverUnit → PaymentUnit
         ├── PaymentUnit (amount, limits)
         │     └── PaymentUnit (child, optional)
-        ├── DeliverUnit (form types in deliver app)
-        ├── LearnModule (modules in learn app)
-        ├── OpportunityVerificationFlags
+        ├── OpportunityVerificationFlags (1:1)
         └── OpportunityAccess (per user)
               ├── OpportunityClaim (1:1)
               │     └── OpportunityClaimLimit (per PaymentUnit)
               ├── CompletedModule (per LearnModule)
               ├── Assessment (per attempt)
               ├── CompletedWork (per entity + PaymentUnit)
-              │     └── Payment
-              └── UserVisit (per form submission)
+              ├── UserVisit (per form submission → CompletedWork)
+              └── Payment (per PaymentUnit)
 ```
 
 ## Key Files
