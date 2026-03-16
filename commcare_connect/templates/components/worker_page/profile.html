@@ -31,7 +31,30 @@
           </div>
         </div>
         <div class="py-2 basis-sm">
-          <h2 class="text-base whitespace-nowrap">{{ opportunity_access.user.name }}</h2>
+          <h2 class="text-base whitespace-nowrap flex items-center gap-1">
+            {% if opportunity_access.suspended %}
+              <span x-data x-tooltip.raw="User suspended">
+                <i class="fa-solid fa-minus-square text-black-600"></i>
+              </span>
+            {% elif opportunity_access.userinvite.status == "accepted" %}
+              <span x-data x-tooltip.raw="Invite accepted">
+                <i class="fa-solid fa-circle-check text-green-600"></i>
+              </span>
+            {% elif opportunity_access.userinvite.status == "invited" or opportunity_access.userinvite.status == "sms_delivered" %}
+              <span x-data x-tooltip.raw="Invite pending">
+                <i class="fa-regular fa-clock text-orange-600"></i>
+              </span>
+            {% elif opportunity_access.userinvite.status == "not_found" %}
+              <span x-data x-tooltip.raw="User not found">
+                <i class="fa-solid fa-circle-xmark text-red-600"></i>
+              </span>
+            {% elif opportunity_access.userinvite.status == "sms_not_delivered" %}
+              <span x-data x-tooltip.raw="Invite failed">
+                <i class="fa-solid fa-circle-xmark text-red-600"></i>
+              </span>
+            {% endif %}
+            {{ opportunity_access.user.name }}
+          </h2>
           <p class="text-xs">{{ opportunity_access.user.username }}</p>
           <p class="mt-2 whitespace-nowrap">
             <i class="fa-solid fa-phone"></i>
