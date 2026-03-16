@@ -7,7 +7,7 @@ except ImportError:
     boto3 = None
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils.timezone import now
 
 from commcare_connect.utils.itertools import batched
@@ -43,6 +43,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, **options):
+        if boto3 is None:
+            raise CommandError("boto3 is required but not installed.")
         retention_days = options["retention_days"]
         if retention_days < 1:
             self.stderr.write(self.style.ERROR("--retention-days must be a positive integer."))
