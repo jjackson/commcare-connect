@@ -163,7 +163,7 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
                     xform_id=None,
                     status=CompletedTaskStatus.ASSIGNED,
                 )
-                .first()
+                .get()
             )
             if not completed_task:
                 continue
