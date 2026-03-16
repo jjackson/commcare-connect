@@ -78,8 +78,8 @@ def download_export_file(
 
     try:
         export_file = ExportS3Boto3Storage().open(saved_filename)
-    except FileNotFoundError:
-        raise Http404("Export file no longer available")
+    except FileNotFoundError as e:
+        raise Http404("Export file no longer available") from e
 
     return FileResponse(
         export_file,
