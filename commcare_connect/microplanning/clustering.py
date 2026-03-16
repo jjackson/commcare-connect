@@ -184,7 +184,7 @@ class WorkAreaGrouper:
             unvisited.discard(current)
             total_buildings += building_count
 
-            for neighbour in adjacency.get(current, []):
+            for neighbour in sorted(adjacency.get(current, [])):
                 if neighbour in unvisited and neighbour not in seen:
                     queue.append(neighbour)
                     seen.add(neighbour)
