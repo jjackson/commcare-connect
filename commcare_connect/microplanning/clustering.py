@@ -155,13 +155,11 @@ class WorkAreaGrouper:
                 if hull.geom_type != "Polygon":
                     hull = hull.buffer(SHARED_BOUNDARY_TOLERANCE)
                 group_boundary = hull.wkt
-                group_building_count = sum(work_areas[wa_id].building_count for wa_id in work_area_ids)
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
                     ward=ward,
                     name=group_id,
                     boundary=group_boundary,
-                    building_count=group_building_count,
                 )
                 WorkArea.objects.filter(
                     id__in=work_area_ids,

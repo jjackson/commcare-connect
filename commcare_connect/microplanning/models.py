@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.contrib.gis.db import models as geo_models
 from django.utils.translation import gettext_lazy as _
 
@@ -25,10 +27,13 @@ class WorkAreaGroup(geo_models.Model):
     ward = geo_models.SlugField(max_length=255)
     name = geo_models.CharField(max_length=255)
     boundary = geo_models.PolygonField(srid=SRID, null=True, blank=True)
-    building_count = geo_models.PositiveIntegerField(default=0)
 
     class Meta:
         constraints = [geo_models.UniqueConstraint(fields=["name", "opportunity"], name="unique_name_per_opportunity")]
+
+    @cached_property
+    def building_count(self):
+        return sum(work_area.building_count for work_area in self.workarea_set.all())
 
 
 class WorkArea(geo_models.Model):
