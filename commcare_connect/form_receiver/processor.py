@@ -154,18 +154,19 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
             if not task_slug:
                 continue
 
-            completed_task = (
-                CompletedTask.objects.select_for_update()
-                .filter(
-                    task__app=app,
-                    task__slug=task_slug,
-                    opportunity_access=access,
-                    xform_id=None,
-                    status=CompletedTaskStatus.ASSIGNED,
+            try:
+                completed_task = (
+                    CompletedTask.objects.select_for_update()
+                    .filter(
+                        task__app=app,
+                        task__slug=task_slug,
+                        opportunity_access=access,
+                        xform_id=None,
+                        status=CompletedTaskStatus.ASSIGNED,
+                    )
+                    .get()
                 )
-                .first()
-            )
-            if not completed_task:
+            except CompletedTask.DoesNotExist:
                 continue
 
             completed_task.xform_id = xform.id
