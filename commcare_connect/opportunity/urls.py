@@ -10,6 +10,7 @@ from commcare_connect.opportunity.views import (
     OpportunityInitUpdate,
     OpportunityList,
     OpportunityPaymentUnitTableView,
+    TaskListView,
     WorkerDeliverView,
     WorkerLearnView,
     WorkerPaymentsView,
@@ -161,4 +162,5 @@ urlpatterns = [
         name="download_invoice_line_items",
     ),
     path("<slug:opp_id>/visit_export_count/", views.visit_export_count, name="visit_export_count"),
+    path("<slug:opp_id>/tasks/", TaskListView.as_view(), name="task_list"),
 ]

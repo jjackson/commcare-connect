@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load i18n %}
+{% load render_table from django_tables2 %}
+
+{% block title %}{{ request.org }} - {{ opportunity.name }} - Task List{% endblock %}
+
+{% block content %}
+    <div class="container md:max-w-screen-2xl mx-auto flex flex-col gap-4">
+        {% include 'components/breadcrumbs.html' with path=path %}
+
+        <div class="flex flex-col gap-8 w-full rounded-lg p-6 bg-brand-indigo">
+            <div class="flex justify-between items-start">
+                <div class="flex flex-col gap-2">
+                    <h1 class="text-2xl font-medium text-white">{% trans "Task List" %}</h1>
+                    <p class="text-sm text-gray-100">{% trans "Manage Connect Worker actions and interventions" %}</p>
+                    <p class="text-xs text-gray-300">{% trans "General action tracking system" %}</p>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex flex-col items-center justify-center min-w-32 px-4 py-3 rounded-lg border border-white/30 bg-indigo-400">
+                        <span class="text-2xl font-bold text-white">{{ total_tasks }}</span>
+                        <div class="flex flex-col items-center gap-1 mt-1">
+                            <i class="fa-solid fa-list-check text-white text-sm"></i>
+                            <span class="text-xs text-white">{% trans "Total Tasks" %}</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center min-w-32 px-4 py-3 rounded-lg border border-white/30 bg-indigo-400">
+                        <span class="text-2xl font-bold text-white">{{ open_tasks }}</span>
+                        <div class="flex flex-col items-center gap-1 mt-1">
+                            <i class="fa-regular fa-calendar text-white text-sm"></i>
+                            <span class="text-xs text-white">{% trans "Open Tasks" %}</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center min-w-32 px-4 py-3 rounded-lg border border-white/30 bg-indigo-400">
+                        <span class="text-2xl font-bold text-white">{{ complete_tasks }}</span>
+                        <div class="flex flex-col items-center gap-1 mt-1">
+                            <i class="fa-solid fa-circle-check text-white text-sm"></i>
+                            <span class="text-xs text-white">{% trans "Complete" %}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-xs p-4">
+            {% render_table table %}
+        </div>
+    </div>
+{% endblock %}
