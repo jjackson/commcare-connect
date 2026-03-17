@@ -1,3 +1,4 @@
+import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from uuid import uuid4
@@ -10,6 +11,8 @@ from shapely.ops import transform
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
+
+logger = logging.getLogger(__name__)
 
 # Minimum length (in meters) of a shared boundary segment for two
 # work areas to be considered adjacent. this threshold filters
@@ -77,11 +80,24 @@ class WorkAreaGrouper:
 
     def cluster_work_areas(self):
         work_areas = self._prepare_data()
+        if not work_areas:
+            logger.info("Opportunity %s: no ungrouped work areas to cluster", self.opportunity_id)
+            return
+
         work_area_groups = defaultdict(set)
 
         wards = defaultdict(list)
         for wa_id, wa_data in work_areas.items():
             wards[wa_data.ward].append(wa_id)
+
+        logger.info(
+            "Opportunity %s: clustering %d work areas across %d wards (max_buildings=%d, buffer_distance=%d)",
+            self.opportunity_id,
+            len(work_areas),
+            len(wards),
+            self.max_buildings,
+            self.buffer_distance,
+        )
 
         for ward, ward_ids in wards.items():
             ward_data = {wa_id: work_areas[wa_id] for wa_id in ward_ids}
@@ -96,6 +112,7 @@ class WorkAreaGrouper:
                 ),
             )
             unvisited = set(ward_ids)
+            ward_group_count = 0
 
             for wa_id in sorted_ids:
                 if wa_id not in unvisited:
@@ -111,9 +128,24 @@ class WorkAreaGrouper:
                 if not cluster:
                     cluster = [wa_id]
                     unvisited.discard(wa_id)
+                    logger.debug(
+                        "Opportunity %s, ward %s: work area %s exceeds max_buildings, assigned to its own group",
+                        self.opportunity_id,
+                        ward,
+                        wa_id,
+                    )
 
                 group_id = str(uuid4())
                 work_area_groups[(ward, group_id)].update(cluster)
+                ward_group_count += 1
+
+            logger.info(
+                "Opportunity %s, ward %s: %d work areas clustered into %d groups",
+                self.opportunity_id,
+                ward,
+                len(ward_ids),
+                ward_group_count,
+            )
 
         with transaction.atomic():
             for key, work_area_ids in work_area_groups.items():
@@ -136,6 +168,12 @@ class WorkAreaGrouper:
                     opportunity=self.opportunity_id,
                     work_area_group__isnull=True,
                 ).update(work_area_group=work_area_group)
+
+        logger.info(
+            "Opportunity %s: clustering complete, created %d groups",
+            self.opportunity_id,
+            len(work_area_groups),
+        )
 
     def _build_adjacency(self, ward_data: dict, tolerance: float = SHARED_BOUNDARY_TOLERANCE) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
