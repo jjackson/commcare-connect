@@ -1927,9 +1927,13 @@ class AddTaskTypeForm(forms.ModelForm):
         task_units = get_task_units_for_app(self.opportunity.deliver_app)
         already_used_slugs = set(Task.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True))
         available_units = [tu for tu in task_units if tu.id not in already_used_slugs]
-        self.fields["task_unit"].choices = [("", _("Select a task unit"))] + [
-            (tu.id, tu.name) for tu in available_units
-        ]
+        if available_units:
+            self.fields["task_unit_id"].choices = [("", _("Select a task unit"))] + [
+                (tu.id, tu.name) for tu in available_units
+            ]
+        else:
+            self.fields["task_unit_id"].choices = [("", _("No available task units"))]
+            self.fields["task_unit_id"].widget.attrs["disabled"] = True
         self.task_units_data = json.dumps(
             {tu.id: {"name": tu.name, "description": tu.description} for tu in available_units}
         )
