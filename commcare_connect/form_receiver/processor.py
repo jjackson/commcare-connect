@@ -354,11 +354,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 try:
                     user_visit.work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
                 except WorkArea.DoesNotExist:
-                    logger.error(
-                        f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
-                    )
+                    raise ProcessingError("Work area not found")
             else:
-                logger.error(f"Invalid work area case id specified: {work_area_case_id}")
+                raise ProcessingError(f"Invalid work area case id specified: {work_area_case_id}")
 
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:
