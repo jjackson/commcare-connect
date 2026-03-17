@@ -57,8 +57,8 @@ class WorkAreaGrouper:
     def __init__(
         self,
         opportunity_id: int,
-        max_buildings=300,
-        buffer_distance=100,
+        max_buildings: int = 300,
+        buffer_distance: int = 100,
     ):
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
