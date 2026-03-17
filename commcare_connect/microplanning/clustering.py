@@ -1,9 +1,11 @@
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from uuid import uuid4
 
 from django.db import transaction
 from pyproj import Transformer
 from shapely import shared_paths, unary_union, wkb
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
 from shapely.strtree import STRtree
 
@@ -13,6 +15,14 @@ from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 # work areas to be considered adjacent. this threshold filters
 # them out so only genuine shared edges count.
 SHARED_BOUNDARY_TOLERANCE = 1e-6
+
+
+@dataclass
+class WorkAreaData:
+    ward: str
+    centroid: BaseGeometry
+    boundary: BaseGeometry
+    building_count: int
 
 
 class WorkAreaGrouper:
@@ -71,7 +81,7 @@ class WorkAreaGrouper:
 
         wards = defaultdict(list)
         for wa_id, wa_data in work_areas.items():
-            wards[wa_data["ward"]].append(wa_id)
+            wards[wa_data.ward].append(wa_id)
 
         for ward, ward_ids in wards.items():
             ward_data = {wa_id: work_areas[wa_id] for wa_id in ward_ids}
@@ -81,8 +91,8 @@ class WorkAreaGrouper:
             sorted_ids = sorted(
                 ward_ids,
                 key=lambda wa_id: (
-                    ward_data[wa_id]["centroid"].x,
-                    -ward_data[wa_id]["centroid"].y,
+                    ward_data[wa_id].centroid.x,
+                    -ward_data[wa_id].centroid.y,
                 ),
             )
             unvisited = set(ward_ids)
@@ -108,12 +118,12 @@ class WorkAreaGrouper:
         with transaction.atomic():
             for key, work_area_ids in work_area_groups.items():
                 ward, group_id = key
-                combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
+                combined_work_area_boundary = unary_union([work_areas[wa_id].boundary for wa_id in work_area_ids])
                 hull = combined_work_area_boundary.convex_hull
                 if hull.geom_type != "Polygon":
                     hull = hull.buffer(SHARED_BOUNDARY_TOLERANCE)
                 group_boundary = hull.wkt
-                group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
+                group_building_count = sum(work_areas[wa_id].building_count for wa_id in work_area_ids)
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
                     ward=ward,
@@ -132,7 +142,7 @@ class WorkAreaGrouper:
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
-            transformed_geoms[wa_id] = transform(self.transformer.transform, wa["boundary"])
+            transformed_geoms[wa_id] = transform(self.transformer.transform, wa.boundary)
 
         wa_ids_list = list(transformed_geoms.keys())
         geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
@@ -179,7 +189,7 @@ class WorkAreaGrouper:
             if current not in unvisited:
                 continue
 
-            building_count = work_areas[current]["building_count"]
+            building_count = work_areas[current].building_count
 
             if total_buildings + building_count > self.max_buildings:
                 seen.discard(current)
@@ -204,11 +214,10 @@ class WorkAreaGrouper:
             building_count__gt=0,
         )
         for wa in work_area_qs.iterator():
-            work_areas[wa.id] = {
-                "id": wa.id,
-                "ward": wa.ward,
-                "centroid": wkb.loads(bytes(wa.centroid.wkb)),
-                "boundary": wkb.loads(bytes(wa.boundary.wkb)),
-                "building_count": wa.building_count,
-            }
+            work_areas[wa.id] = WorkAreaData(
+                ward=wa.ward,
+                centroid=wkb.loads(bytes(wa.centroid.wkb)),
+                boundary=wkb.loads(bytes(wa.boundary.wkb)),
+                building_count=wa.building_count,
+            )
         return work_areas
