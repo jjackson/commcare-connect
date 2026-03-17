@@ -9,6 +9,11 @@ from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 
+# Minimum length (in meters) of a shared boundary segment for two
+# work areas to be considered adjacent. this threshold filters
+# them out so only genuine shared edges count.
+SHARED_BOUNDARY_TOLERANCE = 1e-6
+
 
 class WorkAreaGrouper:
     """
@@ -122,7 +127,7 @@ class WorkAreaGrouper:
                     work_area_group__isnull=True,
                 ).update(work_area_group=work_area_group)
 
-    def _build_adjacency(self, ward_data: dict, tolerance: float = 1e-6) -> dict:
+    def _build_adjacency(self, ward_data: dict, tolerance: float = SHARED_BOUNDARY_TOLERANCE) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
 
         transformed_geoms = {}
