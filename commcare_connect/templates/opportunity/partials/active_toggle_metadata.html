@@ -14,7 +14,7 @@
             <span class="font-medium">{% trans 'Unavailable' %}</span>
         {% endif %}
         {% endwith %}
-        on {{ latest_active_event.pgh_created_at|date:"d M Y" }}
+        {% blocktrans with date=latest_active_event.pgh_created_at|date:"d M Y" %}on {{ date }}{% endblocktrans %}
     </p>
     <button type="button" @click="showActiveHistory = true" aria-label="View active status history"
         :aria-expanded="showActiveHistory"
