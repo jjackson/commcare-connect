@@ -111,7 +111,7 @@ class WorkAreaGrouper:
                 combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
                 hull = combined_work_area_boundary.convex_hull
                 if hull.geom_type != "Polygon":
-                    hull = hull.buffer(1e-6)
+                    hull = hull.buffer(SHARED_BOUNDARY_TOLERANCE)
                 group_boundary = hull.wkt
                 group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
                 work_area_group = WorkAreaGroup.objects.create(
