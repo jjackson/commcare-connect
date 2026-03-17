@@ -1938,8 +1938,8 @@ class AddTaskTypeForm(forms.ModelForm):
         task = super().save(commit=False)
         task.app = self.opportunity.deliver_app
         task.slug = self.cleaned_data["task_unit"]
-        task_unit_name = dict(self.fields["task_unit"].choices).get(task.slug, "")
-        task.task_unit_name = task_unit_name[:255]
+        unit_name = dict(self.fields["task_unit"].choices).get(task.slug, "")
+        task.unit_name = unit_name[:255]
         if commit:
             task.save()
         return task

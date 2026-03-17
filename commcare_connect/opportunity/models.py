@@ -261,7 +261,7 @@ class LearnModule(models.Model):
 class Task(models.Model):
     app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
     slug = models.SlugField()
-    task_unit_name = models.CharField(max_length=255, null=True, blank=True)
+    unit_name = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)

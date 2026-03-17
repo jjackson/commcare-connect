@@ -1695,7 +1695,7 @@ class TaskTable(tables.Table):
     index = IndexColumn()
     name = tables.Column(verbose_name=gettext_lazy("Task Type Name"))
     description = tables.Column(verbose_name=gettext_lazy("Description"))
-    linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="task_unit_name")
+    linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="unit_name")
 
     class Meta:
         model = Task

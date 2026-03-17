@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="task",
-            name="task_unit_name",
+            name="unit_name",
             field=models.CharField(blank=True, max_length=255, null=True),
         ),
     ]
