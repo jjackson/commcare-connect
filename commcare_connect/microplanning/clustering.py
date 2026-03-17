@@ -92,7 +92,7 @@ class WorkAreaGrouper:
                     continue
 
                 cluster = self._bfs_cluster(
-                    seed_idx=wa_id,
+                    seed_id=wa_id,
                     unvisited=unvisited,
                     adjacency=adjacency,
                     work_areas=work_areas,
@@ -163,15 +163,15 @@ class WorkAreaGrouper:
 
     def _bfs_cluster(
         self,
-        seed_idx,
+        seed_id,
         unvisited: set,
         adjacency: dict,
         work_areas: dict,
     ) -> list:
         cluster = []
         total_buildings = 0
-        queue = deque([seed_idx])
-        seen = {seed_idx}
+        queue = deque([seed_id])
+        seen = {seed_id}
 
         while queue:
             current = queue.popleft()
