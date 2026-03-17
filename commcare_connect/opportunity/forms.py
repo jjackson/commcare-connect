@@ -1895,7 +1895,7 @@ class CreateTaskForm(forms.Form):
 
 
 class AddTaskTypeForm(forms.ModelForm):
-    task_unit = forms.ChoiceField(
+    task_unit_id = forms.ChoiceField(
         label=_("Task unit"),
         choices=[],
         widget=forms.Select(attrs={"@change": "onTaskUnitSelectChange($event.target.value)"}),
@@ -1915,7 +1915,7 @@ class AddTaskTypeForm(forms.ModelForm):
         self.helper.form_tag = False
         self.helper.layout = Layout(
             Div(
-                Field("task_unit"),
+                Field("task_unit_id"),
                 Field("name"),
                 css_class="grid grid-cols-2 gap-6",
             ),
@@ -1937,8 +1937,8 @@ class AddTaskTypeForm(forms.ModelForm):
     def save(self, commit=True):
         task = super().save(commit=False)
         task.app = self.opportunity.deliver_app
-        task.slug = self.cleaned_data["task_unit"]
-        unit_name = dict(self.fields["task_unit"].choices).get(task.slug, "")
+        task.slug = self.cleaned_data["task_unit_id"]
+        unit_name = dict(self.fields["task_unit_id"].choices).get(task.slug, "")
         task.unit_name = unit_name[:255]
         if commit:
             task.save()
@@ -1946,10 +1946,10 @@ class AddTaskTypeForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        task_unit_id = cleaned_data.get("task_unit")
+        task_unit_id = cleaned_data.get("task_unit_id")
         if not task_unit_id:
             return cleaned_data
 
         if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
-            self.add_error("task_unit", _("A task with this task unit ID already exists."))
+            self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
         return cleaned_data
