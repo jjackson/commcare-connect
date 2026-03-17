@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.opportunity.app_xml import get_task_units_for_app
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedWork,
@@ -1891,3 +1892,64 @@ class CreateTaskForm(forms.Form):
         if due_date < datetime.date.today():
             raise ValidationError(_("Due date cannot be in the past."))
         return due_date
+
+
+class AddTaskTypeForm(forms.ModelForm):
+    task_unit = forms.ChoiceField(
+        label=_("Task unit"),
+        choices=[],
+        widget=forms.Select(attrs={"@change": "onTaskUnitSelectChange($event.target.value)"}),
+    )
+
+    class Meta:
+        model = Task
+        fields = ["name", "description", "case_property"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, opportunity, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.opportunity = opportunity
+        self._populate_task_unit_choices()
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Div(
+                Field("task_unit"),
+                Field("name"),
+                css_class="grid grid-cols-2 gap-6",
+            ),
+            Field("case_property"),
+            Field("description"),
+        )
+
+    def _populate_task_unit_choices(self):
+        task_units = get_task_units_for_app(self.opportunity.deliver_app)
+        already_used_slugs = set(Task.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True))
+        available_units = [tu for tu in task_units if tu.id not in already_used_slugs]
+        self.fields["task_unit"].choices = [("", _("Select a task unit"))] + [
+            (tu.id, tu.name) for tu in available_units
+        ]
+        self.task_units_data = json.dumps(
+            {tu.id: {"name": tu.name, "description": tu.description} for tu in available_units}
+        )
+
+    def save(self, commit=True):
+        task = super().save(commit=False)
+        task.app = self.opportunity.deliver_app
+        task.slug = self.cleaned_data["task_unit"]
+        task_unit_name = dict(self.fields["task_unit"].choices).get(task.slug, "")
+        task.task_unit_name = task_unit_name[:255]
+        if commit:
+            task.save()
+        return task
+
+    def clean(self):
+        cleaned_data = super().clean()
+        task_unit_id = cleaned_data.get("task_unit")
+        if not task_unit_id:
+            return cleaned_data
+
+        if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
+            self.add_error("task_unit", _("A task with this task unit ID already exists."))
+        return cleaned_data
