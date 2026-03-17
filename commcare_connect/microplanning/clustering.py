@@ -5,9 +5,10 @@ from uuid import uuid4
 
 from django.db import transaction
 from pyproj import Transformer
-from shapely import shared_paths, unary_union, wkb
+from shapely import unary_union, wkb
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
+from shapely.prepared import prep
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
@@ -173,7 +174,7 @@ class WorkAreaGrouper:
             len(work_area_groups),
         )
 
-    def _build_adjacency(self, ward_data: dict, tolerance: float = SHARED_BOUNDARY_TOLERANCE) -> dict:
+    def _build_adjacency(self, ward_data: dict) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
 
         transformed_geoms = {}
@@ -188,22 +189,22 @@ class WorkAreaGrouper:
         for work_area_id, geom in transformed_geoms.items():
             query_geom = geom.buffer(self.buffer_distance)
             candidate_indices = spatial_index.query(query_geom, predicate="intersects")
+            prepared_geom = prep(geom)
 
             for idx in candidate_indices:
                 neighbour_id = wa_ids_list[idx]
-                if neighbour_id == work_area_id:
+                # Already known adjacent from a previous iteration
+                if neighbour_id in adjacency[work_area_id]:
                     continue
 
                 candidate_geom = transformed_geoms[neighbour_id]
 
-                shared = shared_paths(geom.boundary, candidate_geom.boundary)
-                if shared.length > tolerance:
+                if prepared_geom.intersects(candidate_geom):
                     adjacency[work_area_id].add(neighbour_id)
-                    continue
-
-                dist = geom.distance(candidate_geom)
-                if dist <= self.buffer_distance:
+                    adjacency[neighbour_id].add(work_area_id)
+                elif geom.distance(candidate_geom) <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
+                    adjacency[neighbour_id].add(work_area_id)
 
         return adjacency
 
