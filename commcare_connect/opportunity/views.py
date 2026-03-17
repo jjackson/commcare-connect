@@ -174,6 +174,7 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
+    opportunity_program_manager_required,
     opportunity_required,
     org_admin_required,
     org_member_required,
@@ -1207,12 +1208,10 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
     return redirect("opportunity:detail", org_slug, opp_id)
 
 
-@org_program_manager_required
+@opportunity_program_manager_required
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
-    if not request.is_opportunity_pm:
-        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = True
     access.suspension_date = now()
@@ -1227,11 +1226,9 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @require_POST
-@org_program_manager_required
+@opportunity_program_manager_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
-    if not request.is_opportunity_pm:
-        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = False
     access.save()
