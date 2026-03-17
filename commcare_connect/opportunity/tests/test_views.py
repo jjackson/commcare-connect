@@ -24,6 +24,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentUnit,
+    Task,
     UserInvite,
     UserInviteStatus,
     VisitReviewStatus,
@@ -1974,3 +1975,95 @@ def test_visit_export_count_boundary_dates(
 
     assert response.status_code == HTTPStatus.OK
     assert "2 visits match your filters." in response.content.decode()
+
+
+@pytest.mark.django_db
+class TestTaskTypesConfig:
+    MOCK_TASK_UNITS_PATH = "commcare_connect.opportunity.forms.get_task_units_for_app"
+
+    @pytest.fixture
+    def opp(self, program_manager_org):
+        return OpportunityFactory(organization=program_manager_org)
+
+    @pytest.fixture
+    def task_units(self):
+        from commcare_connect.opportunity.app_xml import TaskUnit
+
+        return [
+            TaskUnit(id="task_1", name="Task One", description="Desc one"),
+            TaskUnit(id="task_2", name="Task Two", description="Desc two"),
+        ]
+
+    def _url(self, opp):
+        return reverse("opportunity:task_types_config", args=(opp.organization.slug, opp.opportunity_id))
+
+    def test_unauthenticated_redirects(self, client, opportunity, task_units):
+        url = self._url(opportunity)
+        with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
+            response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert "/accounts/login/" in response["Location"] or "login" in response["Location"]
+
+    def test_non_managed_opp_org_member_success(self, client, organization, org_user_admin, task_units):
+        opp = OpportunityFactory(organization=organization)
+        url = reverse("opportunity:task_types_config", args=(organization.slug, opp.opportunity_id))
+        client.force_login(org_user_admin)
+        with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
+            response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+    def test_managed_opp_non_pm_redirects(self, client, organization, org_user_admin, program_manager_org):
+        program = ProgramFactory(organization=program_manager_org)
+        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        url = reverse("opportunity:task_types_config", args=(organization.slug, managed_opp.opportunity_id))
+        client.force_login(org_user_admin)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response["Location"] == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opp.opportunity_id)
+        )
+
+    def test_managed_opp_pm_success(
+        self, client, organization, program_manager_org, program_manager_org_user_admin, task_units
+    ):
+        program = ProgramFactory(organization=program_manager_org)
+        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        url = reverse("opportunity:task_types_config", args=(program_manager_org.slug, managed_opp.opportunity_id))
+        client.force_login(program_manager_org_user_admin)
+        with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
+            response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+    def test_post_valid_data_creates_task_and_redirects(self, client, program_manager_org_user_admin, opp, task_units):
+        client.force_login(program_manager_org_user_admin)
+        with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
+            response = client.post(
+                self._url(opp),
+                data={
+                    "task_unit": "task_1",
+                    "name": "My Task",
+                    "description": "A useful task description.",
+                    "case_property": "",
+                },
+            )
+        assert response.status_code == HTTPStatus.FOUND
+        assert response["Location"] == self._url(opp)
+        task = Task.objects.get(app=opp.deliver_app, name="My Task")
+        assert task.slug == "task_1"
+
+    def test_post_missing_data_rerenders_form_with_errors(
+        self, client, program_manager_org_user_admin, opp, task_units
+    ):
+        client.force_login(program_manager_org_user_admin)
+        with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
+            response = client.post(
+                self._url(opp),
+                data={
+                    "name": "",
+                    "description": "A useful task description.",
+                    "task_unit": "",
+                },
+            )
+        assert response.status_code == HTTPStatus.OK
+        assert not Task.objects.filter(app=opp.deliver_app).exists()
+        assert response.context["form"].errors
