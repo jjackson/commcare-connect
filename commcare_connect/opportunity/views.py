@@ -324,13 +324,13 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     form_class = OpportunityChangeForm
     active_history_events = []
 
-    def get(self, *args, **kwargs):
+    def dispatch(self, *args, **kwargs):
         self.active_history_events = (
             OpportunityActiveEvent.objects.filter(pgh_obj=self.get_object())
             .select_related("pgh_context")
             .order_by("-pgh_created_at")
         )
-        return super().get(*args, **kwargs)
+        return super().dispatch(*args, **kwargs)
 
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.opportunity_id))
