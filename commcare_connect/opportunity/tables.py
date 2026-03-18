@@ -1697,7 +1697,7 @@ class TaskListTable(OrgContextTable):
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = tables.Column(verbose_name=gettext_lazy("Status"), accessor="status")
     task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
-    assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date")
+    assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
     assigned_by = tables.Column(verbose_name=gettext_lazy("Assigned By"), accessor="assigned_by__name")
     action = tables.Column(verbose_name="", orderable=False, empty_values=())

@@ -426,6 +426,7 @@ class CompletedTask(XFormBaseModel):
         max_length=50,
     )
     due_date = models.DateField()
+    date_created = models.DateTimeField(auto_now_add=True)
     assigned_by = models.ForeignKey(
         User,
         null=True,

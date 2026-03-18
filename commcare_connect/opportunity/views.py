@@ -3131,7 +3131,7 @@ class TaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSing
         return (
             CompletedTask.objects.filter(opportunity_access__opportunity=opportunity)
             .select_related("task", "opportunity_access__user", "assigned_by")
-            .order_by("-date")
+            .order_by("-date_created")
         )
 
     def get_context_data(self, **kwargs):
