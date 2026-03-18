@@ -1691,13 +1691,24 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class TaskTable(tables.Table):
+class TaskTable(OpportunityContextTable):
     index = IndexColumn()
     name = tables.Column(verbose_name=gettext_lazy("Task Type Name"))
     description = tables.Column(verbose_name=gettext_lazy("Description"))
     linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="unit_name")
+    archived = tables.BooleanColumn(verbose_name=gettext_lazy("Archived"))
+    actions = tables.Column(empty_values=(), orderable=False, verbose_name=gettext_lazy("Actions"))
 
     class Meta:
         model = Task
-        fields = ("index", "name", "description", "linked_task_unit")
+        fields = ("index", "name", "description", "linked_task_unit", "archived", "actions")
         empty_text = gettext_lazy("No task types configured for this opportunity.")
+
+    def render_actions(self, record):
+        edit_url = reverse("opportunity:edit_task_type", args=(self.org_slug, self.opp_id, record.pk))
+        request = getattr(self.context, "request", None) if hasattr(self, "context") else None
+        return render_to_string(
+            "opportunity/partials/edit_task_button.html",
+            {"edit_url": edit_url},
+            request=request,
+        )
