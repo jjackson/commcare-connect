@@ -3,7 +3,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from functools import partial
+from functools import cached_property, partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
@@ -322,22 +322,14 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     model = Opportunity
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
-    active_history_events = []
 
-    def set_active_events(self):
-        self.active_history_events = (
+    @cached_property
+    def active_history_events(self):
+        return (
             OpportunityActiveEvent.objects.filter(pgh_obj=self.get_object())
             .select_related("pgh_context")
             .order_by("-pgh_created_at")
         )
-
-    def get(self, *args, **kwargs):
-        self.set_active_events()
-        return super().get(*args, **kwargs)
-
-    def post(self, *args, **kwargs):
-        self.set_active_events()
-        return super().post(*args, **kwargs)
 
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.opportunity_id))
