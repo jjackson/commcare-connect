@@ -3137,12 +3137,17 @@ class TaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSing
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         opportunity = self.get_opportunity()
-        queryset = self.get_queryset()
+
+        counts = CompletedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
+            total=Count("id"),
+            open_tasks=Count("id", filter=Q(status=CompletedTaskStatus.ASSIGNED)),
+            complete_tasks=Count("id", filter=Q(status=CompletedTaskStatus.COMPLETED)),
+        )
 
         context["opportunity"] = opportunity
-        context["total_tasks"] = queryset.count()
-        context["open_tasks"] = queryset.filter(status=CompletedTaskStatus.ASSIGNED).count()
-        context["complete_tasks"] = queryset.filter(status=CompletedTaskStatus.COMPLETED).count()
+        context["total_tasks"] = counts["total"]
+        context["open_tasks"] = counts["open_tasks"]
+        context["complete_tasks"] = counts["complete_tasks"]
 
         context["path"] = [
             {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": self.request.org.slug})},
