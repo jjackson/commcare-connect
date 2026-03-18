@@ -1753,7 +1753,7 @@ class TaskListTable(OrgContextTable):
 
     def render_assigned_by(self, value):
         if value is None:
-            return "---"
+            return "deleted user"
         return value
 
     def render_action(self, record):
