@@ -249,6 +249,9 @@ class ModifyWorkAreaUpdateView(UpdateView):
     pk_url_kwarg = "work_area_id"
     context_object_name = "work_area"
 
+    def get_queryset(self):
+        return super().get_queryset().filter(opportunity=self.request.opportunity)
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["opportunity"] = self.request.opportunity
