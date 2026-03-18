@@ -2074,7 +2074,7 @@ class TestTaskTypesConfig:
             response = client.post(
                 self._url(opp),
                 data={
-                    "task_unit": "task_1",
+                    "task_unit_id": "task_1",
                     "name": "My Task",
                     "description": "A useful task description.",
                     "case_property": "",
@@ -2095,7 +2095,7 @@ class TestTaskTypesConfig:
                 data={
                     "name": "",
                     "description": "A useful task description.",
-                    "task_unit": "",
+                    "task_unit_id": "",
                 },
             )
         assert response.status_code == HTTPStatus.OK

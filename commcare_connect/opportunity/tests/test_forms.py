@@ -827,7 +827,7 @@ class TestAddTaskTypeForm:
     def test_task_unit_choices_populated(self, opportunity, task_units):
         with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
             form = AddTaskTypeForm(opportunity=opportunity)
-        choices = form.fields["task_unit"].choices
+        choices = form.fields["task_unit_id"].choices
         assert choices[0] == ("", "Select a task unit")
         assert ("task_1", "Task One") in choices
         assert ("task_2", "Task Two") in choices
@@ -836,7 +836,7 @@ class TestAddTaskTypeForm:
         TaskFactory(app=opportunity.deliver_app, slug="task_1")
         with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
             form = AddTaskTypeForm(opportunity=opportunity)
-        choice_ids = [c[0] for c in form.fields["task_unit"].choices]
+        choice_ids = [c[0] for c in form.fields["task_unit_id"].choices]
         assert "task_1" not in choice_ids
         assert "task_2" in choice_ids
         assert "task_3" in choice_ids
@@ -845,7 +845,7 @@ class TestAddTaskTypeForm:
         with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
             form = AddTaskTypeForm(
                 data={
-                    "task_unit": "task_1",
+                    "task_unit_id": "task_1",
                     "name": "My Task",
                     "description": "A description",
                     "case_property": "some_property",
@@ -858,7 +858,7 @@ class TestAddTaskTypeForm:
         with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
             form = AddTaskTypeForm(data={}, opportunity=opportunity)
         assert not form.is_valid()
-        assert "task_unit" in form.errors
+        assert "task_unit_id" in form.errors
         assert "name" in form.errors
         assert "description" in form.errors
 
@@ -866,7 +866,7 @@ class TestAddTaskTypeForm:
         with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
             form = AddTaskTypeForm(
                 data={
-                    "task_unit": "task_1",
+                    "task_unit_id": "task_1",
                     "name": "My Task",
                     "description": "A description",
                 },
