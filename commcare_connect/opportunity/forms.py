@@ -1984,3 +1984,21 @@ class AddTaskTypeForm(forms.ModelForm):
         if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
             self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
         return cleaned_data
+
+
+class EditTaskTypeForm(forms.ModelForm):
+    class Meta:
+        model = Task
+        fields = ["name", "description", "archived"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+        labels = {"archived": _("Archive this task type")}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Field("name"),
+            Field("description"),
+            Field("archived"),
+        )

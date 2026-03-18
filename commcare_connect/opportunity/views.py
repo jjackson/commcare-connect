@@ -71,6 +71,7 @@ from commcare_connect.opportunity.forms import (
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     DeliverUnitFlagsForm,
+    EditTaskTypeForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
     OpportunityChangeForm,
@@ -1195,6 +1196,41 @@ class TaskTypesConfig(TaskTypeBaseView):
             form.save()
             messages.success(request, _("Task type added successfully."))
             return redirect("opportunity:task_types_config", org_slug=org_slug, opp_id=opp_id)
+        return self.render_to_response(self.get_context_data(form=form))
+
+
+class EditTaskType(TaskTypeBaseView):
+    template_name = "opportunity/edit_task_type_form.html"
+
+    def get_task(self):
+        if not hasattr(self, "_task"):
+            self._task = get_object_or_404(Task, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
+        return self._task
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "form": kwargs.get("form") or EditTaskTypeForm(instance=self.get_task()),
+                "hx_post_url": reverse(
+                    "opportunity:edit_task_type",
+                    args=(self.kwargs["org_slug"], self.kwargs["opp_id"], self.kwargs["pk"]),
+                ),
+            }
+        )
+        return context
+
+    def get(self, request, org_slug, opp_id, pk):
+        return self.render_to_response(self.get_context_data())
+
+    def post(self, request, org_slug, opp_id, pk):
+        form = EditTaskTypeForm(data=request.POST, instance=self.get_task())
+        if form.is_valid():
+            form.save()
+            messages.success(request, _("Task type updated successfully."))
+            response = HttpResponse()
+            response["HX-Redirect"] = reverse("opportunity:task_types_config", args=(org_slug, opp_id))
+            return response
         return self.render_to_response(self.get_context_data(form=form))
 
 
