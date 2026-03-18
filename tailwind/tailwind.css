@@ -62,6 +62,29 @@
   border-right-color: var(--color-brand-indigo);
 }
 
+/* ------ Tippy.js tooltip (white theme, for use on dark backgrounds) ------ */
+.tippy-box[data-theme='light'] {
+  background-color: var(--color-message-info);
+  color: var(--color-brand-deep-purple);
+}
+
+.tippy-box[data-theme='light'][data-placement^='top'] > .tippy-arrow::before {
+  border-top-color: white;
+}
+
+.tippy-box[data-theme='light'][data-placement^='bottom']
+  > .tippy-arrow::before {
+  border-bottom-color: white;
+}
+
+.tippy-box[data-theme='light'][data-placement^='left'] > .tippy-arrow::before {
+  border-left-color: white;
+}
+
+.tippy-box[data-theme='light'][data-placement^='right'] > .tippy-arrow::before {
+  border-right-color: white;
+}
+
 /* ----- background -------*/
 .card_bg {
   @apply rounded-lg bg-white p-6 shadow-sm;
