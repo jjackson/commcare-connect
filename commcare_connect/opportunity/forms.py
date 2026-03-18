@@ -1,8 +1,10 @@
 import datetime
 import json
+import logging
 from functools import cached_property
 from urllib.parse import urlencode
 
+import httpx
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
 from dateutil.relativedelta import relativedelta
@@ -52,6 +54,9 @@ from commcare_connect.opportunity.utils.invoice import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User, UserCredential
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
+
+logger = logging.getLogger(__name__)
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
@@ -1939,7 +1944,14 @@ class AddTaskTypeForm(forms.ModelForm):
         )
 
     def _populate_task_unit_choices(self):
-        task_units = get_task_units_for_app(self.opportunity.deliver_app)
+        try:
+            task_units = get_task_units_for_app(self.opportunity.deliver_app)
+        except (httpx.TimeoutException, httpx.ConnectError, CommCareHQAPIException):
+            logger.exception("Failed to fetch task units for app %s", self.opportunity.deliver_app.pk)
+            self.fields["task_unit_id"].choices = [("", _("Failed to load task units"))]
+            self.fields["task_unit_id"].widget.attrs["disabled"] = True
+            self.task_units_data = json.dumps({})
+            return
         already_used_slugs = set(Task.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True))
         available_units = [tu for tu in task_units if tu.id not in already_used_slugs]
         if available_units:
