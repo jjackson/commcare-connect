@@ -13,6 +13,7 @@ from commcare_connect.opportunity.forms import (
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     CreateTaskForm,
+    EditTaskTypeForm,
     OpportunityChangeForm,
     OpportunityInitUpdateForm,
     OpportunityUserInviteForm,
@@ -876,3 +877,64 @@ class TestAddTaskTypeForm:
         task = form.save()
         assert task.slug == "task_1"
         assert task.app == opportunity.deliver_app
+
+
+@pytest.mark.django_db
+class TestEditTaskTypeForm:
+    def test_updates_name_and_description(self, opportunity):
+        task = TaskFactory(app=opportunity.deliver_app, name="Old Name", description="Old Desc")
+        form = EditTaskTypeForm(
+            data={"name": "New Name", "description": "New Desc", "archived": False},
+            instance=task,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.name == "New Name"
+        assert saved.description == "New Desc"
+
+    def test_requires_name(self, opportunity):
+        task = TaskFactory(app=opportunity.deliver_app)
+        form = EditTaskTypeForm(
+            data={"name": "", "description": "Desc", "archived": False},
+            instance=task,
+        )
+        assert not form.is_valid()
+        assert "name" in form.errors
+
+    def test_archive_sets_archived(self, opportunity):
+        task = TaskFactory(app=opportunity.deliver_app)
+        assert task.archived is False
+        form = EditTaskTypeForm(
+            data={"name": task.name, "description": task.description, "archived": True},
+            instance=task,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.archived is True
+
+    def test_unarchive_clears_archived(self, opportunity):
+        task = TaskFactory(app=opportunity.deliver_app, archived=True)
+        form = EditTaskTypeForm(
+            data={"name": task.name, "description": task.description, "archived": False},
+            instance=task,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.archived is False
+
+    def test_excludes_non_editable_fields(self, opportunity):
+        task = TaskFactory(app=opportunity.deliver_app, slug="original-slug", case_property="original_prop")
+        form = EditTaskTypeForm(
+            data={
+                "name": "New Name",
+                "description": "New Desc",
+                "archived": False,
+                "slug": "hacked-slug",
+                "case_property": "hacked_prop",
+            },
+            instance=task,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.slug == "original-slug"
+        assert saved.case_property == "original_prop"
