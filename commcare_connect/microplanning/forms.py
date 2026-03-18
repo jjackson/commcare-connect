@@ -36,3 +36,6 @@ class WorkAreaModelForm(forms.ModelForm):
             Field("work_area_group"),
             Field("reason"),
         )
+
+    def has_changed(self):
+        return any(f in self.changed_data for f in self._meta.fields)

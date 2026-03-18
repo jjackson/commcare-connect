@@ -196,7 +196,7 @@ class TestModifyWorkAreaUpdateView:
 
     @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
     def test_no_history_created_when_nothing_changes(self, mock_sync, client, org_user_admin, opportunity):
-        group = WorkAreaGroupFactory(opportunity=opportunity, assigned_user=None)
+        group = WorkAreaGroupFactory(opportunity=opportunity)
         work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
         inital_event_count = work_area.expected_visit_count_work_area_group_events.count()
 
@@ -249,6 +249,7 @@ class TestModifyWorkAreaUpdateView:
         )
 
         assert response.status_code == 200
+        assert mock_sync.call_count == 1
         assert any(t.name == self.template_name for t in response.templates)
         assert response.context["form"].non_field_errors()
         work_area.refresh_from_db()
