@@ -25,7 +25,7 @@ def delete_auto_deactivate_periodic_task(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0116_opportunityactiveevent_opportunity_insert_insert_and_more"),
+        ("opportunity", "0117_opportunityactiveevent_opportunity_insert_insert_and_more"),
     ]
 
     operations = [
