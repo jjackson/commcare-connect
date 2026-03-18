@@ -15,6 +15,7 @@ from commcare_connect.opportunity.forms import (
     CreateTaskForm,
     OpportunityChangeForm,
     OpportunityInitUpdateForm,
+    OpportunityUserInviteForm,
 )
 from commcare_connect.opportunity.models import (
     CompletedWork,
@@ -800,6 +801,17 @@ class TestCreateTaskForm:
         assert active in flw_queryset
         assert unaccepted not in flw_queryset
         assert suspended not in flw_queryset
+
+
+@pytest.mark.django_db
+def test_invite_form_rejects_ended_opportunity():
+    opportunity = OpportunityFactory(end_date=datetime.date.today() - datetime.timedelta(days=1))
+    form = OpportunityUserInviteForm(
+        data={"users": "+15555555555"},
+        opportunity=opportunity,
+    )
+    assert not form.is_valid()
+    assert "This opportunity has ended. You cannot invite more workers." in str(form.errors["users"])
 
 
 @pytest.mark.django_db

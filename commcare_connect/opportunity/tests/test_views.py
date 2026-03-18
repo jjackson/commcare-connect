@@ -1978,6 +1978,40 @@ def test_visit_export_count_boundary_dates(
 
 
 @pytest.mark.django_db
+def test_user_invite_redirects_for_ended_opportunity(client, org_user_member, organization):
+    opportunity = OpportunityFactory(
+        organization=organization,
+        end_date=date.today() - timedelta(days=1),
+    )
+    client.force_login(org_user_member)
+    url = reverse("opportunity:user_invite", args=[organization.slug, opportunity.opportunity_id])
+    response = client.get(url)
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+
+    # POST should also redirect, not process the invite
+    response = client.post(url, data={"users": "+15555555555"})
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+
+
+@pytest.mark.django_db
+def test_resend_invites_redirects_for_ended_opportunity(client, org_user_member, organization):
+    opportunity = OpportunityFactory(
+        organization=organization,
+        end_date=date.today() - timedelta(days=1),
+    )
+    client.force_login(org_user_member)
+    url = reverse("opportunity:resend_user_invites", args=[organization.slug, opportunity.opportunity_id])
+    response = client.post(url, data={"user_invite_ids": [1]})
+    assert response.status_code == 200
+    assert (
+        reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id])
+        in response.headers["HX-Redirect"]
+    )
+
+
+@pytest.mark.django_db
 class TestTaskTypesConfig:
     MOCK_TASK_UNITS_PATH = "commcare_connect.opportunity.forms.get_task_units_for_app"
 
