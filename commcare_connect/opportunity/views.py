@@ -1149,15 +1149,17 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     )
 
 
-class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
-    template_name = "opportunity/task_types_config.html"
-
+class TaskTypeBaseView(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
     def dispatch(self, request, *args, **kwargs):
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
         return super().dispatch(request, *args, **kwargs)
 
-    def get_context_data(self, form, **kwargs):
+
+class TaskTypesConfig(TaskTypeBaseView):
+    template_name = "opportunity/task_types_config.html"
+
+    def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         opportunity = self.get_opportunity()
         org_slug = self.request.org.slug
@@ -1171,21 +1173,20 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
             },
             {"title": _("Configure Task Types"), "url": self.request.path},
         ]
-        table = TaskTable(tasks)
+        table = TaskTable(tasks, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         context.update(
             {
                 "opportunity": opportunity,
                 "table": table,
-                "form": form,
+                "form": kwargs.get("form", AddTaskTypeForm(opportunity=opportunity)),
                 "path": path,
             }
         )
         return context
 
     def get(self, request, org_slug, opp_id):
-        form = AddTaskTypeForm(opportunity=self.get_opportunity())
-        return self.render_to_response(self.get_context_data(form=form))
+        return self.render_to_response(self.get_context_data())
 
     def post(self, request, org_slug, opp_id):
         opportunity = self.get_opportunity()
