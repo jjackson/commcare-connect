@@ -162,6 +162,8 @@ class TestModifyWorkAreaUpdateView:
     def test_successful_field_updates(self, mock_sync, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity)
         work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10)
+
+        inital_event_count = work_area.expected_visit_count_work_area_group_events.count()
         assert work_area.work_area_group is None
         new_expected_visit_count = 25
         client.force_login(org_user_admin)
@@ -186,8 +188,8 @@ class TestModifyWorkAreaUpdateView:
         assert work_area.work_area_group == group
 
         events = work_area.expected_visit_count_work_area_group_events
-        assert events.count() == 1
-        event = events.first()
+        assert events.count() == inital_event_count + 1
+        event = events.last()
         assert event.pgh_context.metadata["reason"] == "Boundary adjusted"
         assert event.expected_visit_count == new_expected_visit_count
         assert event.work_area_group == group
@@ -196,6 +198,7 @@ class TestModifyWorkAreaUpdateView:
     def test_no_history_created_when_nothing_changes(self, mock_sync, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity, assigned_user=None)
         work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
+        inital_event_count = work_area.expected_visit_count_work_area_group_events.count()
 
         client.force_login(org_user_admin)
         response = client.post(
@@ -203,12 +206,16 @@ class TestModifyWorkAreaUpdateView:
             {
                 "expected_visit_count": 10,
                 "work_area_group": group.id,
+                "reason": "No change",
             },
         )
 
+        work_area.refresh_from_db()
         assert response.status_code == 204
-        assert work_area.expected_visit_count_work_area_group_events.count() == 0
+        assert work_area.expected_visit_count_work_area_group_events.count() == inital_event_count
         assert mock_sync.call_count == 0  # No sync since nothing changed
+        assert work_area.work_area_group == group
+        assert work_area.expected_visit_count == 10
 
     def test_invalid_form_returns_errors(self, client, org_user_admin, opportunity):
         work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10)
