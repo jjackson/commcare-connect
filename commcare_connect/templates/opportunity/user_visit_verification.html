@@ -21,7 +21,7 @@
 {% block content %}
 {% include 'components/breadcrumbs.html' with path=path %}
 <div class="w-full space-y-4">
-  <div class="flex gap-4 h-32 items-center p-4 profile-bg bg-brand-indigo rounded-2xl">
+  <div class="flex gap-4 h-32 items-center p-4 profile-bg metric-container rounded-2xl">
     {% if selected_opportunity_access %}
     {% include "components/worker_page/profile.html" with opportunity_access=selected_opportunity_access %}
     {% else %}
@@ -37,7 +37,7 @@
     </div>
     {% endif %}
     <div class="grid grid-cols-5 gap-4 w-full">
-      <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="w-full h-full metric-card relative flex flex-col justify-between p-4">
         <div class="flex justify-between items-center">
           <div class="text-2xl" x-data
             x-tooltip.raw="Includes all Deliver app forms submitted by this worker across all payment units including duplicates">
@@ -51,7 +51,7 @@
         </div>
       </div>
 
-      <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg"
+      <div class="w-full h-full metric-card relative flex flex-col justify-between p-4"
         x-data="{ isOpen: false }">
         <div class="flex justify-between items-center">
           <div class="text-2xl">{{ counts.flagged }}</div>
@@ -84,7 +84,7 @@
         </div>
       </div>
 
-      <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg"
+      <div class="w-full h-full metric-card relative flex flex-col justify-between p-4"
         x-data="{ isOpen: false }">
         <div class="flex justify-between items-center">
           <div class="text-2xl">{{ counts.rejected }}</div>
@@ -114,7 +114,7 @@
         </div>
       </div>
 
-      <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg">
+      <div class="w-full h-full metric-card relative flex flex-col justify-between p-4">
         <div class="flex justify-between items-center">
           <div class="text-2xl">{{ payment_accrued_total|intcomma }}</div>
           <div class="hidden lg:block">
@@ -126,7 +126,7 @@
         </div>
       </div>
 
-      <div class="w-full h-full bg-white/10 text-white relative flex flex-col justify-between p-4 rounded-lg"
+      <div class="w-full h-full metric-card relative flex flex-col justify-between p-4"
         x-data="{ isOpen: false }">
         <div class="flex justify-between items-center">
           <div class="text-2xl">{{ total_paid|intcomma }}</div>
