@@ -17,6 +17,7 @@ from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
+    CompletedWorkStatus,
     FormJsonValidationRules,
     InvoiceStatus,
     Opportunity,
@@ -421,6 +422,41 @@ def test_reject_visit(client: Client, opportunity):
     accept_visit.refresh_from_db()
     assert accept_visit.status == VisitValidationStatus.approved
     assert accept_visit.reason is None
+
+
+@pytest.mark.django_db
+def test_approve_previously_rejected_visit_updates_completed_work_status(client: Client, organization):
+    # Regression test: approving a previously rejected visit must update CompletedWork.status to approved.
+    opportunity = OpportunityFactory(organization=organization, auto_approve_payments=True)
+    payment_unit = PaymentUnitFactory(opportunity=opportunity)
+    deliver_unit = DeliverUnitFactory(payment_unit=payment_unit)
+    access = OpportunityAccessFactory(opportunity=opportunity)
+    completed_work = CompletedWorkFactory(opportunity_access=access, payment_unit=payment_unit)
+    visit = UserVisitFactory.create(
+        opportunity=opportunity,
+        user=access.user,
+        opportunity_access=access,
+        deliver_unit=deliver_unit,
+        completed_work=completed_work,
+        status=VisitValidationStatus.pending,
+    )
+
+    admin_user = MembershipFactory.create(organization=organization).user
+    client.force_login(admin_user)
+    reject_url = reverse("opportunity:reject_visits", args=(organization.slug, opportunity.id))
+    approve_url = reverse("opportunity:approve_visits", args=(organization.slug, opportunity.id))
+
+    client.post(reject_url, {"reason": "wrong data", "visit_ids[]": [visit.id]})
+    visit.refresh_from_db()
+    assert visit.status == VisitValidationStatus.rejected
+    completed_work.refresh_from_db()
+    assert completed_work.status == CompletedWorkStatus.rejected
+
+    client.post(approve_url, {"visit_ids[]": [visit.id]})
+    visit.refresh_from_db()
+    assert visit.status == VisitValidationStatus.approved
+    completed_work.refresh_from_db()
+    assert completed_work.status == CompletedWorkStatus.approved
 
 
 @pytest.mark.parametrize(
@@ -1974,3 +2010,37 @@ def test_visit_export_count_boundary_dates(
 
     assert response.status_code == HTTPStatus.OK
     assert "2 visits match your filters." in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_user_invite_redirects_for_ended_opportunity(client, org_user_member, organization):
+    opportunity = OpportunityFactory(
+        organization=organization,
+        end_date=date.today() - timedelta(days=1),
+    )
+    client.force_login(org_user_member)
+    url = reverse("opportunity:user_invite", args=[organization.slug, opportunity.opportunity_id])
+    response = client.get(url)
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+
+    # POST should also redirect, not process the invite
+    response = client.post(url, data={"users": "+15555555555"})
+    assert response.status_code == 302
+    assert reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id]) in response.url
+
+
+@pytest.mark.django_db
+def test_resend_invites_redirects_for_ended_opportunity(client, org_user_member, organization):
+    opportunity = OpportunityFactory(
+        organization=organization,
+        end_date=date.today() - timedelta(days=1),
+    )
+    client.force_login(org_user_member)
+    url = reverse("opportunity:resend_user_invites", args=[organization.slug, opportunity.opportunity_id])
+    response = client.post(url, data={"user_invite_ids": [1]})
+    assert response.status_code == 200
+    assert (
+        reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id])
+        in response.headers["HX-Redirect"]
+    )
