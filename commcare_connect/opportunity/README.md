@@ -9,9 +9,12 @@ The opportunity app is the core domain of CommCare Connect. It manages paid prog
 - **OpportunityClaim** — Created when a user commits to delivering work. Allocates visit limits per payment unit.
 - **PaymentUnit** — Defines what a user gets paid for and how much. Can be hierarchical (parent/child).
 - **DeliverUnit** — A type of form submission within a delivery app (e.g., "household visit", "follow-up").
+- **Task** — A named task within a learn/deliver app, distinct from a LearnModule.
 - **UserVisit** — A single form submission from a mobile user during delivery.
 - **CompletedWork** — Aggregates visits for a specific entity (beneficiary) and payment unit. Tracks approval status and payment.
+- **CompletedTask** — Tracks completion of individual tasks by a user (assigned → completed).
 - **Payment** — A confirmed payment to a user for approved work.
+- **PaymentInvoice** — An invoice for a managed opportunity. Tracks status through NM/PM review workflow and links to completed work and payments.
 
 ## User Journey
 
@@ -47,19 +50,19 @@ Approved work accrues payment. Payments can be distributed manually via CSV uplo
 
 When a delivery form is received, it is checked against the opportunity's `OpportunityVerificationFlags`. Any failures are stored in `UserVisit.flag_reason` as a JSON list, and `UserVisit.flagged` is set to `True`.
 
-| Flag                     | Check                            |
-| ------------------------ | -------------------------------- |
-| `duration`               | Form completed too quickly       |
-| `gps`                    | GPS location missing             |
-| `location`               | Visit too close to another visit |
-| `duplicate`              | Entity already visited           |
-| `form_submission_period` | Outside allowed time window      |
-| `attachment_missing`     | Required attachments missing     |
-| `form_value_not_found`   | Custom form validation failed    |
-| `catchment_areas`        | Outside allowed geographic area  |
-| `user_suspended`         | User is suspended                |
+| Flag                     | Check                            | Configured on                  |
+| ------------------------ | -------------------------------- | ------------------------------ |
+| `duplicate`              | Entity already visited           | `OpportunityVerificationFlags` |
+| `gps`                    | GPS location missing             | `OpportunityVerificationFlags` |
+| `location`               | Visit too close to another visit | `OpportunityVerificationFlags` |
+| `catchment`              | Outside allowed geographic area  | `OpportunityVerificationFlags` |
+| `form_submission_period` | Outside allowed time window      | `OpportunityVerificationFlags` |
+| `duration`               | Form completed too quickly       | `DeliverUnitFlagRules`         |
+| `attachment_missing`     | Required attachments missing     | `DeliverUnitFlagRules`         |
+| `form_value_not_found`   | Custom form validation failed    | `FormJsonValidationRules`      |
+| `user_suspended`         | User is suspended                | `OpportunityAccess.suspended`  |
 
-If `auto_approve_visits` is enabled and the visit is not flagged, the visit is automatically approved.
+Flag codes are defined in `commcare_connect/utils/flags.py`. If `auto_approve_visits` is enabled and the visit is not flagged, the visit is automatically approved.
 
 ## Auto-Approval
 
@@ -72,21 +75,28 @@ Two levels of auto-approval can be enabled per opportunity:
 
 ```text
 Organization
-  └── Opportunity
-        ├── CommCareApp (learn_app, deliver_app)
-        │     ├── LearnModule
-        │     └── DeliverUnit → PaymentUnit
+  ├── CommCareApp
+  │     ├── LearnModule
+  │     ├── Task
+  │     └── DeliverUnit → PaymentUnit
+  └── Opportunity (refs learn_app, deliver_app)
         ├── PaymentUnit (amount, limits)
         │     └── PaymentUnit (child, optional)
         ├── OpportunityVerificationFlags (1:1)
+        ├── DeliverUnitFlagRules (per DeliverUnit)
+        ├── FormJsonValidationRules (per DeliverUnit, M2M)
+        ├── CatchmentArea (per user, optional)
+        ├── PaymentInvoice
+        │     └── Payment (1:1)
         └── OpportunityAccess (per user)
               ├── OpportunityClaim (1:1)
               │     └── OpportunityClaimLimit (per PaymentUnit)
               ├── CompletedModule (per LearnModule)
+              ├── CompletedTask (per Task)
               ├── Assessment (per attempt)
               ├── CompletedWork (per entity + PaymentUnit)
-              ├── UserVisit (per form submission → CompletedWork)
-              └── Payment (per PaymentUnit)
+              │     └── UserVisit (per form submission)
+              └── Payment (per PaymentUnit, for FLW payments)
 ```
 
 ## Key Files
@@ -97,6 +107,10 @@ Organization
 | `api/views.py`                  | Mobile API: claim, progress, delivery                                 |
 | `views.py`                      | Web UI: create, edit, finalize, dashboard                             |
 | `tasks.py`                      | Celery tasks: invites, notifications, auto-approval, exports          |
+| `forms.py`                      | Django forms for opportunity creation/editing                         |
+| `export.py`                     | Exports: visits, payments, user status, work status, catchment areas  |
 | `visit_import.py`               | Bulk visit/payment import, exchange rates                             |
+| `deletion.py`                   | `delete_opportunity()` for stale opportunity cleanup                  |
 | `utils/completed_work.py`       | `CompletedWorkUpdater`: status calculation and payment accrual        |
+| `utils/invoice.py`              | Invoice number generation and start date utilities                    |
 | `../form_receiver/processor.py` | Processes forms from CommCareHQ into modules, assessments, and visits |
