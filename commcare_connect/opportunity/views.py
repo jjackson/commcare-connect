@@ -1023,12 +1023,12 @@ def approve_visits(request, org_slug, opp_id):
                     )
                 visit.justification = justification
 
+    user_ids = list(visits.values_list("user_id", flat=True).distinct())
     approved_count = UserVisit.objects.bulk_update(
         visits, ["status", "review_created_on", "review_status", "justification"]
     )
-    if visits:
-        user_ids = visits.values_list("user_id", flat=True).distinct()
-        update_payment_accrued(opportunity=visits[0].opportunity, users=user_ids, incremental=True)
+    if user_ids:
+        update_payment_accrued(opportunity=request.opportunity, users=user_ids, incremental=True)
     send_event_to_ga(request, Event("bulk_approve_confirm", {"updated": approved_count, "total": len(visit_ids)}))
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})

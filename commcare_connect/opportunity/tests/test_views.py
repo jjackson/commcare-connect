@@ -18,6 +18,7 @@ from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, Autom
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
     CompletedTaskStatus,
+    CompletedWorkStatus,
     FormJsonValidationRules,
     InvoiceStatus,
     Opportunity,
@@ -424,6 +425,41 @@ def test_reject_visit(client: Client, opportunity):
     accept_visit.refresh_from_db()
     assert accept_visit.status == VisitValidationStatus.approved
     assert accept_visit.reason is None
+
+
+@pytest.mark.django_db
+def test_approve_previously_rejected_visit_updates_completed_work_status(client: Client, organization):
+    # Regression test: approving a previously rejected visit must update CompletedWork.status to approved.
+    opportunity = OpportunityFactory(organization=organization, auto_approve_payments=True)
+    payment_unit = PaymentUnitFactory(opportunity=opportunity)
+    deliver_unit = DeliverUnitFactory(payment_unit=payment_unit)
+    access = OpportunityAccessFactory(opportunity=opportunity)
+    completed_work = CompletedWorkFactory(opportunity_access=access, payment_unit=payment_unit)
+    visit = UserVisitFactory.create(
+        opportunity=opportunity,
+        user=access.user,
+        opportunity_access=access,
+        deliver_unit=deliver_unit,
+        completed_work=completed_work,
+        status=VisitValidationStatus.pending,
+    )
+
+    admin_user = MembershipFactory.create(organization=organization).user
+    client.force_login(admin_user)
+    reject_url = reverse("opportunity:reject_visits", args=(organization.slug, opportunity.id))
+    approve_url = reverse("opportunity:approve_visits", args=(organization.slug, opportunity.id))
+
+    client.post(reject_url, {"reason": "wrong data", "visit_ids[]": [visit.id]})
+    visit.refresh_from_db()
+    assert visit.status == VisitValidationStatus.rejected
+    completed_work.refresh_from_db()
+    assert completed_work.status == CompletedWorkStatus.rejected
+
+    client.post(approve_url, {"visit_ids[]": [visit.id]})
+    visit.refresh_from_db()
+    assert visit.status == VisitValidationStatus.approved
+    completed_work.refresh_from_db()
+    assert completed_work.status == CompletedWorkStatus.approved
 
 
 @pytest.mark.parametrize(
