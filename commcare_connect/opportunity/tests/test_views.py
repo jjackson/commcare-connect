@@ -2120,27 +2120,25 @@ class TestTaskTypesConfig:
         assert response.status_code == HTTPStatus.OK
         assert response.context["form"].instance == task
 
-    def test_edit_task_type_post_valid_redirects(self, client, program_manager_org_user_admin, opp, task):
+    @pytest.mark.parametrize(
+        "data, is_valid",
+        [
+            ({"name": "Updated Name", "description": "Updated Desc", "archived": ""}, True),
+            ({"name": "", "description": "Desc", "archived": ""}, False),
+        ],
+    )
+    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task, data, is_valid):
         client.force_login(program_manager_org_user_admin)
-        response = client.post(
-            self._edit_url(opp, task),
-            data={"name": "Updated Name", "description": "Updated Desc", "archived": ""},
-        )
+        response = client.post(self._edit_url(opp, task), data=data)
         assert response.status_code == HTTPStatus.OK
-        assert response["HX-Redirect"] == self._url(opp)
-        task.refresh_from_db()
-        assert task.name == "Updated Name"
-        assert task.description == "Updated Desc"
-
-    def test_edit_task_type_post_invalid_rerenders_form(self, client, program_manager_org_user_admin, opp, task):
-        client.force_login(program_manager_org_user_admin)
-        response = client.post(
-            self._edit_url(opp, task),
-            data={"name": "", "description": "Desc", "archived": ""},
-        )
-        assert response.status_code == HTTPStatus.OK
-        assert "HX-Redirect" not in response
-        assert response.context["form"].errors
+        if is_valid:
+            assert response["HX-Redirect"] == self._url(opp)
+            task.refresh_from_db()
+            assert task.name == data["name"]
+            assert task.description == data["description"]
+        else:
+            assert "HX-Redirect" not in response
+            assert response.context["form"].errors
 
     def test_edit_task_type_requires_org_membership(self, client, opp, task):
         response = client.get(self._edit_url(opp, task))
