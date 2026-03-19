@@ -65,24 +65,24 @@
 /* ------ Tippy.js tooltip (white theme, for use on dark backgrounds) ------ */
 .tippy-box[data-theme='light'] {
   background-color: var(--color-message-info);
-  color: var(--color-brand-deep-purple);
+  color: #141d4d;
 }
 
 .tippy-box[data-theme='light'][data-placement^='top'] > .tippy-arrow::before {
-  border-top-color: white;
+  border-top-color: var(--color-message-info);
 }
 
 .tippy-box[data-theme='light'][data-placement^='bottom']
   > .tippy-arrow::before {
-  border-bottom-color: white;
+  border-bottom-color: var(--color-message-info);
 }
 
 .tippy-box[data-theme='light'][data-placement^='left'] > .tippy-arrow::before {
-  border-left-color: white;
+  border-left-color: var(--color-message-info);
 }
 
 .tippy-box[data-theme='light'][data-placement^='right'] > .tippy-arrow::before {
-  border-right-color: white;
+  border-right-color: var(--color-message-info);
 }
 
 /* ----- background -------*/
