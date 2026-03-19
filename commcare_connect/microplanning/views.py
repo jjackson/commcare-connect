@@ -204,7 +204,7 @@ class WorkAreaVectorLayer(VectorLayer):
         return WorkArea.objects.filter(opportunity_id=self.opp_id).annotate(
             group_id=F("work_area_group__id"),
             group_name=F("work_area_group__name"),
-            assignee_name=F("work_area_group__assigned_user__user__name"),
+            assignee_name=F("work_area_group__opportunity_access__user__name"),
         )
 
 
