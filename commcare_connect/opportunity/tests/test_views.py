@@ -2123,8 +2123,8 @@ class TestTaskTypesConfig:
     @pytest.mark.parametrize(
         "data, is_valid",
         [
-            ({"name": "Updated Name", "description": "Updated Desc", "archived": ""}, True),
-            ({"name": "", "description": "Desc", "archived": ""}, False),
+            ({"name": "Updated Name", "description": "Updated Desc"}, True),
+            ({"name": "", "description": "Desc"}, False),
         ],
     )
     def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task, data, is_valid):

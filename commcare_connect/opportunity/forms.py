@@ -1987,13 +1987,27 @@ class AddTaskTypeForm(forms.ModelForm):
 
 
 class EditTaskTypeForm(forms.ModelForm):
+    is_archived = forms.BooleanField(required=False, label=_("Archive this task type"))
+
     class Meta:
         model = Task
-        fields = ["name", "description", "archived"]
+        fields = ["name", "description"]
         widgets = {"description": forms.Textarea(attrs={"rows": 2})}
-        labels = {"archived": _("Archive this task type")}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance and self.instance.archived:
+            self.fields["is_archived"].initial = True
         self.helper = FormHelper(self)
         self.helper.form_tag = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data["is_archived"]:
+            if not instance.archived:
+                instance.archived = now()
+        else:
+            instance.archived = None
+        if commit:
+            instance.save()
+        return instance

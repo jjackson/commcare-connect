@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 from dateutil.relativedelta import relativedelta
+from django.utils.timezone import now
 from waffle.testutils import override_switch
 
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
@@ -884,7 +885,7 @@ class TestEditTaskTypeForm:
     def test_updates_name_and_description(self, opportunity):
         task = TaskFactory(app=opportunity.deliver_app, name="Old Name", description="Old Desc")
         form = EditTaskTypeForm(
-            data={"name": "New Name", "description": "New Desc", "archived": False},
+            data={"name": "New Name", "description": "New Desc"},
             instance=task,
         )
         assert form.is_valid(), form.errors
@@ -895,7 +896,7 @@ class TestEditTaskTypeForm:
     def test_requires_name(self, opportunity):
         task = TaskFactory(app=opportunity.deliver_app)
         form = EditTaskTypeForm(
-            data={"name": "", "description": "Desc", "archived": False},
+            data={"name": "", "description": "Desc"},
             instance=task,
         )
         assert not form.is_valid()
@@ -903,24 +904,35 @@ class TestEditTaskTypeForm:
 
     def test_archive_sets_archived(self, opportunity):
         task = TaskFactory(app=opportunity.deliver_app)
-        assert task.archived is False
+        assert task.archived is None
         form = EditTaskTypeForm(
-            data={"name": task.name, "description": task.description, "archived": True},
+            data={"name": task.name, "description": task.description, "is_archived": True},
             instance=task,
         )
         assert form.is_valid(), form.errors
         saved = form.save()
-        assert saved.archived is True
+        assert saved.archived is not None
 
     def test_unarchive_clears_archived(self, opportunity):
-        task = TaskFactory(app=opportunity.deliver_app, archived=True)
+        task = TaskFactory(app=opportunity.deliver_app, archived=now())
         form = EditTaskTypeForm(
-            data={"name": task.name, "description": task.description, "archived": False},
+            data={"name": task.name, "description": task.description},
             instance=task,
         )
         assert form.is_valid(), form.errors
         saved = form.save()
-        assert saved.archived is False
+        assert saved.archived is None
+
+    def test_archive_preserves_existing_timestamp(self, opportunity):
+        original_time = now()
+        task = TaskFactory(app=opportunity.deliver_app, archived=original_time)
+        form = EditTaskTypeForm(
+            data={"name": task.name, "description": task.description, "is_archived": True},
+            instance=task,
+        )
+        assert form.is_valid(), form.errors
+        saved = form.save()
+        assert saved.archived == original_time
 
     def test_excludes_non_editable_fields(self, opportunity):
         task = TaskFactory(app=opportunity.deliver_app, slug="original-slug", case_property="original_prop")
@@ -928,7 +940,6 @@ class TestEditTaskTypeForm:
             data={
                 "name": "New Name",
                 "description": "New Desc",
-                "archived": False,
                 "slug": "hacked-slug",
                 "case_property": "hacked_prop",
             },
