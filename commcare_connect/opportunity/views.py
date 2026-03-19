@@ -1150,15 +1150,13 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     )
 
 
-class TaskTypeBaseView(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
+class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
+    template_name = "opportunity/task_types_config.html"
+
     def dispatch(self, request, *args, **kwargs):
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
         return super().dispatch(request, *args, **kwargs)
-
-
-class TaskTypesConfig(TaskTypeBaseView):
-    template_name = "opportunity/task_types_config.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1199,39 +1197,35 @@ class TaskTypesConfig(TaskTypeBaseView):
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class EditTaskType(TaskTypeBaseView):
+class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
+    form_class = EditTaskTypeForm
+    model = Task
 
-    def get_task(self):
-        if not hasattr(self, "_task"):
-            self._task = get_object_or_404(Task, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
-        return self._task
+    def dispatch(self, request, *args, **kwargs):
+        if self.get_opportunity().managed and not request.is_opportunity_pm:
+            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context.update(
-            {
-                "form": kwargs.get("form") or EditTaskTypeForm(instance=self.get_task()),
-                "hx_post_url": reverse(
-                    "opportunity:edit_task_type",
-                    args=(self.kwargs["org_slug"], self.kwargs["opp_id"], self.kwargs["pk"]),
-                ),
-            }
+        context["hx_post_url"] = reverse(
+            "opportunity:edit_task_type",
+            args=(self.kwargs["org_slug"], self.kwargs["opp_id"], self.kwargs["pk"]),
         )
         return context
 
-    def get(self, request, org_slug, opp_id, pk):
-        return self.render_to_response(self.get_context_data())
-
-    def post(self, request, org_slug, opp_id, pk):
-        form = EditTaskTypeForm(data=request.POST, instance=self.get_task())
-        if form.is_valid():
-            form.save()
-            messages.success(request, _("Task type updated successfully."))
-            response = HttpResponse()
-            response["HX-Redirect"] = reverse("opportunity:task_types_config", args=(org_slug, opp_id))
-            return response
-        return self.render_to_response(self.get_context_data(form=form))
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, _("Task type updated successfully."))
+        response = HttpResponse()
+        response["HX-Redirect"] = reverse(
+            "opportunity:task_types_config", args=(self.kwargs["org_slug"], self.kwargs["opp_id"])
+        )
+        return response
 
 
 @org_member_required
