@@ -263,7 +263,11 @@ class ModifyWorkAreaUpdateView(UpdateView):
         try:
             with transaction.atomic(), pghistory.context(reason=reason):
                 work_area.save(update_fields=["expected_visit_count", "work_area_group"])
-                if form.has_changed() and work_area.work_area_group and work_area.work_area_group.assigned_user_id:
+                if (
+                    form.has_changed()
+                    and work_area.work_area_group
+                    and work_area.work_area_group.opportunity_access_id
+                ):
                     # let exception bubble up if case update fails, to avoid saving work area without case sync
                     create_or_update_case_by_work_area(work_area)
         except CommCareHQAPIException as e:
