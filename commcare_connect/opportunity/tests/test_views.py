@@ -2140,10 +2140,10 @@ class TestTaskTypesConfig:
             assert "HX-Redirect" not in response
             assert response.context["form"].errors
 
-    def test_edit_task_type_requires_org_membership(self, client, opp, task):
+    def test_edit_task_type_requires_org_membership(self, client, user, opp, task):
+        client.force_login(user)
         response = client.get(self._edit_url(opp, task))
-        assert response.status_code == HTTPStatus.FOUND
-        assert "login" in response["Location"]
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_managed_opp_requires_pm_role(
         self, client, organization, org_user_admin, program_manager_org
