@@ -16,6 +16,7 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.timezone import now
 from django.utils.translation import gettext
 from tablib import Dataset
@@ -96,6 +97,10 @@ def create_learn_modules_and_deliver_units(opportunity_id):
 
 @celery_app.task()
 def add_connect_users(user_list: list[str], opportunity_id: str):
+    opportunity = Opportunity.objects.get(pk=opportunity_id)
+    if opportunity.has_ended:
+        logger.warning("Skipping invite for ended opportunity %s (%d users)", opportunity_id, len(user_list))
+        return
     found_users = fetch_users(user_list)
     not_found_users = set(user_list) - {user.phone_number for user in found_users}
     for u in not_found_users:
@@ -190,9 +195,8 @@ def generate_visit_export(
     )
     exporter = UserVisitExporter(opportunity, flatten)
     dataset = exporter.get_dataset(from_date, to_date, [VisitValidationStatus(s) for s in status])
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_visit_export.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_visit_export.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 @celery_app.task()
@@ -203,43 +207,41 @@ def generate_review_visit_export(opportunity_id: int, from_date, to_date, status
         from {from_date} to {to_date} and status {','.join(status)}"""
     )
     dataset = export_user_visit_review_data(opportunity, from_date, to_date, [VisitReviewStatus(s) for s in status])
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_review_visit_export.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_review_visit_export.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 @celery_app.task()
 def generate_payment_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_empty_payment_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_export.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_payment_export.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 @celery_app.task()
 def generate_user_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_user_status_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_user_status.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_user_status.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 @celery_app.task()
 def generate_deliver_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_deliver_status_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_deliver_status.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_deliver_status.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 def save_export(dataset: Dataset, file_name: str, export_format: str):
+    from commcare_connect.utils.storages import ExportS3Boto3Storage
+
     content = dataset.export(export_format)
     if isinstance(content, str):
         content = content.encode()
-    default_storage.save(file_name, ContentFile(content))
+    return ExportS3Boto3Storage().save(file_name, ContentFile(content))
 
 
 @celery_app.task()
@@ -386,9 +388,8 @@ def download_user_visit_attachments(self, user_visit_id: int):
 def generate_work_status_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_work_status_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_payment_verification.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_work_status.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 @celery_app.task()
@@ -408,9 +409,8 @@ def bulk_approve_completed_work():
 def generate_catchment_area_export(opportunity_id: int, export_format: str):
     opportunity = Opportunity.objects.get(id=opportunity_id)
     dataset = export_catchment_area_table(opportunity)
-    export_tmp_name = f"{now().isoformat()}_{opportunity.name}_catchment_area.{export_format}"
-    save_export(dataset, export_tmp_name, export_format)
-    return export_tmp_name
+    export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_catchment_area.{export_format}"
+    return save_export(dataset, export_tmp_name, export_format)
 
 
 def get_payment_upload_key(opp_id):
