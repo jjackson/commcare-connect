@@ -1997,8 +1997,3 @@ class EditTaskTypeForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.helper = FormHelper(self)
         self.helper.form_tag = False
-        self.helper.layout = Layout(
-            Field("name"),
-            Field("description"),
-            Field("archived"),
-        )
