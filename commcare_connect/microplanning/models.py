@@ -1,6 +1,7 @@
 from functools import cached_property
 
 from django.contrib.gis.db import models as geo_models
+from django.db.models import Sum
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
@@ -33,7 +34,7 @@ class WorkAreaGroup(geo_models.Model):
 
     @cached_property
     def building_count(self):
-        return sum(work_area.building_count for work_area in self.workarea_set.all())
+        return self.workarea_set.aggregate(total=Sum("building_count"))["total"] or 0
 
 
 class WorkArea(geo_models.Model):
