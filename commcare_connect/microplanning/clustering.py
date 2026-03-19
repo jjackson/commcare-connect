@@ -15,10 +15,9 @@ from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 
 logger = logging.getLogger(__name__)
 
-# Minimum length (in meters) of a shared boundary segment for two
-# work areas to be considered adjacent. this threshold filters
-# them out so only genuine shared edges count.
-SHARED_BOUNDARY_TOLERANCE = 1e-6
+# Small buffer (in meters) applied to degenerate convex hulls
+# (e.g. LineString, Point) to ensure they become valid Polygons.
+DEGENERATE_HULL_BUFFER = 1e-6
 
 
 @dataclass
@@ -154,7 +153,7 @@ class WorkAreaGrouper:
                 combined_work_area_boundary = unary_union([work_areas[wa_id].boundary for wa_id in work_area_ids])
                 hull = combined_work_area_boundary.convex_hull
                 if hull.geom_type != "Polygon":
-                    hull = hull.buffer(SHARED_BOUNDARY_TOLERANCE)
+                    hull = hull.buffer(DEGENERATE_HULL_BUFFER)
                 group_boundary = hull.wkt
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
@@ -193,20 +192,16 @@ class WorkAreaGrouper:
 
             for idx in candidate_indices:
                 neighbour_id = wa_ids_list[idx]
-                # Already known adjacent from a previous iteration
-                if neighbour_id in adjacency[work_area_id]:
+                if neighbour_id == work_area_id or neighbour_id in adjacency[work_area_id]:
                     continue
 
                 candidate_geom = transformed_geoms[neighbour_id]
 
-                if prepared_geom.intersects(candidate_geom):
-                    adjacency[work_area_id].add(neighbour_id)
-                    adjacency[neighbour_id].add(work_area_id)
-                elif geom.distance(candidate_geom) <= self.buffer_distance:
+                if prepared_geom.intersects(candidate_geom) or geom.distance(candidate_geom) <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
                     adjacency[neighbour_id].add(work_area_id)
 
-        return adjacency
+        return {wa_id: sorted(neighbours) for wa_id, neighbours in adjacency.items()}
 
     def _bfs_cluster(
         self,
@@ -236,7 +231,7 @@ class WorkAreaGrouper:
             unvisited.discard(current)
             total_buildings += building_count
 
-            for neighbour in sorted(adjacency.get(current, [])):
+            for neighbour in adjacency.get(current, []):
                 if neighbour in unvisited and neighbour not in seen:
                     queue.append(neighbour)
                     seen.add(neighbour)
