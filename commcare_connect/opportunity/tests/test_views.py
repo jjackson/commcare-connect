@@ -474,14 +474,11 @@ def test_user_visit_review(
     client,
     program_manager_org,
     program_manager_org_user_admin,
-    organization,
+    managed_opportunity,
     review_status,
     new_status,
     expected_status,
 ):
-    program = ProgramFactory(organization=program_manager_org)
-    managed_opportunity = ManagedOpportunityFactory(program=program, organization=organization)
-
     access = OpportunityAccessFactory(opportunity=managed_opportunity)
     visit = UserVisitFactory.create(
         opportunity=managed_opportunity, opportunity_access=access, review_status=review_status
@@ -1802,33 +1799,29 @@ class TestVerificationFlagsConfig:
         assert "Verification flags saved successfully." in messages
 
     def test_get_managed_opportunity_as_non_pm_redirects(
-        self, client, organization, org_user_member, program_manager_org
+        self, client, organization, org_user_member, managed_opportunity
     ):
-        program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         client.force_login(org_user_member)
-        response = client.get(self.url(organization.slug, managed_opp.opportunity_id))
+        response = client.get(self.url(organization.slug, managed_opportunity.opportunity_id))
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == reverse("opportunity:detail", args=(organization.slug, managed_opp.opportunity_id))
+        assert response.url == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opportunity.opportunity_id)
+        )
 
     def test_get_managed_opportunity_as_pm(
-        self, client, organization, program_manager_org, program_manager_org_user_admin
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
     ):
-        program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         client.force_login(program_manager_org_user_admin)
-        response = client.get(self.url(program_manager_org.slug, managed_opp.opportunity_id))
+        response = client.get(self.url(program_manager_org.slug, managed_opportunity.opportunity_id))
         assert response.status_code == HTTPStatus.OK
 
     def test_post_managed_opportunity_as_pm_saves(
-        self, client, organization, program_manager_org, program_manager_org_user_admin
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
     ):
-        program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
-        OpportunityVerificationFlagsFactory(opportunity=managed_opp)
+        OpportunityVerificationFlagsFactory(opportunity=managed_opportunity)
         client.force_login(program_manager_org_user_admin)
         response = client.post(
-            self.url(program_manager_org.slug, managed_opp.opportunity_id), data=self.base_post_data()
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id), data=self.base_post_data()
         )
         assert response.status_code == HTTPStatus.OK
         messages = [m.message for m in get_messages(response.wsgi_request)]
@@ -1906,30 +1899,28 @@ class TestDeleteFormJsonRule:
         ).exists()
 
     def test_delete_form_json_rule_managed_opp_as_non_pm(
-        self, client, organization, org_user_member, program_manager_org
+        self, client, organization, org_user_member, managed_opportunity
     ):
-        program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
-        rule = FormJsonValidationRulesFactory(opportunity=managed_opp)
+        rule = FormJsonValidationRulesFactory(opportunity=managed_opportunity)
         client.force_login(org_user_member)
         response = client.delete(
-            self.url(organization.slug, managed_opp.opportunity_id, rule.form_json_validation_rules_id)
+            self.url(organization.slug, managed_opportunity.opportunity_id, rule.form_json_validation_rules_id)
         )
         assert response.status_code == HTTPStatus.FOUND
-        assert response.url == reverse("opportunity:detail", args=(organization.slug, managed_opp.opportunity_id))
+        assert response.url == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opportunity.opportunity_id)
+        )
         assert FormJsonValidationRules.objects.filter(
             form_json_validation_rules_id=rule.form_json_validation_rules_id
         ).exists()
 
     def test_delete_form_json_rule_managed_opp_as_pm(
-        self, client, organization, program_manager_org, program_manager_org_user_admin
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
     ):
-        program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
-        rule = FormJsonValidationRulesFactory(opportunity=managed_opp)
+        rule = FormJsonValidationRulesFactory(opportunity=managed_opportunity)
         client.force_login(program_manager_org_user_admin)
         response = client.delete(
-            self.url(program_manager_org.slug, managed_opp.opportunity_id, rule.form_json_validation_rules_id)
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id, rule.form_json_validation_rules_id)
         )
         assert response.status_code == HTTPStatus.OK
         assert not FormJsonValidationRules.objects.filter(
@@ -1979,6 +1970,78 @@ def test_payment_delete_view(client: Client, opportunity: Opportunity, org_user_
 
     response = client.post(url)
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestSuspendUser:
+    def url(self, org_slug, opp_id, pk):
+        return reverse("opportunity:suspend_user", args=(org_slug, opp_id, pk))
+
+    def test_suspend_as_pm(
+        self, client, mobile_user, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=False
+        )
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
+    def test_suspend_as_nm_org_admin_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=False
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is False
+
+
+@pytest.mark.django_db
+class TestRevokeUserSuspension:
+    def url(self, org_slug, opp_id, pk):
+        return reverse("opportunity:revoke_user_suspension", args=(org_slug, opp_id, pk))
+
+    def test_revoke_as_pm(
+        self, client, mobile_user, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
+        )
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        access.refresh_from_db()
+        assert access.suspended is False
+
+    def test_revoke_as_nm_org_admin_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
 
 
 @pytest.mark.django_db
