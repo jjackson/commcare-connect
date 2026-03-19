@@ -1699,7 +1699,12 @@ class TaskListTable(OrgContextTable):
     task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
     assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
-    assigned_by = tables.Column(verbose_name=gettext_lazy("Assigned By"), accessor="assigned_by__name")
+    assigned_by = tables.Column(
+        verbose_name=gettext_lazy("Assigned By"),
+        accessor="assigned_by__name",
+        empty_values=(None,),
+        default="deleted user",
+    )
     action = tables.Column(verbose_name="", orderable=False, empty_values=())
 
     class Meta:
@@ -1750,11 +1755,6 @@ class TaskListTable(OrgContextTable):
             badge_classes,
             status,
         )
-
-    def render_assigned_by(self, value):
-        if value is None:
-            return "deleted user"
-        return value
 
     def render_action(self, record):
         # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
