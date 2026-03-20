@@ -16,6 +16,7 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
+from commcare_connect.opportunity.tests.factories import OpportunityFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 
@@ -147,6 +148,15 @@ class TestModifyWorkAreaUpdateView:
 
     def url(self, org_slug, opp_id, work_area_id):
         return reverse("microplanning:modify_work_area", args=(org_slug, opp_id, work_area_id))
+
+    def test_404_wrong_opportunity_work_area(self, client, org_user_admin, opportunity):
+        other_opportunity = OpportunityFactory()
+        work_area = WorkAreaFactory(opportunity=opportunity)
+        client.force_login(org_user_admin)
+        response = client.get(
+            self.url(other_opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id)
+        )
+        assert response.status_code == 404
 
     def test_get_renders_form_with_work_area_data(self, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity)

@@ -20,13 +20,12 @@
         hx-on:htmx:before-request="this.querySelectorAll('button').forEach(b => b.disabled = true)"
         hx-on:htmx:after-request="this.querySelectorAll('button').forEach(b => b.disabled = false)"
         hx-target="#work-area-form" hx-swap="innerHTML">
-        {% csrf_token %}
         {% crispy form %}
         <div class="mt-6 flex justify-between gap-3">
             <button type="button" @click="showWorkAreaEditModal = false" class="button button-md outline-style">
                 {% translate "Cancel" %}
             </button>
-            <button id="submit-btn" type="submit" class="button button-md primary-dark flex items-center justify-center gap-2">
+            <button type="submit" class="button button-md primary-dark flex items-center justify-center gap-2">
                 <span>{% translate "Save" %}</span>
                 <i id="submit-spinner"
                     class="fa-solid fa-spinner animate-spin !hidden [&.htmx-request]:!inline-block htmx-indicator"></i>

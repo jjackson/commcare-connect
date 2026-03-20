@@ -37,7 +37,7 @@
                     const data = e.detail;
 
                     // Update sidebar if selected
-                    if (this.selectedFeature && this.selectedFeature._id == data.id) {
+                    if (this.selectedFeature && this.selectedFeature._id === data.id) {
                         this.selectedFeature = {
                             ...this.selectedFeature,
                             expected_visit_count: data.expected_visit_count,
