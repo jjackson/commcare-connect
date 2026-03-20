@@ -1703,7 +1703,7 @@ class TaskListTable(OrgContextTable):
         verbose_name=gettext_lazy("Assigned By"),
         accessor="assigned_by__name",
         empty_values=(None,),
-        default="deleted user",
+        default=gettext_lazy("Deleted user"),
     )
     action = tables.Column(verbose_name="", orderable=False, empty_values=())
 
