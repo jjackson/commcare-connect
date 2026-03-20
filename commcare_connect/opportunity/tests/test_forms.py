@@ -7,12 +7,15 @@ from dateutil.relativedelta import relativedelta
 from waffle.testutils import override_switch
 
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.opportunity.app_xml import TaskUnit
 from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
+    AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     CreateTaskForm,
     OpportunityChangeForm,
     OpportunityInitUpdateForm,
+    OpportunityUserInviteForm,
 )
 from commcare_connect.opportunity.models import (
     CompletedWork,
@@ -798,3 +801,78 @@ class TestCreateTaskForm:
         assert active in flw_queryset
         assert unaccepted not in flw_queryset
         assert suspended not in flw_queryset
+
+
+@pytest.mark.django_db
+def test_invite_form_rejects_ended_opportunity():
+    opportunity = OpportunityFactory(end_date=datetime.date.today() - datetime.timedelta(days=1))
+    form = OpportunityUserInviteForm(
+        data={"users": "+15555555555"},
+        opportunity=opportunity,
+    )
+    assert not form.is_valid()
+    assert "This opportunity has ended. You cannot invite more workers." in str(form.errors["users"])
+
+
+@pytest.mark.django_db
+class TestAddTaskTypeForm:
+    @pytest.fixture
+    def task_units(self):
+        return [
+            TaskUnit(id="task_1", name="Task One", description="Desc one"),
+            TaskUnit(id="task_2", name="Task Two", description="Desc two"),
+            TaskUnit(id="task_3", name="Task Three", description="Desc three"),
+        ]
+
+    def test_task_unit_choices_populated(self, opportunity, task_units):
+        with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
+            form = AddTaskTypeForm(opportunity=opportunity)
+        choices = form.fields["task_unit_id"].choices
+        assert choices[0] == ("", "Select a task unit")
+        assert ("task_1", "Task One") in choices
+        assert ("task_2", "Task Two") in choices
+
+    def test_already_used_slugs_excluded(self, opportunity, task_units):
+        TaskFactory(app=opportunity.deliver_app, slug="task_1")
+        with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
+            form = AddTaskTypeForm(opportunity=opportunity)
+        choice_ids = [c[0] for c in form.fields["task_unit_id"].choices]
+        assert "task_1" not in choice_ids
+        assert "task_2" in choice_ids
+        assert "task_3" in choice_ids
+
+    def test_valid_form(self, opportunity, task_units):
+        with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
+            form = AddTaskTypeForm(
+                data={
+                    "task_unit_id": "task_1",
+                    "name": "My Task",
+                    "description": "A description",
+                    "case_property": "some_property",
+                },
+                opportunity=opportunity,
+            )
+        assert form.is_valid(), form.errors
+
+    def test_missing_required_fields(self, opportunity, task_units):
+        with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
+            form = AddTaskTypeForm(data={}, opportunity=opportunity)
+        assert not form.is_valid()
+        assert "task_unit_id" in form.errors
+        assert "name" in form.errors
+        assert "description" in form.errors
+
+    def test_save_sets_slug_and_app(self, opportunity, task_units):
+        with patch("commcare_connect.opportunity.forms.get_task_units_for_app", return_value=task_units):
+            form = AddTaskTypeForm(
+                data={
+                    "task_unit_id": "task_1",
+                    "name": "My Task",
+                    "description": "A description",
+                },
+                opportunity=opportunity,
+            )
+        assert form.is_valid(), form.errors
+        task = form.save()
+        assert task.slug == "task_1"
+        assert task.app == opportunity.deliver_app

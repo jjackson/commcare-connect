@@ -2,7 +2,7 @@ import pytest
 from django.contrib.gis.geos import Point, Polygon
 
 from commcare_connect.microplanning.clustering import WorkAreaGrouper
-from commcare_connect.microplanning.models import SRID, WorkArea, WorkAreaGroup
+from commcare_connect.microplanning.models import SRID, WorkAreaGroup
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory
 
 
@@ -40,7 +40,7 @@ class TestWorkAreaGrouper:
             )
             centroid = Point(x + size / 2, y + size / 2, srid=SRID)
 
-            work_area = WorkArea.objects.create(
+            work_area = WorkAreaFactory(
                 opportunity=opportunity,
                 slug=f"{slug_prefix}-{ward}-{idx}",
                 ward=ward,

@@ -4,11 +4,13 @@
 {% block css %}
 {{ block.super }}
 <link rel="stylesheet" href="{% static 'bundles/css/mapbox.css' %}">
+<link rel="stylesheet" href="{% static 'bundles/css/tomselect.css' %}">
 {% endblock %}
 
 {% block javascript %}
 {{ block.super }}
 <script src="{% static 'bundles/js/mapbox-bundle.js' %}"></script>
+<script src="{% static 'bundles/js/tomselect-bundle.js' %}"></script>
 {% endblock javascript %}
 
 {% block content %}
@@ -17,7 +19,7 @@
 
     <!-- Top header section -->
     <header class="mb-2">
-        <div class="w-full rounded-lg bg-brand-indigo p-5 shadow-sm sm:p-6">
+        <div class="metric-container p-5 shadow-sm sm:p-6">
             <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div class="min-w-0 flex-1">
                     <h1 class="multi-line-clamp-2 text-2xl font-semibold text-white break-words hyphens-auto leading-snug">
@@ -28,7 +30,7 @@
                 <div class="w-full border-t border-white/20 pt-4 lg:w-auto lg:border-t-0 lg:border-l lg:border-white/20 lg:pl-8 lg:pt-0">
                     <div class="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 lg:w-auto lg:max-w-3xl xl:grid-cols-6">
                         {% for metric in metrics %}
-                            <div class="rounded-md border border-brand-sky/30 bg-brand-cornflower-blue/25 p-3 text-center">
+                            <div class="metric-card rounded-md p-3 text-center">
                                 <div class="text-xl font-semibold text-white">
                                     {{ metric.value|default:"--" }}
                                 </div>
@@ -78,6 +80,11 @@
     <div class="flex flex-col gap-2 xl:flex-row xl:items-stretch xl:h-[max(calc(100vh-300px),200px)]" x-data="mapController()">
         <!-- Map section -->
         <div id="map-wrapper" x-ref="mapContainer" class="relative min-w-0 flex-1 shadow-md h-[max(calc(100vh-300px),200px)] xl:h-full">
+            <div id="toast-container"
+                class="absolute top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm text-white opacity-0 transition-opacity duration-300">
+                <i id="toast-icon" class="text-lg"></i>
+                <span id="toast-message"></span>
+            </div>
             <div id="map" class="w-full h-full"></div>
         </div>
 
@@ -130,12 +137,18 @@
                             </dd>
                         </div>
                     </dl>
-                    <div class="mt-4 flex justify-end">
-                        <button class="button button-md button-outline-rounded">
-                            <i class="fa-regular fa-pen-to-square"></i>
-                            {% translate "Modify Work Area" %}
-                        </button>
+                <div class="mt-4 flex justify-end">
+                    <button class="button button-md button-outline-rounded" @click="openWorkAreaEditModal(selectedFeature._id)">
+                        <i class="fa-regular fa-pen-to-square"></i>
+                        {% translate "Modify Work Area" %}
+                    </button>
+                    <div x-show="showWorkAreaEditModal" x-cloak @click.self="showWorkAreaEditModal = false"
+                        @work-area-updated.window="showWorkAreaEditModal = false" class="modal-backdrop">
+                        <div class="modal relative" @click.stop>
+                            <div id="work-area-form"></div>
+                        </div>
                     </div>
+                </div>
                 </div>
             </template>
         </aside>

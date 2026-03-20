@@ -19,6 +19,8 @@ from commcare_connect.opportunity.models import (
     Assessment,
     CommCareApp,
     CompletedModule,
+    CompletedTask,
+    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -42,6 +44,7 @@ from commcare_connect.utils.lock import try_redis_lock
 logger = logging.getLogger(__name__)
 
 LEARN_MODULE_JSONPATH = parse("$..module")
+TASK_MODULE_JSONPATH = parse("$..task")
 ASSESSMENT_JSONPATH = parse("$..assessment")
 DELIVER_UNIT_JSONPATH = parse("$..deliver")
 
@@ -135,6 +138,63 @@ def process_learn_modules(user: User, xform: XForm, app: CommCareApp, opportunit
             update_completed_learn_date(access, save_access)
 
 
+def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity: Opportunity, blocks: list[dict]):
+    """Process task modules from a form received from CommCare HQ."""
+    with transaction.atomic():
+        try:
+            access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
+        except OpportunityAccess.DoesNotExist:
+            raise ProcessingError(f"User does not have access to opportunity {opportunity.name}")
+        save_access = False
+
+        updated_tasks = False
+
+        for task_data in blocks:
+            task_slug = task_data.get("@id")
+            if not task_slug:
+                continue
+
+            try:
+                completed_task = (
+                    CompletedTask.objects.select_for_update()
+                    .filter(
+                        task__app=app,
+                        task__slug=task_slug,
+                        opportunity_access=access,
+                        xform_id=None,
+                        status=CompletedTaskStatus.ASSIGNED,
+                    )
+                    .get()
+                )
+            except CompletedTask.DoesNotExist:
+                continue
+
+            completed_task.xform_id = xform.id
+            completed_task.date = xform.metadata.timeEnd
+            completed_task.duration = xform.metadata.duration
+            completed_task.app_build_id = xform.build_id
+            completed_task.app_build_version = xform.metadata.app_build_version
+            completed_task.status = CompletedTaskStatus.COMPLETED
+
+            completed_task.save(
+                update_fields=[
+                    "xform_id",
+                    "date",
+                    "duration",
+                    "app_build_id",
+                    "app_build_version",
+                    "status",
+                ]
+            )
+            updated_tasks = True
+            if not access.last_active or access.last_active < completed_task.date:
+                access.last_active = completed_task.date
+                save_access = True
+
+        if updated_tasks and save_access:
+            access.save(update_fields=["last_active"])
+
+
 def update_completed_learn_date(access, save_access=False):
     if not access.completed_learn_date and access.learn_progress == 100.0:
         # Get the earliest completion date for each unique module
@@ -190,15 +250,27 @@ def process_assessments(user, xform: XForm, app: CommCareApp, opportunity: Oppor
 
 
 def process_deliver_form(user, xform: XForm, app: CommCareApp, opportunity: Opportunity):
-    matches = [
+    deliver_matches = [
         match.value for match in DELIVER_UNIT_JSONPATH.find(xform.form) if match.value["@xmlns"] == CCC_LEARN_XMLNS
     ]
-    if matches:
-        for deliver_unit_block in matches:
-            process_deliver_unit(user, xform, app, opportunity, deliver_unit_block)
+    for deliver_unit_block in deliver_matches:
+        process_deliver_unit(user, xform, app, opportunity, deliver_unit_block)
+
+    task_matches = [
+        match.value for match in TASK_MODULE_JSONPATH.find(xform.form) if match.value["@xmlns"] == CCC_LEARN_XMLNS
+    ]
+    if task_matches:
+        process_task_modules(user, xform, app, opportunity, task_matches)
 
 
 def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xform: XForm) -> list[list[str]]:
+    """Validate a form submission against the opportunity's verification flags.
+
+    Checks GPS presence, location proximity, catchment areas, submission time window,
+    duplicate entities, attachments, form duration, and custom JSON validation rules.
+    Returns a list of [flag_code, reason] pairs. May modify user_visit.status as a
+    side effect (e.g., resetting duplicate status when the duplicate flag is disabled).
+    """
     flags = []
     opportunity_flags, _ = OpportunityVerificationFlags.objects.get_or_create(opportunity=user_visit.opportunity)
     if opportunity_flags.duplicate:
@@ -278,6 +350,15 @@ def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xfor
 
 
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
+    """Process a delivery form submission into a UserVisit and update CompletedWork.
+
+    Acquires a Redis lock per entity to handle concurrent submissions, then:
+    1. Creates a UserVisit with initial status based on daily/total/claim limits
+    2. Runs verification flag checks via clean_form_submission()
+    3. Auto-approves if enabled and no flags are raised
+    4. Updates or creates the associated CompletedWork record
+    5. Triggers incremental payment recalculation
+    """
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     try:
         access = OpportunityAccess.objects.get(opportunity=opportunity, user=user)
@@ -354,11 +435,9 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
                 try:
                     user_visit.work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
                 except WorkArea.DoesNotExist:
-                    logger.error(
-                        f"No work area found for opportunity ({opportunity.id}) with case_id: {work_area_case_id}"
-                    )
+                    raise ProcessingError("Work area not found")
             else:
-                logger.error(f"Invalid work area case id specified: {work_area_case_id}")
+                raise ProcessingError(f"Invalid work area case id specified: {work_area_case_id}")
 
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:

@@ -79,6 +79,7 @@ class Country(models.Model):
         return self.name
 
 
+@pghistory.track(fields=["active"])
 class Opportunity(BaseModel):
     opportunity_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     organization = models.ForeignKey(
@@ -261,15 +262,18 @@ class LearnModule(models.Model):
 class Task(models.Model):
     app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
     slug = models.SlugField()
+    unit_name = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField()
-    time_estimate = models.IntegerField(help_text="Estimated hours to complete the task")
+    case_property = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["app_id", "slug"], name="unique_task_per_app")]
+        constraints = [
+            models.UniqueConstraint(fields=["app_id", "slug"], name="unique_task_per_app"),
+        ]
 
 
 class XFormBaseModel(models.Model):
@@ -425,6 +429,15 @@ class CompletedTask(XFormBaseModel):
         choices=CompletedTaskStatus.choices,
         default=CompletedTaskStatus.ASSIGNED,
         max_length=50,
+    )
+    due_date = models.DateField()
+    date_created = models.DateTimeField(auto_now_add=True)
+    assigned_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="completed_tasks",
     )
 
     class Meta:
@@ -705,6 +718,13 @@ class CompletedWork(models.Model):
         return self.calculate_completed(visits, approved=True)
 
     def calculate_completed(self, visits, approved=False):
+        """Count completed deliveries for this entity by taking the minimum across required deliver units.
+
+        A delivery is "complete" when all required deliver unit forms have been submitted.
+        The count is the minimum across required units (all must be done), capped by the
+        total of optional units if any exist, and further constrained by child payment
+        unit completion counts.
+        """
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -914,6 +934,12 @@ class OpportunityClaimLimit(models.Model):
 
     @classmethod
     def create_claim_limits(cls, opportunity: Opportunity, claim: OpportunityClaim):
+        """Allocate visit limits for a new claim based on remaining budget.
+
+        For each payment unit, calculates how many visits are still available
+        (total capacity minus already-claimed visits) and creates a claim limit
+        with the lesser of the remaining visits or the per-user max.
+        """
         claim_limits_by_payment_unit = defaultdict(list)
         claim_limits = OpportunityClaimLimit.objects.filter(
             opportunity_claim__opportunity_access__opportunity=opportunity

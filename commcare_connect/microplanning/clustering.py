@@ -1,13 +1,31 @@
+import logging
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from uuid import uuid4
 
 from django.db import transaction
 from pyproj import Transformer
-from shapely import shared_paths, unary_union, wkb
+from shapely import unary_union, wkb
+from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
+from shapely.prepared import prep
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
+
+logger = logging.getLogger(__name__)
+
+# Small buffer (in meters) applied to degenerate convex hulls
+# (e.g. LineString, Point) to ensure they become valid Polygons.
+DEGENERATE_HULL_BUFFER = 1e-6
+
+
+@dataclass
+class WorkAreaData:
+    ward: str
+    centroid: BaseGeometry
+    boundary: BaseGeometry
+    building_count: int
 
 
 class WorkAreaGrouper:
@@ -52,8 +70,8 @@ class WorkAreaGrouper:
     def __init__(
         self,
         opportunity_id: int,
-        max_buildings=300,
-        buffer_distance=100,
+        max_buildings: int = 300,
+        buffer_distance: int = 100,
     ):
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
@@ -62,11 +80,24 @@ class WorkAreaGrouper:
 
     def cluster_work_areas(self):
         work_areas = self._prepare_data()
+        if not work_areas:
+            logger.info("Opportunity %s: no ungrouped work areas to cluster", self.opportunity_id)
+            return
+
         work_area_groups = defaultdict(set)
 
         wards = defaultdict(list)
         for wa_id, wa_data in work_areas.items():
-            wards[wa_data["ward"]].append(wa_id)
+            wards[wa_data.ward].append(wa_id)
+
+        logger.info(
+            "Opportunity %s: clustering %d work areas across %d wards (max_buildings=%d, buffer_distance=%d)",
+            self.opportunity_id,
+            len(work_areas),
+            len(wards),
+            self.max_buildings,
+            self.buffer_distance,
+        )
 
         for ward, ward_ids in wards.items():
             ward_data = {wa_id: work_areas[wa_id] for wa_id in ward_ids}
@@ -76,18 +107,19 @@ class WorkAreaGrouper:
             sorted_ids = sorted(
                 ward_ids,
                 key=lambda wa_id: (
-                    ward_data[wa_id]["centroid"].x,
-                    -ward_data[wa_id]["centroid"].y,
+                    ward_data[wa_id].centroid.x,
+                    -ward_data[wa_id].centroid.y,
                 ),
             )
             unvisited = set(ward_ids)
+            ward_group_count = 0
 
             for wa_id in sorted_ids:
                 if wa_id not in unvisited:
                     continue
 
                 cluster = self._bfs_cluster(
-                    seed_idx=wa_id,
+                    seed_id=wa_id,
                     unvisited=unvisited,
                     adjacency=adjacency,
                     work_areas=work_areas,
@@ -96,25 +128,38 @@ class WorkAreaGrouper:
                 if not cluster:
                     cluster = [wa_id]
                     unvisited.discard(wa_id)
+                    logger.debug(
+                        "Opportunity %s, ward %s: work area %s exceeds max_buildings, assigned to its own group",
+                        self.opportunity_id,
+                        ward,
+                        wa_id,
+                    )
 
                 group_id = str(uuid4())
                 work_area_groups[(ward, group_id)].update(cluster)
+                ward_group_count += 1
+
+            logger.info(
+                "Opportunity %s, ward %s: %d work areas clustered into %d groups",
+                self.opportunity_id,
+                ward,
+                len(ward_ids),
+                ward_group_count,
+            )
 
         with transaction.atomic():
             for key, work_area_ids in work_area_groups.items():
                 ward, group_id = key
-                combined_work_area_boundary = unary_union([work_areas[wa_id]["boundary"] for wa_id in work_area_ids])
+                combined_work_area_boundary = unary_union([work_areas[wa_id].boundary for wa_id in work_area_ids])
                 hull = combined_work_area_boundary.convex_hull
                 if hull.geom_type != "Polygon":
-                    hull = hull.buffer(1e-6)
+                    hull = hull.buffer(DEGENERATE_HULL_BUFFER)
                 group_boundary = hull.wkt
-                group_building_count = sum(work_areas[wa_id]["building_count"] for wa_id in work_area_ids)
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
                     ward=ward,
                     name=group_id,
                     boundary=group_boundary,
-                    building_count=group_building_count,
                 )
                 WorkArea.objects.filter(
                     id__in=work_area_ids,
@@ -122,12 +167,18 @@ class WorkAreaGrouper:
                     work_area_group__isnull=True,
                 ).update(work_area_group=work_area_group)
 
-    def _build_adjacency(self, ward_data: dict, tolerance: float = 1e-6) -> dict:
+        logger.info(
+            "Opportunity %s: clustering complete, created %d groups",
+            self.opportunity_id,
+            len(work_area_groups),
+        )
+
+    def _build_adjacency(self, ward_data: dict) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
-            transformed_geoms[wa_id] = transform(self.transformer.transform, wa["boundary"])
+            transformed_geoms[wa_id] = transform(self.transformer.transform, wa.boundary)
 
         wa_ids_list = list(transformed_geoms.keys())
         geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
@@ -137,36 +188,32 @@ class WorkAreaGrouper:
         for work_area_id, geom in transformed_geoms.items():
             query_geom = geom.buffer(self.buffer_distance)
             candidate_indices = spatial_index.query(query_geom, predicate="intersects")
+            prepared_geom = prep(geom)
 
             for idx in candidate_indices:
                 neighbour_id = wa_ids_list[idx]
-                if neighbour_id == work_area_id:
+                if neighbour_id == work_area_id or neighbour_id in adjacency[work_area_id]:
                     continue
 
                 candidate_geom = transformed_geoms[neighbour_id]
 
-                shared = shared_paths(geom.boundary, candidate_geom.boundary)
-                if shared.length > tolerance:
+                if prepared_geom.intersects(candidate_geom) or geom.distance(candidate_geom) <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
-                    continue
+                    adjacency[neighbour_id].add(work_area_id)
 
-                dist = geom.distance(candidate_geom)
-                if dist <= self.buffer_distance:
-                    adjacency[work_area_id].add(neighbour_id)
-
-        return adjacency
+        return {wa_id: sorted(neighbours) for wa_id, neighbours in adjacency.items()}
 
     def _bfs_cluster(
         self,
-        seed_idx,
+        seed_id,
         unvisited: set,
         adjacency: dict,
         work_areas: dict,
     ) -> list:
         cluster = []
         total_buildings = 0
-        queue = deque([seed_idx])
-        seen = {seed_idx}
+        queue = deque([seed_id])
+        seen = {seed_id}
 
         while queue:
             current = queue.popleft()
@@ -174,7 +221,7 @@ class WorkAreaGrouper:
             if current not in unvisited:
                 continue
 
-            building_count = work_areas[current]["building_count"]
+            building_count = work_areas[current].building_count
 
             if total_buildings + building_count > self.max_buildings:
                 seen.discard(current)
@@ -199,11 +246,10 @@ class WorkAreaGrouper:
             building_count__gt=0,
         )
         for wa in work_area_qs.iterator():
-            work_areas[wa.id] = {
-                "id": wa.id,
-                "ward": wa.ward,
-                "centroid": wkb.loads(bytes(wa.centroid.wkb)),
-                "boundary": wkb.loads(bytes(wa.boundary.wkb)),
-                "building_count": wa.building_count,
-            }
+            work_areas[wa.id] = WorkAreaData(
+                ward=wa.ward,
+                centroid=wkb.loads(bytes(wa.centroid.wkb)),
+                boundary=wkb.loads(bytes(wa.boundary.wkb)),
+                building_count=wa.building_count,
+            )
         return work_areas
