@@ -123,6 +123,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    AssignedTaskListTable,
     CompletedWorkTable,
     DeliverUnitTable,
     InvoiceDeliveriesTable,
@@ -134,7 +135,6 @@ from commcare_connect.opportunity.tables import (
     PaymentUnitTable,
     ProgramManagerOpportunityTable,
     SuspendedUsersTable,
-    TaskListTable,
     UserVisitVerificationTable,
     WorkerDeliveryTable,
     WorkerLearnStatusTable,
@@ -3142,9 +3142,9 @@ def visit_export_count(request, org_slug, opp_id):
     return HttpResponse(html)
 
 
-class TaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSingleTableView):
-    template_name = "opportunity/task_list.html"
-    table_class = TaskListTable
+class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSingleTableView):
+    template_name = "opportunity/assigned_task_list.html"
+    table_class = AssignedTaskListTable
     paginate_by = DEFAULT_PAGE_SIZE
 
     def get_queryset(self):

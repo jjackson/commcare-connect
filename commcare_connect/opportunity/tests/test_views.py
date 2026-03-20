@@ -2163,12 +2163,12 @@ def test_resend_invites_redirects_for_ended_opportunity(client, org_user_member,
 
 
 @pytest.mark.django_db
-class TestTaskListView:
+class TestAssignedTaskListView:
     def test_page_loads_with_no_tasks(
         self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
     ):
         client.force_login(org_user_member)
-        url = reverse("opportunity:task_list", args=(organization.slug, opportunity.opportunity_id))
+        url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
         response = client.get(url)
         assert response.status_code == 200
         assert response.context["total_tasks"] == 0
@@ -2185,7 +2185,7 @@ class TestTaskListView:
         CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
-        url = reverse("opportunity:task_list", args=(organization.slug, opportunity.opportunity_id))
+        url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
         response = client.get(url)
         assert response.status_code == 200
         assert response.context["total_tasks"] == 3

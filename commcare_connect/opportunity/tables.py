@@ -1692,8 +1692,8 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class TaskListTable(OrgContextTable):
-    task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
+class AssignedTaskListTable(OrgContextTable):
+    assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = tables.Column(verbose_name=gettext_lazy("Status"), accessor="status")
     task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
@@ -1711,7 +1711,7 @@ class TaskListTable(OrgContextTable):
         model = CompletedTask
         fields = ()
         sequence = (
-            "task_id",
+            "assigned_task_id",
             "connect_worker",
             "status",
             "task_type",
@@ -1724,7 +1724,7 @@ class TaskListTable(OrgContextTable):
         row_attrs = {"class": "group"}
         empty_text = gettext_lazy("No tasks have been assigned yet.")
 
-    def render_task_id(self, value):
+    def render_assigned_task_id(self, value):
         # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
         return format_html(
             '<a href="#" class="text-brand-indigo hover:underline">'
