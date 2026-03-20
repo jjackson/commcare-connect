@@ -618,7 +618,7 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
     queryset = OpportunityData(organization, False, filters).get_data()
     assert queryset.count() == expected_count
     if not filters:
-        opp = queryset[0]
+        opp = next(item for item in queryset if item.id == opportunity.id)
         assert opp.pending_invites == 3
         assert opp.pending_approvals == 1
         assert opp.total_accrued == total_accrued
