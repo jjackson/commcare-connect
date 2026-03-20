@@ -627,7 +627,8 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
 @pytest.mark.django_db
 def test_tiered_queryset_basic():
     users = [User.objects.create(username=f"user{i}") for i in range(5)]
-    base_qs = User.objects.all()
+    user_ids = [u.id for u in users]
+    base_qs = User.objects.filter(id__in=user_ids).order_by("id")
 
     def data_qs_fn(ids):
         qs = User.objects.filter(id__in=ids)
