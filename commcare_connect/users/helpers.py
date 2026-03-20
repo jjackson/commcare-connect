@@ -59,8 +59,6 @@ def build_hq_user_payload(user):
     }
     if user.name:
         payload["first_name"] = user.name
-    if user.email:
-        payload["email"] = user.email
     if user.phone_number:
         payload["default_phone_number"] = user.phone_number
     return payload
