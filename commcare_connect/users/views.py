@@ -389,12 +389,12 @@ def permission_management_search(request):
     email = request.GET.get("email", "").strip()
     context = {}
     if email:
-        try:
-            target_user = User.objects.get(email__iexact=email)
+        target_user = User.objects.filter(email__iexact=email).first()
+        if target_user:
             context["target_user"] = target_user
             context["permissions"] = _get_user_custom_permissions(target_user)
             context["is_self"] = target_user == request.user
-        except User.DoesNotExist:
+        else:
             context["not_found"] = True
     return render(request, "users/permission_management_results.html", context)
 
@@ -418,14 +418,19 @@ def permission_management_update(request):
     custom_perms = Permission.objects.filter(content_type=ct).exclude(codename__in=_DEFAULT_MODEL_PERMS)
 
     is_self = target_user == request.user
+    perms_to_add = []
+    perms_to_remove = []
     for perm in custom_perms:
-        # Prevent removing manage_internal_permissions from self
-        if is_self and perm.codename == "manage_internal_permissions" and perm.codename not in selected_codenames:
+        if is_self and perm.codename == "manage_internal_permissions":
             continue
         if perm.codename in selected_codenames:
-            target_user.user_permissions.add(perm)
+            perms_to_add.append(perm)
         else:
-            target_user.user_permissions.remove(perm)
+            perms_to_remove.append(perm)
+    if perms_to_add:
+        target_user.user_permissions.add(*perms_to_add)
+    if perms_to_remove:
+        target_user.user_permissions.remove(*perms_to_remove)
 
     context = {
         "target_user": target_user,

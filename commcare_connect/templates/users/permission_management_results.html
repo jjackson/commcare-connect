@@ -18,7 +18,6 @@
     <form hx-post="{% url 'users:permission_management_update' %}"
           hx-target="#results"
           hx-swap="innerHTML">
-        {% csrf_token %}
         <input type="hidden" name="user_id" value="{{ target_user.id }}">
         <div class="space-y-3">
             {% for perm in permissions %}
@@ -34,10 +33,6 @@
                     <span class="text-gray-500">— {{ perm.name }}</span>
                 </span>
             </label>
-            {% if is_self and perm.codename == "manage_internal_permissions" %}
-            {# Include as hidden so the disabled checkbox still submits #}
-            <input type="hidden" name="permissions" value="manage_internal_permissions">
-            {% endif %}
             {% endfor %}
         </div>
         <div class="mt-4">
