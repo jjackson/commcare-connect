@@ -369,6 +369,21 @@ class TestPermissionManagement:
         target_user = User.objects.get(pk=target_user.pk)
         assert not target_user.has_perm("users.otp_access")
 
+    def test_revoke_one_of_multiple_permissions(self, admin_user, target_user, client):
+        otp_perm = Permission.objects.get(codename="otp_access")
+        demo_perm = Permission.objects.get(codename="demo_users_access")
+        target_user.user_permissions.add(otp_perm, demo_perm)
+        client.force_login(admin_user)
+        # Keep otp_access, remove demo_users_access
+        response = client.post(
+            self.update_url,
+            {"user_id": target_user.id, "permissions": ["otp_access"]},
+        )
+        assert response.status_code == 200
+        target_user = User.objects.get(pk=target_user.pk)
+        assert target_user.has_perm("users.otp_access")
+        assert not target_user.has_perm("users.demo_users_access")
+
     def test_cannot_remove_own_manage_permission(self, admin_user, client):
         client.force_login(admin_user)
         # POST without manage_internal_permissions in the list — should not remove it from self
