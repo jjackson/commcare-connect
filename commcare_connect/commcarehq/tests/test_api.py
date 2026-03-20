@@ -42,7 +42,7 @@ class TestCreateOrUpdateCaseByWorkArea:
         opp_access = OpportunityAccessFactory(opportunity__api_key=api_key)
         work_area_group = WorkAreaGroupFactory(
             opportunity=opp_access.opportunity,
-            assigned_user=opp_access,
+            opportunity_access=opp_access,
         )
         work_area = WorkAreaFactory(
             opportunity=opp_access.opportunity,
@@ -69,8 +69,8 @@ class TestCreateOrUpdateCaseByWorkArea:
         else:
             assert call_kwargs.get("case_id") is None
 
-    def test_no_assigned_user(self):
-        work_area_group = WorkAreaGroupFactory(assigned_user=None)
+    def test_no_opportunity_access(self):
+        work_area_group = WorkAreaGroupFactory(opportunity_access=None)
         work_area = WorkAreaFactory(work_area_group=work_area_group)
 
         expected_error_message = "Work Area must have an assigned Opportunity Access through its Work Area Group"

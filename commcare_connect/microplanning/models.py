@@ -1,3 +1,4 @@
+import pghistory
 from django.contrib.gis.db import models as geo_models
 from django.utils.translation import gettext_lazy as _
 
@@ -21,16 +22,20 @@ class WorkAreaStatus(geo_models.TextChoices):
 
 class WorkAreaGroup(geo_models.Model):
     opportunity = geo_models.ForeignKey(Opportunity, on_delete=geo_models.CASCADE)
-    assigned_user = geo_models.ForeignKey(OpportunityAccess, null=True, blank=True, on_delete=geo_models.SET_NULL)
+    opportunity_access = geo_models.ForeignKey(OpportunityAccess, null=True, blank=True, on_delete=geo_models.SET_NULL)
     ward = geo_models.SlugField(max_length=255)
     name = geo_models.CharField(
         max_length=255,
     )
 
+    def __str__(self):
+        return self.name
+
     class Meta:
         constraints = [geo_models.UniqueConstraint(fields=["name", "opportunity"], name="unique_name_per_opportunity")]
 
 
+@pghistory.track(fields=["expected_visit_count", "work_area_group"])
 class WorkArea(geo_models.Model):
     work_area_group = geo_models.ForeignKey(WorkAreaGroup, null=True, blank=True, on_delete=geo_models.SET_NULL)
     opportunity = geo_models.ForeignKey(Opportunity, on_delete=geo_models.CASCADE)

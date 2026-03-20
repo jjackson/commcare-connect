@@ -129,6 +129,7 @@ class TestProcessTaskModules:
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
             status=CompletedTaskStatus.ASSIGNED,
+            due_date=now() + datetime.timedelta(days=7),
         )
 
         task_block = TaskJsonFactory(id=task.slug).json
@@ -166,6 +167,7 @@ class TestProcessTaskModules:
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
             status=CompletedTaskStatus.ASSIGNED,
+            due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block])
@@ -188,6 +190,7 @@ class TestProcessTaskModules:
             duration=datetime.timedelta(minutes=5),
             xform_id="existing-form-id",
             status=CompletedTaskStatus.COMPLETED,
+            due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block, {"name": "missing @id"}])
