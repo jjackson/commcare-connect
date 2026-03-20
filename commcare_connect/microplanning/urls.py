@@ -18,4 +18,9 @@ urlpatterns = [
         views.workareas_group_geojson,
         name="workareas_group_geojson",
     ),
+    path(
+        "<slug:opp_id>/modify_workarea/<int:work_area_id>/",
+        views.ModifyWorkAreaUpdateView.as_view(),
+        name="modify_work_area",
+    ),
 ]
