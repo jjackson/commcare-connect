@@ -38,4 +38,5 @@ class WorkAreaModelForm(forms.ModelForm):
         )
 
     def has_changed(self):
+        # Ignore "reason" form is unchanged unless model fields change
         return any(f in self.changed_data for f in self._meta.fields)
