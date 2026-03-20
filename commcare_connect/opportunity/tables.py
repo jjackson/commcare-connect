@@ -25,6 +25,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     PaymentInvoice,
     PaymentUnit,
+    Task,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -1759,3 +1760,15 @@ class AssignedTaskListTable(OrgContextTable):
     def render_action(self, record):
         # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
         return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
+
+
+class TaskTable(tables.Table):
+    index = IndexColumn()
+    name = tables.Column(verbose_name=gettext_lazy("Task Type Name"))
+    description = tables.Column(verbose_name=gettext_lazy("Description"))
+    linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="unit_name")
+
+    class Meta:
+        model = Task
+        fields = ("index", "name", "description", "linked_task_unit")
+        empty_text = gettext_lazy("No task types configured for this opportunity.")
