@@ -372,6 +372,7 @@ class TestPermissionManagement:
     def test_cannot_remove_own_manage_permission(self, admin_user, client):
         client.force_login(admin_user)
         # POST without manage_internal_permissions in the list — should not remove it from self
+        # but other submitted permissions should still be applied
         response = client.post(
             self.update_url,
             {"user_id": admin_user.id, "permissions": ["otp_access"]},
@@ -379,6 +380,7 @@ class TestPermissionManagement:
         assert response.status_code == 200
         admin_user = User.objects.get(pk=admin_user.pk)
         assert admin_user.has_perm("users.manage_internal_permissions")
+        assert admin_user.has_perm("users.otp_access")
 
     def test_internal_features_shows_permission_management_card(self, admin_user, client):
         client.force_login(admin_user)
