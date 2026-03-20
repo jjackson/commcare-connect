@@ -97,6 +97,8 @@ from commcare_connect.opportunity.helpers import (
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
+    CompletedTask,
+    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -121,6 +123,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    AssignedTaskListTable,
     CompletedWorkTable,
     DeliverUnitTable,
     InvoiceDeliveriesTable,
@@ -191,7 +194,12 @@ from commcare_connect.utils.datetime import get_start_end_date_range_with_time
 from commcare_connect.utils.db import get_object_by_uuid_or_int
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels, Flags
-from commcare_connect.utils.tables import PAGE_SIZE_OPTIONS, get_duration_min, get_validated_page_size
+from commcare_connect.utils.tables import (
+    DEFAULT_PAGE_SIZE,
+    PAGE_SIZE_OPTIONS,
+    get_duration_min,
+    get_validated_page_size,
+)
 
 EXPORT_ROW_LIMIT = 10_000
 
@@ -3132,3 +3140,41 @@ def visit_export_count(request, org_slug, opp_id):
     )
 
     return HttpResponse(html)
+
+
+class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSingleTableView):
+    template_name = "opportunity/assigned_task_list.html"
+    table_class = AssignedTaskListTable
+    paginate_by = DEFAULT_PAGE_SIZE
+
+    def get_queryset(self):
+        opportunity = self.get_opportunity()
+        return (
+            CompletedTask.objects.filter(opportunity_access__opportunity=opportunity)
+            .select_related("task", "opportunity_access__user", "assigned_by")
+            .order_by("-date_created")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        opportunity = self.get_opportunity()
+
+        counts = CompletedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
+            total_tasks=Count("id"),
+            open_tasks=Count("id", filter=Q(status=CompletedTaskStatus.ASSIGNED)),
+            complete_tasks=Count("id", filter=Q(status=CompletedTaskStatus.COMPLETED)),
+        )
+
+        context["opportunity"] = opportunity
+        context.update(counts)
+
+        context["path"] = [
+            {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": self.request.org.slug})},
+            {
+                "title": opportunity.name,
+                "url": reverse("opportunity:detail", args=(self.request.org.slug, opportunity.opportunity_id)),
+            },
+            {"title": "Task List"},
+        ]
+
+        return context

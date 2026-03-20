@@ -17,6 +17,7 @@ from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
+    CompletedTaskStatus,
     CompletedWorkStatus,
     FormJsonValidationRules,
     InvoiceStatus,
@@ -34,6 +35,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import invite_user
 from commcare_connect.opportunity.tests.factories import (
     BlobMetaFactory,
+    CompletedTaskFactory,
     CompletedWorkFactory,
     DeliverUnitFactory,
     FormJsonValidationRulesFactory,
@@ -46,6 +48,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentFactory,
     PaymentInvoiceFactory,
     PaymentUnitFactory,
+    TaskFactory,
     UserInviteFactory,
     UserVisitFactory,
 )
@@ -2157,3 +2160,34 @@ def test_resend_invites_redirects_for_ended_opportunity(client, org_user_member,
         reverse("opportunity:detail", args=[organization.slug, opportunity.opportunity_id])
         in response.headers["HX-Redirect"]
     )
+
+
+@pytest.mark.django_db
+class TestAssignedTaskListView:
+    def test_page_loads_with_no_tasks(
+        self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
+    ):
+        client.force_login(org_user_member)
+        url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.context["total_tasks"] == 0
+        assert response.context["open_tasks"] == 0
+        assert response.context["complete_tasks"] == 0
+
+    def test_page_shows_correct_metrics(
+        self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
+    ):
+        access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
+        task = TaskFactory(app=opportunity.deliver_app)
+        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
+        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
+        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.COMPLETED)
+
+        client.force_login(org_user_member)
+        url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.context["total_tasks"] == 3
+        assert response.context["open_tasks"] == 2
+        assert response.context["complete_tasks"] == 1
