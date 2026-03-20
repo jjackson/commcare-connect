@@ -3,7 +3,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from functools import partial
+from functools import cached_property, partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
@@ -107,6 +107,7 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    OpportunityActiveEvent,
     OpportunityClaim,
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
@@ -323,6 +324,14 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
 
+    @cached_property
+    def active_history_events(self):
+        return (
+            OpportunityActiveEvent.objects.filter(pgh_obj=self.get_object())
+            .select_related("pgh_context")
+            .order_by("-pgh_created_at")
+        )
+
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.opportunity_id))
 
@@ -338,6 +347,17 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
             add_connect_users.delay(users, form.instance.id)
 
         return response
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_events"] = self.active_history_events
+        return context
+
+    def get_form_kwargs(self, *args, **kwargs):
+        form_kwargs = super().get_form_kwargs(*args, **kwargs)
+        if self.active_history_events:
+            form_kwargs.update({"latest_active_history_event": self.active_history_events[0]})
+        return form_kwargs
 
 
 class OpportunityFinalize(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
