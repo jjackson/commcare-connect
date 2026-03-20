@@ -1,8 +1,10 @@
 import datetime
 import json
+import logging
 from functools import cached_property
 from urllib.parse import urlencode
 
+import httpx
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Column, Div, Field, Fieldset, Layout, Row, Submit
 from dateutil.relativedelta import relativedelta
@@ -17,6 +19,7 @@ from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.opportunity.app_xml import get_task_units_for_app
 from commcare_connect.opportunity.models import (
     CommCareApp,
     CompletedWork,
@@ -51,6 +54,9 @@ from commcare_connect.opportunity.utils.invoice import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import ManagedOpportunity
 from commcare_connect.users.models import User, UserCredential
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
+
+logger = logging.getLogger(__name__)
 
 FILTER_COUNTRIES = [("+276", "Malawi"), ("+234", "Nigeria"), ("+27", "South Africa"), ("+91", "India")]
 
@@ -148,11 +154,11 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
         ]
 
     def __init__(self, *args, **kwargs):
+        self.latest_active_history_event = kwargs.pop("latest_active_history_event", None)
         super().__init__(*args, **kwargs)
         self.opportunity = self.instance
 
         self.fields["users"].required = False
-
         layout_fields = [
             Row(
                 HTML(
@@ -174,6 +180,12 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                         "active",
                         css_class=CHECKBOX_CLASS,
                         wrapper_class="bg-slate-100 flex items-center justify-between p-4 rounded-lg",
+                    ),
+                    HTML(
+                        "{% load i18n %}"
+                        "{% with latest_active_event=form.latest_active_history_event %}"
+                        '{% include "opportunity/partials/active_toggle_metadata.html" %}'
+                        "{% endwith %}"
                     ),
                     Field(
                         "is_test",
@@ -1906,3 +1918,75 @@ class CreateTaskForm(forms.Form):
         if due_date < datetime.date.today():
             raise ValidationError(_("Due date cannot be in the past."))
         return due_date
+
+
+class AddTaskTypeForm(forms.ModelForm):
+    task_unit_id = forms.ChoiceField(
+        label=_("Task unit"),
+        choices=[],
+        widget=forms.Select(attrs={"@change": "onTaskUnitSelectChange($event.target.value)"}),
+    )
+
+    class Meta:
+        model = Task
+        fields = ["name", "description", "case_property"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, opportunity, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.opportunity = opportunity
+        self._populate_task_unit_choices()
+
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+        self.helper.layout = Layout(
+            Div(
+                Field("task_unit_id"),
+                Field("name"),
+                css_class="grid grid-cols-2 gap-6",
+            ),
+            Field("case_property"),
+            Field("description"),
+        )
+
+    def _populate_task_unit_choices(self):
+        try:
+            task_units = get_task_units_for_app(self.opportunity.deliver_app)
+        except (httpx.TimeoutException, httpx.ConnectError, CommCareHQAPIException):
+            logger.exception("Failed to fetch task units for app %s", self.opportunity.deliver_app.pk)
+            self.fields["task_unit_id"].choices = [("", _("Failed to load task units"))]
+            self.fields["task_unit_id"].widget.attrs["disabled"] = True
+            self.task_units_data = json.dumps({})
+            return
+        already_used_slugs = set(Task.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True))
+        available_units = [tu for tu in task_units if tu.id not in already_used_slugs]
+        if available_units:
+            self.fields["task_unit_id"].choices = [("", _("Select a task unit"))] + [
+                (tu.id, tu.name) for tu in available_units
+            ]
+        else:
+            self.fields["task_unit_id"].choices = [("", _("No available task units"))]
+            self.fields["task_unit_id"].widget.attrs["disabled"] = True
+        self.task_units_data = json.dumps(
+            {tu.id: {"name": tu.name, "description": tu.description} for tu in available_units}
+        )
+
+    def save(self, commit=True):
+        task = super().save(commit=False)
+        task.app = self.opportunity.deliver_app
+        task.slug = self.cleaned_data["task_unit_id"]
+        unit_name = dict(self.fields["task_unit_id"].choices).get(task.slug, "")
+        task.unit_name = unit_name[:255]
+        if commit:
+            task.save()
+        return task
+
+    def clean(self):
+        cleaned_data = super().clean()
+        task_unit_id = cleaned_data.get("task_unit_id")
+        if not task_unit_id:
+            return cleaned_data
+
+        if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
+            self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
+        return cleaned_data
