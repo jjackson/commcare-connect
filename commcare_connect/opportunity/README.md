@@ -10,6 +10,7 @@ The opportunity app is the core domain of CommCare Connect. It manages paid prog
 - **PaymentUnit** — Defines what a user gets paid for and how much. Can be hierarchical (parent/child).
 - **DeliverUnit** — A type of form submission within a delivery app (e.g., "household visit", "follow-up").
 - **Task** — A named task within a learn/deliver app, distinct from a LearnModule.
+- **TaskUnit** — A task module from the delivery app XML. A task unit links to a task.
 - **UserVisit** — A single form submission from a mobile user during delivery.
 - **CompletedWork** — Aggregates visits for a specific entity (beneficiary) and payment unit. Tracks approval status and payment.
 - **CompletedTask** — Tracks completion of individual tasks by a user (assigned → completed).
