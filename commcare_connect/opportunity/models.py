@@ -260,12 +260,16 @@ class LearnModule(models.Model):
 
 
 class Task(models.Model):
+    task_type_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, null=True, blank=True)
     slug = models.SlugField()
     unit_name = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
+    is_active = models.BooleanField(default=False)
+    duration = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.name
