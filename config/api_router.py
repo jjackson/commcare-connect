@@ -13,6 +13,7 @@ from commcare_connect.opportunity.api.views import (
     UserLearnProgressView,
     UserVisitViewSet,
 )
+from commcare_connect.program.api.views import ProgramViewSet
 from commcare_connect.users.api.views import UserViewSet
 
 if settings.DEBUG:
@@ -26,6 +27,7 @@ router.register("opportunity/(?P<opportunity_id>.+)/user_visit", UserVisitViewSe
 router.register("lookups/delivery_types", DeliveryTypeViewSet, basename="DeliveryType")
 router.register("lookups/currencies", CurrencyViewSet, basename="Currency")
 router.register("lookups/countries", CountryViewSet, basename="Country")
+router.register("program", ProgramViewSet, basename="Program")
 
 app_name = "api"
 urlpatterns = [
