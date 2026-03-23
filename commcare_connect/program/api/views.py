@@ -1,10 +1,16 @@
+from django.shortcuts import get_object_or_404
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmin
-from commcare_connect.program.api.serializers import ProgramCreateSerializer, ProgramReadSerializer
-from commcare_connect.program.models import Program
+from commcare_connect.program.api.serializers import (
+    ManagedOpportunityCreateSerializer,
+    ManagedOpportunityReadSerializer,
+    ProgramCreateSerializer,
+    ProgramReadSerializer,
+)
+from commcare_connect.program.models import ManagedOpportunity, Program
 
 
 class ProgramViewSet(viewsets.ModelViewSet):
@@ -29,3 +35,44 @@ class ProgramViewSet(viewsets.ModelViewSet):
         if org_slug:
             qs = qs.filter(organization__slug=org_slug)
         return qs.order_by("-start_date")
+
+
+class ManagedOpportunityViewSet(viewsets.ModelViewSet):
+    serializer_class = ManagedOpportunityReadSerializer
+    permission_classes = [IsAuthenticated, TokenHasScope]
+    required_scopes = ["create"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def initial(self, request, *args, **kwargs):
+        """Inject PM org slug for permission checking on nested program routes."""
+        if self.kwargs.get("program_id"):
+            try:
+                program = Program.objects.get(program_id=self.kwargs["program_id"])
+                self.kwargs["org_slug"] = program.organization.slug
+            except Program.DoesNotExist:
+                pass
+        super().initial(request, *args, **kwargs)
+
+    def get_permissions(self):
+        if self.action in ("create", "partial_update"):
+            return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
+        return [IsAuthenticated(), TokenHasScope()]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "partial_update"):
+            return ManagedOpportunityCreateSerializer
+        return ManagedOpportunityReadSerializer
+
+    def get_program(self):
+        return get_object_or_404(Program, program_id=self.kwargs["program_id"])
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.kwargs.get("program_id"):
+            context["program"] = self.get_program()
+        return context
+
+    def get_queryset(self):
+        return ManagedOpportunity.objects.filter(program__program_id=self.kwargs["program_id"]).order_by(
+            "-date_created"
+        )
