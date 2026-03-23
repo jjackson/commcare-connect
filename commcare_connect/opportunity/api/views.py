@@ -8,7 +8,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.timezone import now
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -195,8 +195,23 @@ class ConfirmPaymentsView(APIView):
         return confirm_payments(request, request.user, request.data.get("payments", []))
 
 
-class PaymentUnitViewSet(viewsets.ModelViewSet):
+class ReadSerializerResponseMixin:
+    """Return the read serializer in create/update responses instead of the write serializer."""
+
+    read_serializer_class = None
+
+    def create(self, request, *args, **kwargs):
+        write_serializer = self.get_serializer(data=request.data)
+        write_serializer.is_valid(raise_exception=True)
+        self.perform_create(write_serializer)
+        read_serializer = self.read_serializer_class(write_serializer.instance, context=self.get_serializer_context())
+        headers = self.get_success_headers(read_serializer.data)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+
+class PaymentUnitViewSet(ReadSerializerResponseMixin, viewsets.ModelViewSet):
     serializer_class = PaymentUnitSerializer
+    read_serializer_class = PaymentUnitSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
@@ -235,8 +250,9 @@ class PaymentUnitViewSet(viewsets.ModelViewSet):
         )
 
 
-class DeliverUnitViewSet(viewsets.ModelViewSet):
+class DeliverUnitViewSet(ReadSerializerResponseMixin, viewsets.ModelViewSet):
     serializer_class = DeliverUnitReadSerializer
+    read_serializer_class = DeliverUnitReadSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]

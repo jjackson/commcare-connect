@@ -4,6 +4,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 
 from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmin
+from commcare_connect.opportunity.api.views import ReadSerializerResponseMixin
 from commcare_connect.program.api.serializers import (
     ManagedOpportunityCreateSerializer,
     ManagedOpportunityReadSerializer,
@@ -15,8 +16,9 @@ from commcare_connect.program.api.serializers import (
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication
 
 
-class ProgramViewSet(viewsets.ModelViewSet):
+class ProgramViewSet(ReadSerializerResponseMixin, viewsets.ModelViewSet):
     serializer_class = ProgramReadSerializer
+    read_serializer_class = ProgramReadSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "head", "options"]
@@ -59,8 +61,9 @@ class ProgramNestedViewMixin:
         return context
 
 
-class ManagedOpportunityViewSet(ProgramNestedViewMixin, viewsets.ModelViewSet):
+class ManagedOpportunityViewSet(ReadSerializerResponseMixin, ProgramNestedViewMixin, viewsets.ModelViewSet):
     serializer_class = ManagedOpportunityReadSerializer
+    read_serializer_class = ManagedOpportunityReadSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "head", "options"]
@@ -82,8 +85,9 @@ class ManagedOpportunityViewSet(ProgramNestedViewMixin, viewsets.ModelViewSet):
         ).order_by("-date_created")
 
 
-class ProgramApplicationViewSet(ProgramNestedViewMixin, viewsets.ModelViewSet):
+class ProgramApplicationViewSet(ReadSerializerResponseMixin, ProgramNestedViewMixin, viewsets.ModelViewSet):
     serializer_class = ProgramApplicationReadSerializer
+    read_serializer_class = ProgramApplicationReadSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "head", "options"]
