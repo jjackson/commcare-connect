@@ -60,8 +60,7 @@ def microplanning_home(request, *args, **kwargs):
     areas_present = WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists()
     show_area_btn = not (cache.get(get_import_area_cache_key(opportunity.id)) is not None or areas_present)
     work_area_groups_present = WorkAreaGroup.objects.filter(opportunity_id=opportunity.id).exists()
-    clustering_lock = cache.lock(get_cluster_area_cache_lock_key(opportunity.id))
-    show_workarea_groups_btn = areas_present and not (clustering_lock.locked() or work_area_groups_present)
+    show_workarea_groups_btn = areas_present and not work_area_groups_present
 
     tiles_url = reverse(
         "microplanning:workareas_tiles",
