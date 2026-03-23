@@ -18,6 +18,7 @@ from commcare_connect.flags.switch_names import API_UUID
 from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmin
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
+    DeliverUnitCreateSerializer,
     DeliveryProgressSerializer,
     OpportunitySerializer,
     PaymentUnitCreateSerializer,
@@ -26,6 +27,7 @@ from commcare_connect.opportunity.api.serializers import (
 )
 from commcare_connect.opportunity.models import (
     CompletedWork,
+    DeliverUnit,
     Opportunity,
     OpportunityAccess,
     OpportunityClaim,
@@ -217,3 +219,21 @@ class PaymentUnitViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return PaymentUnit.objects.filter(opportunity__opportunity_id=self.kwargs["opportunity_id"]).order_by("pk")
+
+
+class DeliverUnitViewSet(viewsets.ModelViewSet):
+    serializer_class = DeliverUnitCreateSerializer
+    permission_classes = [IsAuthenticated, TokenHasScope]
+    required_scopes = ["create"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("create", "partial_update", "destroy"):
+            return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
+        return [IsAuthenticated(), TokenHasScope()]
+
+    def get_queryset(self):
+        """Filter deliver units by those linked to payment units of this opportunity."""
+        return DeliverUnit.objects.filter(
+            payment_unit__opportunity__opportunity_id=self.kwargs["opportunity_id"]
+        ).order_by("pk")

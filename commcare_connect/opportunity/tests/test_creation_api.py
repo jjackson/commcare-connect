@@ -170,9 +170,7 @@ def managed_opp_setup(program_manager_org, program_manager_org_user_admin):
 
 @pytest.mark.django_db
 class TestPaymentUnitAPI:
-    def test_create_payment_unit(
-        self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup
-    ):
+    def test_create_payment_unit(self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup):
         opp = managed_opp_setup
         _add_create_credentials(api_client, program_manager_org_user_admin)
         response = api_client.post(
@@ -191,9 +189,7 @@ class TestPaymentUnitAPI:
         assert response.status_code == 201, response.data
         assert PaymentUnit.objects.filter(opportunity=opp, name="Per Visit").exists()
 
-    def test_list_payment_units(
-        self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup
-    ):
+    def test_list_payment_units(self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup):
         opp = managed_opp_setup
         PaymentUnit.objects.create(
             opportunity=opp, name="Unit 1", description="test", amount=10, max_total=10, max_daily=5
@@ -201,6 +197,49 @@ class TestPaymentUnitAPI:
         _add_create_credentials(api_client, program_manager_org_user_admin)
         response = api_client.get(
             f"/api/opportunity/{opp.opportunity_id}/payment_units/?organization={opp.program.organization.slug}"
+        )
+        assert response.status_code == 200
+        assert len(response.data) == 1
+
+
+@pytest.mark.django_db
+class TestDeliverUnitAPI:
+    @pytest.fixture
+    def opp_with_payment_unit(self, managed_opp_setup):
+        opp = managed_opp_setup
+        pu = PaymentUnit.objects.create(
+            opportunity=opp, name="Per Visit", description="test", amount=10, max_total=10, max_daily=5
+        )
+        return opp, pu
+
+    def test_create_deliver_unit(
+        self, api_client: APIClient, program_manager_org_user_admin: User, opp_with_payment_unit
+    ):
+        opp, pu = opp_with_payment_unit
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/opportunity/{opp.opportunity_id}/deliver_units/",
+            {
+                "slug": "form_1",
+                "name": "Home Visit Form",
+                "payment_unit": pu.id,
+                "app": opp.deliver_app.id,
+                "optional": False,
+                "organization": opp.program.organization.slug,
+            },
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        assert DeliverUnit.objects.filter(slug="form_1", payment_unit=pu).exists()
+
+    def test_list_deliver_units(
+        self, api_client: APIClient, program_manager_org_user_admin: User, opp_with_payment_unit
+    ):
+        opp, pu = opp_with_payment_unit
+        DeliverUnit.objects.create(app=opp.deliver_app, slug="form_1", name="Form 1", payment_unit=pu)
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.get(
+            f"/api/opportunity/{opp.opportunity_id}/deliver_units/?organization={opp.program.organization.slug}"
         )
         assert response.status_code == 200
         assert len(response.data) == 1

@@ -8,6 +8,7 @@ from commcare_connect.opportunity.api.views import (
     ClaimOpportunityView,
     ConfirmPaymentsView,
     ConfirmPaymentView,
+    DeliverUnitViewSet,
     DeliveryProgressView,
     OpportunityViewSet,
     PaymentUnitViewSet,
@@ -29,6 +30,11 @@ router.register(
     "opportunity/(?P<opportunity_id>[^/.]+)/payment_units",
     PaymentUnitViewSet,
     basename="PaymentUnit",
+)
+router.register(
+    "opportunity/(?P<opportunity_id>[^/.]+)/deliver_units",
+    DeliverUnitViewSet,
+    basename="DeliverUnit",
 )
 router.register("lookups/delivery_types", DeliveryTypeViewSet, basename="DeliveryType")
 router.register("lookups/currencies", CurrencyViewSet, basename="Currency")

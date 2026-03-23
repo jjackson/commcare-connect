@@ -9,6 +9,7 @@ from commcare_connect.opportunity.models import (
     CompletedModule,
     CompletedWork,
     CompletedWorkStatus,
+    DeliverUnit,
     LearnModule,
     Opportunity,
     OpportunityAccess,
@@ -71,6 +72,12 @@ class PaymentUnitCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["opportunity"] = self.context["opportunity"]
         return super().create(validated_data)
+
+
+class DeliverUnitCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeliverUnit
+        fields = ["slug", "name", "payment_unit", "app", "optional"]
 
 
 class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
