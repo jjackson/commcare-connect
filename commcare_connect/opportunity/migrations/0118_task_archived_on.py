@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0117_task_case_property_and_task_unit_name"),
+        ("opportunity", "0122_add_task_fields"),
     ]
 
     operations = [

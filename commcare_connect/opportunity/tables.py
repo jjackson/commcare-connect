@@ -15,6 +15,8 @@ from django_tables2 import columns
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import (
     CatchmentArea,
+    CompletedTask,
+    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -1689,6 +1691,75 @@ class InvoiceDeliveriesTable(tables.Table):
             "payment_accrued",
             "payment_accrued_usd",
         )
+
+
+class AssignedTaskListTable(OrgContextTable):
+    assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
+    connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
+    status = tables.Column(verbose_name=gettext_lazy("Status"), accessor="status")
+    task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
+    assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
+    due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
+    assigned_by = tables.Column(
+        verbose_name=gettext_lazy("Assigned By"),
+        accessor="assigned_by__name",
+        empty_values=(None,),
+        default=gettext_lazy("Deleted user"),
+    )
+    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+
+    class Meta:
+        model = CompletedTask
+        fields = ()
+        sequence = (
+            "assigned_task_id",
+            "connect_worker",
+            "status",
+            "task_type",
+            "assigned_date",
+            "due_date",
+            "assigned_by",
+            "action",
+        )
+        order_by = ("-assigned_date",)
+        row_attrs = {"class": "group"}
+        empty_text = gettext_lazy("No tasks have been assigned yet.")
+
+    def render_assigned_task_id(self, value):
+        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
+        return format_html(
+            '<a href="#" class="text-brand-indigo hover:underline">'
+            '<span class="text-sm font-medium">#{}</span></a>',
+            value,
+        )
+
+    def render_connect_worker(self, value):
+        return format_html(
+            '<div class="flex flex-col items-start">'
+            '<p class="text-sm font-medium text-gray-700">{}</p>'
+            '<p class="text-xs text-gray-500">{}</p>'
+            "</div>",
+            value.name,
+            value.username,
+        )
+
+    def render_status(self, value):
+        if value == CompletedTaskStatus.ASSIGNED:
+            status = _("To Do")
+            badge_classes = "bg-amber-100 text-amber-800"
+        else:
+            status = _("Complete")
+            badge_classes = "bg-green-100 text-green-800"
+        return format_html(
+            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
+            "{}</span>",
+            badge_classes,
+            status,
+        )
+
+    def render_action(self, record):
+        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
+        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
 
 
 class TaskTable(OpportunityContextTable):

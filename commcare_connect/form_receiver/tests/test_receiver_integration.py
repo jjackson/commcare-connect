@@ -265,7 +265,7 @@ def test_receiver_deliver_form_max_visits_reached(
     assert UserVisit.objects.filter(user=mobile_user_with_connect_link).count() == 4
     # Limit reached
     submit_form_for_random_entity(form_json2)
-    user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link)
+    user_visits = UserVisit.objects.filter(user=mobile_user_with_connect_link).order_by("id")
     assert user_visits.count() == 5
     # First four are not over-limit
     assert {u.status for u in user_visits[0:4]} == {VisitValidationStatus.pending, VisitValidationStatus.approved}

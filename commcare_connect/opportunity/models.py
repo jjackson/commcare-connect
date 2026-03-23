@@ -79,6 +79,7 @@ class Country(models.Model):
         return self.name
 
 
+@pghistory.track(pghistory.UpdateEvent(), fields=["active"])
 class Opportunity(BaseModel):
     opportunity_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     organization = models.ForeignKey(
@@ -259,13 +260,17 @@ class LearnModule(models.Model):
 
 
 class Task(models.Model):
+    task_type_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
+    opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, null=True, blank=True)
     slug = models.SlugField()
     unit_name = models.CharField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
     archived = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=False)
+    duration = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -420,15 +425,25 @@ class CompletedTaskStatus(models.TextChoices):
 
 
 class CompletedTask(XFormBaseModel):
+    assigned_task_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     task = models.ForeignKey(Task, on_delete=models.PROTECT)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
-    date = models.DateTimeField()
+    completed_at = models.DateTimeField()
     duration = models.DurationField()
     xform_id = models.CharField(max_length=50, null=True)
     status = models.CharField(
         choices=CompletedTaskStatus.choices,
         default=CompletedTaskStatus.ASSIGNED,
         max_length=50,
+    )
+    due_date = models.DateField()
+    date_created = models.DateTimeField(auto_now_add=True)
+    assigned_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="completed_tasks",
     )
 
     class Meta:
@@ -709,6 +724,13 @@ class CompletedWork(models.Model):
         return self.calculate_completed(visits, approved=True)
 
     def calculate_completed(self, visits, approved=False):
+        """Count completed deliveries for this entity by taking the minimum across required deliver units.
+
+        A delivery is "complete" when all required deliver unit forms have been submitted.
+        The count is the minimum across required units (all must be done), capped by the
+        total of optional units if any exist, and further constrained by child payment
+        unit completion counts.
+        """
         unit_counts = Counter(visits)
         deliver_units = self.payment_unit.deliver_units.values("id", "optional")
         required_deliver_units = list(
@@ -918,6 +940,12 @@ class OpportunityClaimLimit(models.Model):
 
     @classmethod
     def create_claim_limits(cls, opportunity: Opportunity, claim: OpportunityClaim):
+        """Allocate visit limits for a new claim based on remaining budget.
+
+        For each payment unit, calculates how many visits are still available
+        (total capacity minus already-claimed visits) and creates a claim limit
+        with the lesser of the remaining visits or the per-user max.
+        """
         claim_limits_by_payment_unit = defaultdict(list)
         claim_limits = OpportunityClaimLimit.objects.filter(
             opportunity_claim__opportunity_access__opportunity=opportunity

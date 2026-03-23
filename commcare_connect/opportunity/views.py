@@ -3,7 +3,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
-from functools import partial
+from functools import cached_property, partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
@@ -99,6 +99,8 @@ from commcare_connect.opportunity.helpers import (
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedModule,
+    CompletedTask,
+    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -109,6 +111,7 @@ from commcare_connect.opportunity.models import (
     LearnModule,
     Opportunity,
     OpportunityAccess,
+    OpportunityActiveEvent,
     OpportunityClaim,
     OpportunityClaimLimit,
     OpportunityVerificationFlags,
@@ -123,6 +126,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tables import (
+    AssignedTaskListTable,
     CompletedWorkTable,
     DeliverUnitTable,
     InvoiceDeliveriesTable,
@@ -178,6 +182,7 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
+    opportunity_program_manager_required,
     opportunity_required,
     org_admin_required,
     org_member_required,
@@ -193,7 +198,12 @@ from commcare_connect.utils.datetime import get_start_end_date_range_with_time
 from commcare_connect.utils.db import get_object_by_uuid_or_int
 from commcare_connect.utils.file import get_file_extension
 from commcare_connect.utils.flags import FlagLabels, Flags
-from commcare_connect.utils.tables import PAGE_SIZE_OPTIONS, get_duration_min, get_validated_page_size
+from commcare_connect.utils.tables import (
+    DEFAULT_PAGE_SIZE,
+    PAGE_SIZE_OPTIONS,
+    get_duration_min,
+    get_validated_page_size,
+)
 
 EXPORT_ROW_LIMIT = 10_000
 
@@ -326,6 +336,14 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
     template_name = "opportunity/opportunity_edit.html"
     form_class = OpportunityChangeForm
 
+    @cached_property
+    def active_history_events(self):
+        return (
+            OpportunityActiveEvent.objects.filter(pgh_obj=self.get_object())
+            .select_related("pgh_context")
+            .order_by("-pgh_created_at")
+        )
+
     def get_success_url(self):
         return reverse("opportunity:detail", args=(self.request.org.slug, self.object.opportunity_id))
 
@@ -341,6 +359,17 @@ class OpportunityEdit(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, U
             add_connect_users.delay(users, form.instance.id)
 
         return response
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["active_events"] = self.active_history_events
+        return context
+
+    def get_form_kwargs(self, *args, **kwargs):
+        form_kwargs = super().get_form_kwargs(*args, **kwargs)
+        if self.active_history_events:
+            form_kwargs.update({"latest_active_history_event": self.active_history_events[0]})
+        return form_kwargs
 
 
 class OpportunityFinalize(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
@@ -1019,12 +1048,12 @@ def approve_visits(request, org_slug, opp_id):
                     )
                 visit.justification = justification
 
+    user_ids = list(visits.values_list("user_id", flat=True).distinct())
     approved_count = UserVisit.objects.bulk_update(
         visits, ["status", "review_created_on", "review_status", "justification"]
     )
-    if visits:
-        user_ids = visits.values_list("user_id", flat=True).distinct()
-        update_payment_accrued(opportunity=visits[0].opportunity, users=user_ids, incremental=True)
+    if user_ids:
+        update_payment_accrued(opportunity=request.opportunity, users=user_ids, incremental=True)
     send_event_to_ga(request, Event("bulk_approve_confirm", {"updated": approved_count, "total": len(visit_ids)}))
 
     return HttpResponse(status=200, headers={"HX-Trigger": "reload_table"})
@@ -1289,7 +1318,7 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
     return redirect("opportunity:detail", org_slug, opp_id)
 
 
-@org_member_required
+@opportunity_program_manager_required
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
@@ -1307,7 +1336,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @require_POST
-@org_member_required
+@opportunity_program_manager_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
@@ -3193,3 +3222,41 @@ def visit_export_count(request, org_slug, opp_id):
     )
 
     return HttpResponse(html)
+
+
+class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgContextSingleTableView):
+    template_name = "opportunity/assigned_task_list.html"
+    table_class = AssignedTaskListTable
+    paginate_by = DEFAULT_PAGE_SIZE
+
+    def get_queryset(self):
+        opportunity = self.get_opportunity()
+        return (
+            CompletedTask.objects.filter(opportunity_access__opportunity=opportunity)
+            .select_related("task", "opportunity_access__user", "assigned_by")
+            .order_by("-date_created")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        opportunity = self.get_opportunity()
+
+        counts = CompletedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
+            total_tasks=Count("id"),
+            open_tasks=Count("id", filter=Q(status=CompletedTaskStatus.ASSIGNED)),
+            complete_tasks=Count("id", filter=Q(status=CompletedTaskStatus.COMPLETED)),
+        )
+
+        context["opportunity"] = opportunity
+        context.update(counts)
+
+        context["path"] = [
+            {"title": "Opportunities", "url": reverse("opportunity:list", kwargs={"org_slug": self.request.org.slug})},
+            {
+                "title": opportunity.name,
+                "url": reverse("opportunity:detail", args=(self.request.org.slug, opportunity.opportunity_id)),
+            },
+            {"title": "Task List"},
+        ]
+
+        return context

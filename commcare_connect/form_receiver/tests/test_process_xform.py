@@ -125,10 +125,11 @@ class TestProcessTaskModules:
         completed_task = CompletedTask.objects.create(
             task=task,
             opportunity_access=context["access"],
-            date=now() - datetime.timedelta(days=1),
+            completed_at=now() - datetime.timedelta(days=1),
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
             status=CompletedTaskStatus.ASSIGNED,
+            due_date=now() + datetime.timedelta(days=7),
         )
 
         task_block = TaskJsonFactory(id=task.slug).json
@@ -141,7 +142,7 @@ class TestProcessTaskModules:
 
         assert completed_task.status == CompletedTaskStatus.COMPLETED
         assert completed_task.xform_id == context["xform"].id
-        assert completed_task.date == context["xform"].metadata.timeEnd
+        assert completed_task.completed_at == context["xform"].metadata.timeEnd
         assert completed_task.duration == context["xform"].metadata.duration
 
     def test_missing_task(self, task_module_context):
@@ -162,10 +163,11 @@ class TestProcessTaskModules:
         CompletedTask.objects.create(
             task=task,
             opportunity_access=other_access,
-            date=now(),
+            completed_at=now(),
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
             status=CompletedTaskStatus.ASSIGNED,
+            due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block])
@@ -184,10 +186,11 @@ class TestProcessTaskModules:
         existing_completed_task = CompletedTask.objects.create(
             task=task,
             opportunity_access=context_access,
-            date=now(),
+            completed_at=now(),
             duration=datetime.timedelta(minutes=5),
             xform_id="existing-form-id",
             status=CompletedTaskStatus.COMPLETED,
+            due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block, {"name": "missing @id"}])

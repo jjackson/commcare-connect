@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from types import SimpleNamespace
 from unittest import mock
@@ -14,6 +15,9 @@ from django.urls import reverse
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
+from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
+from commcare_connect.opportunity.tests.factories import OpportunityFactory
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 
 @pytest.mark.django_db
@@ -130,3 +134,133 @@ class TestMicroplanningHomeView:
         client.force_login(org_user_member)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestModifyWorkAreaUpdateView:
+    template_name = "microplanning/work_area_form.html"
+
+    @pytest.fixture(autouse=True)
+    def setup_flag(self, opportunity):
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(opportunity)
+        flag.flush()
+
+    def url(self, org_slug, opp_id, work_area_id):
+        return reverse("microplanning:modify_work_area", args=(org_slug, opp_id, work_area_id))
+
+    def test_404_wrong_opportunity_work_area(self, client, org_user_admin, opportunity):
+        other_opportunity = OpportunityFactory()
+        work_area = WorkAreaFactory(opportunity=opportunity)
+        client.force_login(org_user_admin)
+        response = client.get(
+            self.url(other_opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id)
+        )
+        assert response.status_code == 404
+
+    def test_get_renders_form_with_work_area_data(self, client, org_user_admin, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=15, work_area_group=group)
+        client.force_login(org_user_admin)
+        response = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id))
+
+        assert response.status_code == 200
+        assert any(t.name == self.template_name for t in response.templates)
+        assert response.context["work_area"] == work_area
+
+    @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
+    def test_successful_field_updates(self, mock_sync, client, org_user_admin, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10)
+
+        initial_event_count = work_area.expected_visit_count_work_area_group_events.count()
+        assert work_area.work_area_group is None
+        new_expected_visit_count = 25
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id),
+            {
+                "expected_visit_count": new_expected_visit_count,
+                "work_area_group": group.id,
+                "reason": "Boundary adjusted",
+            },
+        )
+        assert response.status_code == 204
+        trigger = json.loads(response["HX-Trigger"])
+        assert "workAreaUpdated" in trigger
+        assert trigger["workAreaUpdated"]["expected_visit_count"] == new_expected_visit_count
+        assert trigger["workAreaUpdated"]["group_id"] == group.id
+        assert trigger["workAreaUpdated"]["group_name"] == group.name
+        assert mock_sync.call_count == 1
+
+        work_area.refresh_from_db()
+        assert work_area.expected_visit_count == new_expected_visit_count
+        assert work_area.work_area_group == group
+
+        events = work_area.expected_visit_count_work_area_group_events
+        assert events.count() == initial_event_count + 1
+        event = events.last()
+        assert event.pgh_context.metadata["reason"] == "Boundary adjusted"
+        assert event.expected_visit_count == new_expected_visit_count
+        assert event.work_area_group == group
+
+    @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
+    def test_no_history_created_when_nothing_changes(self, mock_sync, client, org_user_admin, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
+        initial_event_count = work_area.expected_visit_count_work_area_group_events.count()
+
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id),
+            {
+                "expected_visit_count": 10,
+                "work_area_group": group.id,
+                "reason": "No change",
+            },
+        )
+
+        work_area.refresh_from_db()
+        assert response.status_code == 204
+        assert work_area.expected_visit_count_work_area_group_events.count() == initial_event_count
+        assert mock_sync.call_count == 0  # No sync since nothing changed
+        assert work_area.work_area_group == group
+        assert work_area.expected_visit_count == 10
+
+    def test_invalid_form_returns_errors(self, client, org_user_admin, opportunity):
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10)
+
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id),
+            {"expected_visit_count": "not-a-number"},
+        )
+
+        assert response.status_code == 200
+        assert any(t.name == self.template_name for t in response.templates)
+        assert response.context["form"].errors
+        work_area.refresh_from_db()
+        assert work_area.expected_visit_count == 10  # unchanged
+
+    @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
+    def test_hq_sync_failure_returns_form_error(self, mock_sync, client, org_user_admin, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
+        mock_sync.side_effect = CommCareHQAPIException("sync failed")
+
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id),
+            {
+                "expected_visit_count": 25,
+                "work_area_group": group.id,
+                "reason": "Test",
+            },
+        )
+
+        assert response.status_code == 200
+        assert mock_sync.call_count == 1
+        assert any(t.name == self.template_name for t in response.templates)
+        assert response.context["form"].non_field_errors()
+        work_area.refresh_from_db()
+        assert work_area.expected_visit_count == 10  # rolled back due to atomic transaction

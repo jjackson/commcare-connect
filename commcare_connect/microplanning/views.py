@@ -1,7 +1,9 @@
 import csv
 import json
+import logging
 import uuid
 
+import pghistory
 from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib import messages
@@ -10,6 +12,7 @@ from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.db import transaction
 from django.db.models import F
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
@@ -19,17 +22,23 @@ from django.utils.timezone import localdate
 from django.utils.translation import gettext as _
 from django.views import View
 from django.views.decorators.http import require_GET
+from django.views.generic.edit import UpdateView
 from vectortiles import VectorLayer
 from vectortiles.views import MVTView
 
+from commcare_connect.commcarehq.api import create_or_update_case_by_work_area
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
+from commcare_connect.microplanning.forms import WorkAreaModelForm
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.organization.decorators import opportunity_required, org_admin_required
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 from commcare_connect.utils.file import get_file_extension
 
 from .tasks import WorkAreaCSVImporter, get_import_area_cache_key, import_work_areas_task
+
+logger = logging.getLogger(__name__)
 
 WORKAREA_MIN_ZOOM = 6
 
@@ -58,6 +67,11 @@ def microplanning_home(request, *args, **kwargs):
         },
     )
 
+    edit_work_area_url = reverse(
+        "microplanning:modify_work_area",
+        args=[request.org.slug, opportunity.opportunity_id, 0],
+    ).replace("/0/", "/")
+
     status_meta = {
         status.value: {
             "label": status.label,
@@ -80,6 +94,7 @@ def microplanning_home(request, *args, **kwargs):
             "groups_url": groups_url,
             "status_meta": status_meta,
             "workarea_min_zoom": WORKAREA_MIN_ZOOM,
+            "edit_work_area_url": edit_work_area_url,
         },
     )
 
@@ -189,7 +204,7 @@ class WorkAreaVectorLayer(VectorLayer):
         return WorkArea.objects.filter(opportunity_id=self.opp_id).annotate(
             group_id=F("work_area_group__id"),
             group_name=F("work_area_group__name"),
-            assignee_name=F("work_area_group__assigned_user__user__name"),
+            assignee_name=F("work_area_group__opportunity_access__user__name"),
         )
 
 
@@ -224,3 +239,54 @@ def workareas_group_geojson(request, org_slug, opp_id):
     ]
     extent = qs.aggregate(extent=Extent("boundary"))["extent"]
     return JsonResponse({"group_features": group_features, "workarea_bounds": extent})
+
+
+@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+class ModifyWorkAreaUpdateView(UpdateView):
+    model = WorkArea
+    form_class = WorkAreaModelForm
+    template_name = "microplanning/work_area_form.html"
+    pk_url_kwarg = "work_area_id"
+    context_object_name = "work_area"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(opportunity=self.request.opportunity)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["opportunity"] = self.request.opportunity
+        return kwargs
+
+    def form_valid(self, form):
+        work_area = form.save(commit=False)
+        reason = form.cleaned_data.pop("reason", "")
+        try:
+            with transaction.atomic(), pghistory.context(reason=reason):
+                work_area.save(update_fields=["expected_visit_count", "work_area_group"])
+                if (
+                    form.has_changed()
+                    and work_area.work_area_group
+                    and work_area.work_area_group.opportunity_access_id
+                ):
+                    # let exception bubble up if case update fails, to avoid saving work area without case sync
+                    create_or_update_case_by_work_area(work_area)
+        except CommCareHQAPIException as e:
+            logger.info(f"Failed to update case for work area {work_area.id} after form submission. Error: {e}")
+            form.add_error(
+                None,
+                _("Failed to update the work area. Please try again, and if the issue persists, contact support."),
+            )
+            return super().form_invalid(form)
+
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = json.dumps(
+            {
+                "workAreaUpdated": {
+                    "id": work_area.id,
+                    "expected_visit_count": work_area.expected_visit_count,
+                    "group_id": work_area.work_area_group_id,
+                    "group_name": getattr(work_area.work_area_group, "name", None),
+                }
+            }
+        )
+        return response
