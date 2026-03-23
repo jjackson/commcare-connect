@@ -833,7 +833,6 @@ class VisitExportForm(forms.Form):
     )
     to_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"}),
-        required=False,
         initial=datetime.date.today().strftime("%Y-%m-%d"),
     )
     status = forms.MultipleChoiceField(
