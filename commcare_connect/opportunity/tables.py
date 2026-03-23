@@ -1778,8 +1778,9 @@ class TaskTable(OpportunityContextTable):
                 class="button button-md outline-style"
                 hx-get="{% url 'opportunity:edit_task_type' table.org_slug table.opp_id record.pk %}"
                 hx-target="#edit-task-form"
-                @htmx:after-request="if ($event.detail.successful) { showEditTaskTypeModal = true }
-                    else { editTaskError = true }">
+                @htmx:after-request="if ($event.detail.successful) {
+                        showEditTaskTypeModal = true; editTaskError = false
+                    } else { editTaskError = true }">
                 <i class="fa-regular fa-pen-to-square mr-1"></i> {% translate "Edit" %}
             </button>
         """,

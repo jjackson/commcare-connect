@@ -1183,9 +1183,10 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
     template_name = "opportunity/task_types_config.html"
 
     def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return super().dispatch(request, *args, **kwargs)
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1232,9 +1233,10 @@ class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, Upda
     model = Task
 
     def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return super().dispatch(request, *args, **kwargs)
+        return response
 
     def get_object(self, queryset=None):
         return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
