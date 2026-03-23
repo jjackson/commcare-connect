@@ -1,7 +1,6 @@
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from uuid import uuid4
 
 from django.db import transaction
 from pyproj import Transformer
@@ -85,6 +84,7 @@ class WorkAreaGrouper:
             return
 
         work_area_groups = defaultdict(set)
+        group_index = 0
 
         wards = defaultdict(list)
         for wa_id, wa_data in work_areas.items():
@@ -135,8 +135,9 @@ class WorkAreaGrouper:
                         wa_id,
                     )
 
-                group_id = str(uuid4())
-                work_area_groups[(ward, group_id)].update(cluster)
+                group_index += 1
+                group_name = f"group_{group_index}"
+                work_area_groups[(ward, group_name)].update(cluster)
                 ward_group_count += 1
 
             logger.info(
