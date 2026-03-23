@@ -724,8 +724,6 @@ class TestManagedReqPlusOpt:
 
 @pytest.mark.django_db
 class TestEdgeCases:
-    """Edge cases documented in the HTML matrix."""
-
     def test_over_limit_visit_neutral_for_status(self):
         """over_limit visits: not rejected, not approved. Effectively neutral.
         Does increment unit_counts but doesn't contribute to approved counts."""
@@ -1040,7 +1038,7 @@ class TestParentChildPaymentUnit:
 
 @pytest.mark.django_db
 class TestOptionalDUNotYetSubmitted:
-    def test_incomplete_cw_stays_stuck_when_only_required_du_has_visit(self):
+    def test_incomplete_cw_updates_when_only_required_du_has_visit(self):
         opp_access = _setup_non_managed()
         pu = _make_payment_unit(opp_access)
         req_du = _make_required_du(opp_access, pu)
@@ -1053,7 +1051,7 @@ class TestOptionalDUNotYetSubmitted:
 
         assert cw.status == CompletedWorkStatus.pending
 
-    def test_incomplete_cw_stays_stuck_when_only_required_du_approved(self):
+    def test_incomplete_cw_updates_when_only_required_du_approved(self):
         opp_access = _setup_non_managed()
         pu = _make_payment_unit(opp_access)
         req_du = _make_required_du(opp_access, pu)
