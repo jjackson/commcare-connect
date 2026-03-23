@@ -4,6 +4,7 @@ import pytest
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
+from commcare_connect.opportunity.models import DeliveryType
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User
 
@@ -87,3 +88,37 @@ class TestOrgPermissions:
             format="json",
         )
         assert response.status_code == 403
+
+
+@pytest.mark.django_db
+class TestLookupEndpoints:
+    def test_list_delivery_types(self, api_client: APIClient, program_manager_org_user_admin: User):
+        DeliveryType.objects.create(name="Direct Delivery", slug="direct-delivery", description="Direct")
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get("/api/lookups/delivery_types/")
+        assert response.status_code == 200
+        assert len(response.data) >= 1
+        assert "id" in response.data[0]
+        assert "name" in response.data[0]
+        assert "slug" in response.data[0]
+
+    def test_list_currencies(self, api_client: APIClient, program_manager_org_user_admin: User):
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get("/api/lookups/currencies/")
+        assert response.status_code == 200
+        assert len(response.data) >= 1
+        assert "code" in response.data[0]
+        assert "name" in response.data[0]
+
+    def test_list_countries(self, api_client: APIClient, program_manager_org_user_admin: User):
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get("/api/lookups/countries/")
+        assert response.status_code == 200
+        assert len(response.data) >= 1
+        assert "code" in response.data[0]
+        assert "name" in response.data[0]
+        assert "currency" in response.data[0]
+
+    def test_lookups_unauthenticated(self, api_client: APIClient):
+        response = api_client.get("/api/lookups/delivery_types/")
+        assert response.status_code == 401

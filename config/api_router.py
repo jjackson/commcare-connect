@@ -3,6 +3,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter, SimpleRouter
 
 from commcare_connect.form_receiver.views import FormReceiver
+from commcare_connect.opportunity.api.lookups import CountryViewSet, CurrencyViewSet, DeliveryTypeViewSet
 from commcare_connect.opportunity.api.views import (
     ClaimOpportunityView,
     ConfirmPaymentsView,
@@ -22,6 +23,9 @@ else:
 router.register("users", UserViewSet)
 router.register("opportunity", OpportunityViewSet, basename="Opportunity")
 router.register("opportunity/(?P<opportunity_id>.+)/user_visit", UserVisitViewSet, basename="UserVisit")
+router.register("lookups/delivery_types", DeliveryTypeViewSet, basename="DeliveryType")
+router.register("lookups/currencies", CurrencyViewSet, basename="Currency")
+router.register("lookups/countries", CountryViewSet, basename="Country")
 
 app_name = "api"
 urlpatterns = [
