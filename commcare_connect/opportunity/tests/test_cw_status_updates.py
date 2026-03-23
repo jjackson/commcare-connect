@@ -795,7 +795,7 @@ class TestEdgeCases:
 
     def test_no_required_dus_with_optional_approved(self):
         """No required DUs, optional DU with approved visit → approved.
-        all([]) = True for required. any() finds approved optional."""
+        all([]) = True for required (vacuous). any() finds approved optional."""
         opp_access = _setup_non_managed()
         pu = _make_payment_unit(opp_access)
         opt_du = _make_optional_du(opp_access, pu)
@@ -805,14 +805,7 @@ class TestEdgeCases:
 
         _run_update(cw)
 
-        # No required DUs → all_required = True (vacuous)
-        # Optional has approved → any_optional = True
-        # But completed_count = min([], default=0) = 0 for required, then
-        # optional_completed = 1, number_completed = min(0, 1) = 0
-        # So guard skips this CW!
-        # Actually wait — with no required DUs, min([], default=0) = 0
-        # So number_completed = 0, guard fires.
-        assert cw.status == CompletedWorkStatus.pending
+        assert cw.status == CompletedWorkStatus.approved
 
     def test_multiple_visits_same_required_du_1_approved_1_pending(self):
         """Multiple visits on same required DU: 1 approved + 1 pending.
@@ -1043,3 +1036,73 @@ class TestParentChildPaymentUnit:
 
         assert parent_cw.status == CompletedWorkStatus.approved
         assert child_cw.status == CompletedWorkStatus.approved
+
+
+@pytest.mark.django_db
+class TestOptionalDUNotYetSubmitted:
+    def test_incomplete_cw_stays_stuck_when_only_required_du_has_visit(self):
+        opp_access = _setup_non_managed()
+        pu = _make_payment_unit(opp_access)
+        req_du = _make_required_du(opp_access, pu)
+        _make_optional_du(opp_access, pu)  # exists but has no visits
+        cw = _make_cw(opp_access, pu, status=CompletedWorkStatus.incomplete)
+
+        _make_visit(opp_access, req_du, cw, VisitValidationStatus.pending)
+
+        _run_update(cw)
+
+        assert cw.status == CompletedWorkStatus.pending
+
+    def test_incomplete_cw_stays_stuck_when_only_required_du_approved(self):
+        opp_access = _setup_non_managed()
+        pu = _make_payment_unit(opp_access)
+        req_du = _make_required_du(opp_access, pu)
+        _make_optional_du(opp_access, pu)
+        cw = _make_cw(opp_access, pu, status=CompletedWorkStatus.incomplete)
+
+        _make_visit(opp_access, req_du, cw, VisitValidationStatus.approved)
+
+        _run_update(cw)
+
+        assert cw.status == CompletedWorkStatus.pending
+
+    def test_rejected_visit_on_required_du_no_optional_visits(self):
+        opp_access = _setup_non_managed()
+        pu = _make_payment_unit(opp_access)
+        req_du = _make_required_du(opp_access, pu)
+        _make_optional_du(opp_access, pu)
+        cw = _make_cw(opp_access, pu, status=CompletedWorkStatus.pending)
+
+        _make_visit(opp_access, req_du, cw, VisitValidationStatus.rejected, reason="Bad data")
+
+        _run_update(cw)
+
+        assert cw.status == CompletedWorkStatus.rejected
+
+    def test_payment_not_calculated_until_optional_du_submitted(self):
+        opp_access = _setup_non_managed()
+        pu = _make_payment_unit(opp_access, amount=100)
+        req_du = _make_required_du(opp_access, pu)
+        _make_optional_du(opp_access, pu)
+        cw = _make_cw(opp_access, pu, status=CompletedWorkStatus.incomplete)
+
+        _make_visit(opp_access, req_du, cw, VisitValidationStatus.approved)
+
+        _run_update(cw)
+
+        assert cw.status == CompletedWorkStatus.pending
+        assert cw.saved_payment_accrued == 0
+        assert cw.saved_completed_count == 0
+
+    def test_managed_incomplete_cw_required_approved_agree_no_optional_visits(self):
+        opp_access = _setup_managed()
+        pu = _make_payment_unit(opp_access)
+        req_du = _make_required_du(opp_access, pu)
+        _make_optional_du(opp_access, pu)
+        cw = _make_cw(opp_access, pu, status=CompletedWorkStatus.incomplete)
+
+        _make_visit(opp_access, req_du, cw, VisitValidationStatus.approved, review_status=VisitReviewStatus.agree)
+
+        _run_update(cw)
+
+        assert cw.status == CompletedWorkStatus.pending

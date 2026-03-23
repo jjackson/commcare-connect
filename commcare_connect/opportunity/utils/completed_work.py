@@ -70,6 +70,8 @@ class CompletedWorkUpdater:
         deliver units (ensuring all required forms are submitted). If optional
         deliver units exist, their total count is also used as an upper bound.
         If child payment units exist, their counts further constrain the total.
+        Also tracks whether any visit exists (has_visits), which is used to
+        gate status transitions independently of payment eligibility.
         """
         self._prepare_deliver_payment_unit_maps()
 
@@ -83,9 +85,12 @@ class CompletedWorkUpdater:
                     if user_visit.review_status == VisitReviewStatus.agree.value:
                         approved_unit_counts[user_visit.deliver_unit_id]["agree"] += 1
 
+            has_visits = bool(unit_counts)
             self.completed_works_unit_approvals[completed_work.id] = approved_unit_counts
 
             if completed_work.id in self.counts:
+                if has_visits:
+                    self.counts[completed_work.id]["has_visits"] = True
                 continue
 
             payment_unit_id = completed_work.payment_unit_id
@@ -124,6 +129,7 @@ class CompletedWorkUpdater:
 
             self.counts[completed_work.id]["approved"] = number_approved
             self.counts[completed_work.id]["completed"] = number_completed
+            self.counts[completed_work.id]["has_visits"] = has_visits
 
     def _update_status(self, completed_work):
         """Set CompletedWork status based on visit statuses and approval rules.
@@ -208,11 +214,17 @@ class CompletedWorkUpdater:
         to_update = []
         for completed_work in self.completed_works:
             completed_count = self.counts[completed_work.id]["completed"]
-            if completed_count < 1:
+            has_visits = self.counts[completed_work.id].get("has_visits", False)
+
+            if not has_visits:
                 continue
 
             status_updated = self._update_status(completed_work)
-            payment_updated = self._update_payment(completed_work)
+
+            payment_updated = False
+            if completed_count >= 1:
+                payment_updated = self._update_payment(completed_work)
+
             if status_updated or payment_updated:
                 to_update.append(completed_work)
 
