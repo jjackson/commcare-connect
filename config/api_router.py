@@ -10,6 +10,7 @@ from commcare_connect.opportunity.api.views import (
     ConfirmPaymentView,
     DeliverUnitViewSet,
     DeliveryProgressView,
+    InviteUsersView,
     OpportunityViewSet,
     PaymentUnitViewSet,
     UserLearnProgressView,
@@ -60,4 +61,5 @@ urlpatterns = [
     path("opportunity/<slug:pk>/delivery_progress", DeliveryProgressView.as_view(), name="deliver_progress"),
     path("payment/<slug:pk>/confirm", ConfirmPaymentView.as_view(), name="confirm_payment"),
     path("payment/confirm", ConfirmPaymentsView.as_view(), name="confirm_payments"),
+    path("opportunity/<slug:opportunity_id>/invite/", InviteUsersView.as_view(), name="invite_users"),
 ]

@@ -336,3 +336,15 @@ class DeliveryProgressSerializer(serializers.Serializer):
             .annotate(last_visit_date=Max("uservisit__visit_date"))
         )
         return CompletedWorkSerializer(completed_works, many=True).data
+
+
+class InviteUsersSerializer(serializers.Serializer):
+    phone_numbers = serializers.ListField(child=serializers.CharField())
+
+    def validate_phone_numbers(self, phone_numbers):
+        for number in phone_numbers:
+            if not number.startswith("+") or not number[1:].isdigit():
+                raise serializers.ValidationError(
+                    "Phone numbers must contain only digits and include the country code starting with '+'."
+                )
+        return phone_numbers

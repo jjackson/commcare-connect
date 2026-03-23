@@ -20,6 +20,7 @@ from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
     DeliverUnitCreateSerializer,
     DeliveryProgressSerializer,
+    InviteUsersSerializer,
     OpportunitySerializer,
     PaymentUnitCreateSerializer,
     PaymentUnitSerializer,
@@ -35,6 +36,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentUnit,
 )
+from commcare_connect.opportunity.tasks import add_connect_users
 from commcare_connect.users.helpers import create_hq_user_and_link
 from commcare_connect.users.models import User
 from commcare_connect.utils.db import get_object_or_list_by_uuid_or_int
@@ -237,3 +239,16 @@ class DeliverUnitViewSet(viewsets.ModelViewSet):
         return DeliverUnit.objects.filter(
             payment_unit__opportunity__opportunity_id=self.kwargs["opportunity_id"]
         ).order_by("pk")
+
+
+class InviteUsersView(APIView):
+    permission_classes = [IsAuthenticated, TokenHasScope, IsOrgProgramManagerAdmin]
+    required_scopes = ["create"]
+
+    def post(self, request, opportunity_id):
+        opportunity = get_object_or_404(Opportunity, opportunity_id=opportunity_id)
+        serializer = InviteUsersSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        phone_numbers = serializer.validated_data["phone_numbers"]
+        add_connect_users.delay(phone_numbers, str(opportunity.pk))
+        return Response({"invited": len(phone_numbers)})

@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 import pytest
 from django.utils.timezone import now
@@ -243,3 +244,50 @@ class TestDeliverUnitAPI:
         )
         assert response.status_code == 200
         assert len(response.data) == 1
+
+
+@pytest.mark.django_db
+class TestInviteUsersAPI:
+    @pytest.fixture
+    def active_opp(self, managed_opp_setup):
+        """Set up a fully configured opportunity with payment units."""
+        opp = managed_opp_setup
+        PaymentUnit.objects.create(
+            opportunity=opp, name="Per Visit", description="test", amount=10, max_total=10, max_daily=5
+        )
+        opp.active = True
+        opp.save()
+        return opp
+
+    @patch("commcare_connect.opportunity.api.views.add_connect_users")
+    def test_invite_users_success(
+        self, mock_add_users, api_client: APIClient, program_manager_org_user_admin: User, active_opp
+    ):
+        opp = active_opp
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/opportunity/{opp.opportunity_id}/invite/",
+            {
+                "phone_numbers": ["+1234567890", "+0987654321"],
+                "organization": opp.program.organization.slug,
+            },
+            format="json",
+        )
+        assert response.status_code == 200, response.data
+        assert response.data["invited"] == 2
+        mock_add_users.delay.assert_called_once_with(["+1234567890", "+0987654321"], str(opp.pk))
+
+    def test_invite_invalid_phone_number(
+        self, api_client: APIClient, program_manager_org_user_admin: User, active_opp
+    ):
+        opp = active_opp
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/opportunity/{opp.opportunity_id}/invite/",
+            {
+                "phone_numbers": ["not-a-number"],
+                "organization": opp.program.organization.slug,
+            },
+            format="json",
+        )
+        assert response.status_code == 400
