@@ -17,14 +17,14 @@ from commcare_connect.program.models import ManagedOpportunity, Program, Program
 
 class ProgramViewSet(viewsets.ModelViewSet):
     serializer_class = ProgramReadSerializer
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("create", "partial_update"):
             return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
-        return [IsAuthenticated(), TokenHasScope()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action in ("create", "partial_update"):
@@ -32,16 +32,16 @@ class ProgramViewSet(viewsets.ModelViewSet):
         return ProgramReadSerializer
 
     def get_queryset(self):
-        qs = Program.objects.all()
+        qs = Program.objects.filter(organization__memberships__user=self.request.user)
         org_slug = self.request.query_params.get("organization")
         if org_slug:
             qs = qs.filter(organization__slug=org_slug)
-        return qs.order_by("-start_date")
+        return qs.distinct().order_by("-start_date")
 
 
 class ManagedOpportunityViewSet(viewsets.ModelViewSet):
     serializer_class = ManagedOpportunityReadSerializer
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
@@ -58,7 +58,7 @@ class ManagedOpportunityViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in ("create", "partial_update"):
             return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
-        return [IsAuthenticated(), TokenHasScope()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action in ("create", "partial_update"):
@@ -82,7 +82,7 @@ class ManagedOpportunityViewSet(viewsets.ModelViewSet):
 
 class ProgramApplicationViewSet(viewsets.ModelViewSet):
     serializer_class = ProgramApplicationReadSerializer
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "head", "options"]
 
@@ -99,7 +99,7 @@ class ProgramApplicationViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == "create":
             return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
-        return [IsAuthenticated(), TokenHasScope()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action == "create":

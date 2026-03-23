@@ -82,15 +82,33 @@ class TestCreateProgram:
 
 @pytest.mark.django_db
 class TestListPrograms:
-    def test_list_programs_for_pm_org(
+    def test_list_programs_scoped_to_user_orgs(
         self, api_client: APIClient, program_manager_org_user_admin: User, program_manager_org: Organization
     ):
         ProgramFactory(organization=program_manager_org)
-        ProgramFactory()
-        _add_create_credentials(api_client, program_manager_org_user_admin)
+        ProgramFactory()  # different org - user has no membership, should not appear
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get("/api/program/")
+        assert response.status_code == 200
+        assert len(response.data) == 1  # only sees programs from their own org
+
+    def test_list_programs_filtered_by_org(
+        self, api_client: APIClient, program_manager_org_user_admin: User, program_manager_org: Organization
+    ):
+        ProgramFactory(organization=program_manager_org)
+        api_client.force_authenticate(program_manager_org_user_admin)
         response = api_client.get(f"/api/program/?organization={program_manager_org.slug}")
         assert response.status_code == 200
         assert len(response.data) == 1
+
+    def test_list_programs_no_scope_required_for_read(
+        self, api_client: APIClient, program_manager_org_user_admin: User, program_manager_org: Organization
+    ):
+        """GET requests don't require the 'create' OAuth scope - just authentication."""
+        ProgramFactory(organization=program_manager_org)
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get("/api/program/")
+        assert response.status_code == 200
 
 
 @pytest.mark.django_db
@@ -253,7 +271,7 @@ class TestProgramApplicationAPI:
             created_by="test@test.com",
             modified_by="test@test.com",
         )
-        _add_create_credentials(api_client, program_manager_org_user_admin)
+        api_client.force_authenticate(program_manager_org_user_admin)
         response = api_client.get(f"/api/program/{program.program_id}/applications/")
         assert response.status_code == 200
         assert len(response.data) == 1

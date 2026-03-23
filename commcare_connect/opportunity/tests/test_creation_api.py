@@ -195,10 +195,8 @@ class TestPaymentUnitAPI:
         PaymentUnit.objects.create(
             opportunity=opp, name="Unit 1", description="test", amount=10, max_total=10, max_daily=5
         )
-        _add_create_credentials(api_client, program_manager_org_user_admin)
-        response = api_client.get(
-            f"/api/opportunity/{opp.opportunity_id}/payment_units/?organization={opp.program.organization.slug}"
-        )
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get(f"/api/opportunity/{opp.opportunity_id}/payment_units/")
         assert response.status_code == 200
         assert len(response.data) == 1
 
@@ -238,12 +236,12 @@ class TestDeliverUnitAPI:
     ):
         opp, pu = opp_with_payment_unit
         DeliverUnit.objects.create(app=opp.deliver_app, slug="form_1", name="Form 1", payment_unit=pu)
-        _add_create_credentials(api_client, program_manager_org_user_admin)
-        response = api_client.get(
-            f"/api/opportunity/{opp.opportunity_id}/deliver_units/?organization={opp.program.organization.slug}"
-        )
+        api_client.force_authenticate(program_manager_org_user_admin)
+        response = api_client.get(f"/api/opportunity/{opp.opportunity_id}/deliver_units/")
         assert response.status_code == 200
         assert len(response.data) == 1
+        assert "id" in response.data[0]
+        assert "slug" in response.data[0]
 
 
 @pytest.mark.django_db

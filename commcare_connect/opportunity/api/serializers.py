@@ -74,6 +74,12 @@ class PaymentUnitCreateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class DeliverUnitReadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeliverUnit
+        fields = ["id", "slug", "name", "payment_unit", "app", "optional"]
+
+
 class DeliverUnitCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliverUnit

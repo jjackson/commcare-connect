@@ -19,6 +19,7 @@ from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmi
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
     DeliverUnitCreateSerializer,
+    DeliverUnitReadSerializer,
     DeliveryProgressSerializer,
     InviteUsersSerializer,
     OpportunitySerializer,
@@ -196,14 +197,14 @@ class ConfirmPaymentsView(APIView):
 
 class PaymentUnitViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentUnitSerializer
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("create", "partial_update", "destroy"):
             return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
-        return [IsAuthenticated(), TokenHasScope()]
+        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         if self.action in ("create", "partial_update"):
@@ -224,15 +225,20 @@ class PaymentUnitViewSet(viewsets.ModelViewSet):
 
 
 class DeliverUnitViewSet(viewsets.ModelViewSet):
-    serializer_class = DeliverUnitCreateSerializer
-    permission_classes = [IsAuthenticated, TokenHasScope]
+    serializer_class = DeliverUnitReadSerializer
+    permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("create", "partial_update", "destroy"):
             return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
-        return [IsAuthenticated(), TokenHasScope()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "partial_update"):
+            return DeliverUnitCreateSerializer
+        return DeliverUnitReadSerializer
 
     def get_queryset(self):
         """Filter deliver units by those linked to payment units of this opportunity."""
@@ -243,7 +249,7 @@ class DeliverUnitViewSet(viewsets.ModelViewSet):
 
 class InviteUsersView(APIView):
     permission_classes = [IsAuthenticated, TokenHasScope, IsOrgProgramManagerAdmin]
-    required_scopes = ["create"]
+    required_scopes = ["create"]  # POST-only view, always requires create scope
 
     def post(self, request, opportunity_id):
         opportunity = get_object_or_404(Opportunity, opportunity_id=opportunity_id)
