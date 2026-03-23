@@ -210,5 +210,5 @@ class TaskAdmin(admin.ModelAdmin):
 
 @admin.register(CompletedTask)
 class CompletedTaskAdmin(admin.ModelAdmin):
-    list_display = ["task", "opportunity_access", "status", "date"]
+    list_display = ["task", "opportunity_access", "status", "completed_at"]
     search_fields = ["task__name", "opportunity_access__user__username"]

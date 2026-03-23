@@ -280,7 +280,7 @@ class TaskFactory(DjangoModelFactory):
 class CompletedTaskFactory(DjangoModelFactory):
     task = SubFactory(TaskFactory)
     opportunity_access = SubFactory(OpportunityAccessFactory)
-    date = Faker("date_time", tzinfo=timezone.utc)
+    completed_at = Faker("date_time", tzinfo=timezone.utc)
     duration = LazyFunction(lambda: timedelta(hours=1))
     status = CompletedTaskStatus.ASSIGNED
     due_date = LazyFunction(lambda: (date.today() + timedelta(days=7)))
