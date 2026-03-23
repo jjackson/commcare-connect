@@ -136,7 +136,7 @@ class WorkAreaGrouper:
                     )
 
                 group_index += 1
-                group_name = f"group_{group_index}"
+                group_name = f"{ward}_{group_index}"
                 work_area_groups[(ward, group_name)].update(cluster)
                 ward_group_count += 1
 
