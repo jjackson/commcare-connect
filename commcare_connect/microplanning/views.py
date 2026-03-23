@@ -294,8 +294,7 @@ def clustering_status(request, org_slug, opp_id):
             return redirect("microplanning:microplanning_home", org_slug=org_slug, opp_id=opp_id)
 
         task = AsyncResult(task_id)
-        task_meta = task._get_task_meta()
-        status = task_meta.get("status")
+        status = task.state
         message = None
         icon = None
 
