@@ -10,6 +10,7 @@ from commcare_connect.opportunity.api.views import (
     ConfirmPaymentView,
     DeliveryProgressView,
     OpportunityViewSet,
+    PaymentUnitViewSet,
     UserLearnProgressView,
     UserVisitViewSet,
 )
@@ -24,6 +25,11 @@ else:
 router.register("users", UserViewSet)
 router.register("opportunity", OpportunityViewSet, basename="Opportunity")
 router.register("opportunity/(?P<opportunity_id>.+)/user_visit", UserVisitViewSet, basename="UserVisit")
+router.register(
+    "opportunity/(?P<opportunity_id>[^/.]+)/payment_units",
+    PaymentUnitViewSet,
+    basename="PaymentUnit",
+)
 router.register("lookups/delivery_types", DeliveryTypeViewSet, basename="DeliveryType")
 router.register("lookups/currencies", CurrencyViewSet, basename="Currency")
 router.register("lookups/countries", CountryViewSet, basename="Country")

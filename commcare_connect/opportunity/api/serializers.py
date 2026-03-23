@@ -63,6 +63,16 @@ class PaymentUnitSerializer(serializers.ModelSerializer):
         fields = ["id", "payment_unit_id", "name", "max_total", "max_daily", "amount", "end_date"]
 
 
+class PaymentUnitCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentUnit
+        fields = ["name", "description", "amount", "org_amount", "max_total", "max_daily", "start_date", "end_date"]
+
+    def create(self, validated_data):
+        validated_data["opportunity"] = self.context["opportunity"]
+        return super().create(validated_data)
+
+
 class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
     payment_unit_id = serializers.UUIDField(
         source="payment_unit.payment_unit_id",

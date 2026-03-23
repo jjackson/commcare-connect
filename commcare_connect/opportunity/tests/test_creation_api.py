@@ -4,9 +4,14 @@ import pytest
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
-from commcare_connect.opportunity.models import DeliveryType
+from commcare_connect.commcarehq.tests.factories import HQServerFactory
+from commcare_connect.opportunity.models import DeliverUnit, DeliveryType, PaymentUnit
+from commcare_connect.opportunity.tests.factories import CommCareAppFactory
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import ManagedOpportunity, ProgramApplication, ProgramApplicationStatus
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.models import User
+from commcare_connect.users.tests.factories import OrganizationFactory
 
 
 def _add_create_credentials(api_client, user):
@@ -122,3 +127,80 @@ class TestLookupEndpoints:
     def test_lookups_unauthenticated(self, api_client: APIClient):
         response = api_client.get("/api/lookups/delivery_types/")
         assert response.status_code == 401
+
+
+@pytest.fixture
+def managed_opp_setup(program_manager_org, program_manager_org_user_admin):
+    """Module-level fixture: creates a fully configured ManagedOpportunity for testing."""
+    from commcare_connect.opportunity.models import Country, Currency
+
+    dt = DeliveryType.objects.create(name="Direct PU", slug="direct-pu", description="Direct")
+    currency = Currency.objects.get_or_create(code="USD", defaults={"name": "US Dollar"})[0]
+    country = Country.objects.get_or_create(code="USA", defaults={"name": "USA", "currency": currency})[0]
+    program = ProgramFactory(organization=program_manager_org, delivery_type=dt, currency=currency, country=country)
+    nm_org = OrganizationFactory()
+    ProgramApplication.objects.create(
+        program=program,
+        organization=nm_org,
+        status=ProgramApplicationStatus.ACCEPTED,
+        created_by="test@test.com",
+        modified_by="test@test.com",
+    )
+    hq_server = HQServerFactory()
+    opp = ManagedOpportunity.objects.create(
+        name="Test Opp",
+        description="test",
+        program=program,
+        organization=nm_org,
+        currency=currency,
+        country=country,
+        delivery_type=dt,
+        managed=True,
+        start_date="2026-01-01",
+        end_date="2026-12-31",
+        total_budget=50000,
+        created_by="test@test.com",
+        modified_by="test@test.com",
+        learn_app=CommCareAppFactory(organization=nm_org, hq_server=hq_server),
+        deliver_app=CommCareAppFactory(organization=nm_org, hq_server=hq_server),
+        hq_server=hq_server,
+    )
+    return opp
+
+
+@pytest.mark.django_db
+class TestPaymentUnitAPI:
+    def test_create_payment_unit(
+        self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup
+    ):
+        opp = managed_opp_setup
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/opportunity/{opp.opportunity_id}/payment_units/",
+            {
+                "name": "Per Visit",
+                "description": "Payment per visit",
+                "amount": 100,
+                "org_amount": 20,
+                "max_total": 50,
+                "max_daily": 5,
+                "organization": opp.program.organization.slug,
+            },
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        assert PaymentUnit.objects.filter(opportunity=opp, name="Per Visit").exists()
+
+    def test_list_payment_units(
+        self, api_client: APIClient, program_manager_org_user_admin: User, managed_opp_setup
+    ):
+        opp = managed_opp_setup
+        PaymentUnit.objects.create(
+            opportunity=opp, name="Unit 1", description="test", amount=10, max_total=10, max_daily=5
+        )
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.get(
+            f"/api/opportunity/{opp.opportunity_id}/payment_units/?organization={opp.program.organization.slug}"
+        )
+        assert response.status_code == 200
+        assert len(response.data) == 1

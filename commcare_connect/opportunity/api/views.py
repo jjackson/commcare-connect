@@ -5,7 +5,9 @@ import waffle
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404
+from django.shortcuts import get_object_or_404
 from django.utils.timezone import now
+from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
 from rest_framework import viewsets
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -13,10 +15,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from commcare_connect.flags.switch_names import API_UUID
+from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmin
 from commcare_connect.opportunity.api.serializers import (
     CompletedWorkSerializer,
     DeliveryProgressSerializer,
     OpportunitySerializer,
+    PaymentUnitCreateSerializer,
+    PaymentUnitSerializer,
     UserLearnProgressSerializer,
 )
 from commcare_connect.opportunity.models import (
@@ -26,6 +31,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
+    PaymentUnit,
 )
 from commcare_connect.users.helpers import create_hq_user_and_link
 from commcare_connect.users.models import User
@@ -182,3 +188,32 @@ class ConfirmPaymentsView(APIView):
 
     def post(self, request, *args, **kwargs):
         return confirm_payments(request, request.user, request.data.get("payments", []))
+
+
+class PaymentUnitViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentUnitSerializer
+    permission_classes = [IsAuthenticated, TokenHasScope]
+    required_scopes = ["create"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_permissions(self):
+        if self.action in ("create", "partial_update", "destroy"):
+            return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
+        return [IsAuthenticated(), TokenHasScope()]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "partial_update"):
+            return PaymentUnitCreateSerializer
+        return PaymentUnitSerializer
+
+    def get_opportunity(self):
+        return get_object_or_404(Opportunity, opportunity_id=self.kwargs["opportunity_id"])
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.kwargs.get("opportunity_id"):
+            context["opportunity"] = self.get_opportunity()
+        return context
+
+    def get_queryset(self):
+        return PaymentUnit.objects.filter(opportunity__opportunity_id=self.kwargs["opportunity_id"]).order_by("pk")
