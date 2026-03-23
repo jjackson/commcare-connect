@@ -126,3 +126,43 @@ class ManagedOpportunityReadSerializer(serializers.ModelSerializer):
             "date_created",
             "date_modified",
         ]
+
+
+class ProgramApplicationCreateSerializer(serializers.ModelSerializer):
+    organization = serializers.SlugRelatedField(slug_field="slug", queryset=Organization.objects.all())
+
+    class Meta:
+        model = ProgramApplication
+        fields = ["organization"]
+
+    def validate_organization(self, org):
+        program = self.context["program"]
+        if org == program.organization:
+            raise serializers.ValidationError("Cannot invite the program manager's own organization.")
+        if ProgramApplication.objects.filter(program=program, organization=org).exists():
+            raise serializers.ValidationError("This organization has already been invited to this program.")
+        return org
+
+    def create(self, validated_data):
+        program = self.context["program"]
+        user = self.context["request"].user
+        validated_data["program"] = program
+        validated_data["status"] = ProgramApplicationStatus.INVITED
+        validated_data["created_by"] = user.email
+        validated_data["modified_by"] = user.email
+        return super().create(validated_data)
+
+
+class ProgramApplicationReadSerializer(serializers.ModelSerializer):
+    organization = serializers.SlugRelatedField(slug_field="slug", read_only=True)
+
+    class Meta:
+        model = ProgramApplication
+        fields = [
+            "id",
+            "program_application_id",
+            "organization",
+            "status",
+            "date_created",
+            "date_modified",
+        ]

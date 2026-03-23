@@ -15,7 +15,7 @@ from commcare_connect.opportunity.api.views import (
     UserLearnProgressView,
     UserVisitViewSet,
 )
-from commcare_connect.program.api.views import ManagedOpportunityViewSet, ProgramViewSet
+from commcare_connect.program.api.views import ManagedOpportunityViewSet, ProgramApplicationViewSet, ProgramViewSet
 from commcare_connect.users.api.views import UserViewSet
 
 if settings.DEBUG:
@@ -44,6 +44,11 @@ router.register(
     "program/(?P<program_id>[^/.]+)/opportunity",
     ManagedOpportunityViewSet,
     basename="ManagedOpportunity",
+)
+router.register(
+    "program/(?P<program_id>[^/.]+)/applications",
+    ProgramApplicationViewSet,
+    basename="ProgramApplication",
 )
 
 app_name = "api"

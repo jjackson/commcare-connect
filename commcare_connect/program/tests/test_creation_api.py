@@ -192,3 +192,68 @@ class TestCreateManagedOpportunity:
             format="json",
         )
         assert response.status_code == 400
+
+
+@pytest.mark.django_db
+class TestProgramApplicationAPI:
+    @pytest.fixture
+    def program_setup(self, program_manager_org, program_manager_org_user_admin):
+        program = ProgramFactory(organization=program_manager_org)
+        return program
+
+    def test_invite_org_to_program(
+        self,
+        api_client: APIClient,
+        program_manager_org_user_admin: User,
+        program_manager_org: Organization,
+        program_setup,
+    ):
+        program = program_setup
+        target_org = OrganizationFactory()
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/program/{program.program_id}/applications/",
+            {"organization": target_org.slug},
+            format="json",
+        )
+        assert response.status_code == 201, response.data
+        assert ProgramApplication.objects.filter(
+            program=program, organization=target_org, status=ProgramApplicationStatus.INVITED
+        ).exists()
+
+    def test_cannot_invite_own_org(
+        self,
+        api_client: APIClient,
+        program_manager_org_user_admin: User,
+        program_manager_org: Organization,
+        program_setup,
+    ):
+        program = program_setup
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.post(
+            f"/api/program/{program.program_id}/applications/",
+            {"organization": program_manager_org.slug},
+            format="json",
+        )
+        assert response.status_code == 400
+
+    def test_list_applications(
+        self,
+        api_client: APIClient,
+        program_manager_org_user_admin: User,
+        program_manager_org: Organization,
+        program_setup,
+    ):
+        program = program_setup
+        target_org = OrganizationFactory()
+        ProgramApplication.objects.create(
+            program=program,
+            organization=target_org,
+            status=ProgramApplicationStatus.INVITED,
+            created_by="test@test.com",
+            modified_by="test@test.com",
+        )
+        _add_create_credentials(api_client, program_manager_org_user_admin)
+        response = api_client.get(f"/api/program/{program.program_id}/applications/")
+        assert response.status_code == 200
+        assert len(response.data) == 1

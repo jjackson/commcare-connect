@@ -7,10 +7,12 @@ from commcare_connect.opportunity.api.permissions import IsOrgProgramManagerAdmi
 from commcare_connect.program.api.serializers import (
     ManagedOpportunityCreateSerializer,
     ManagedOpportunityReadSerializer,
+    ProgramApplicationCreateSerializer,
+    ProgramApplicationReadSerializer,
     ProgramCreateSerializer,
     ProgramReadSerializer,
 )
-from commcare_connect.program.models import ManagedOpportunity, Program
+from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication
 
 
 class ProgramViewSet(viewsets.ModelViewSet):
@@ -74,5 +76,46 @@ class ManagedOpportunityViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return ManagedOpportunity.objects.filter(program__program_id=self.kwargs["program_id"]).order_by(
+            "-date_created"
+        )
+
+
+class ProgramApplicationViewSet(viewsets.ModelViewSet):
+    serializer_class = ProgramApplicationReadSerializer
+    permission_classes = [IsAuthenticated, TokenHasScope]
+    required_scopes = ["create"]
+    http_method_names = ["get", "post", "head", "options"]
+
+    def initial(self, request, *args, **kwargs):
+        """Inject PM org slug for permission checking."""
+        if self.kwargs.get("program_id"):
+            try:
+                program = Program.objects.get(program_id=self.kwargs["program_id"])
+                self.kwargs["org_slug"] = program.organization.slug
+            except Program.DoesNotExist:
+                pass
+        super().initial(request, *args, **kwargs)
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [IsAuthenticated(), TokenHasScope(), IsOrgProgramManagerAdmin()]
+        return [IsAuthenticated(), TokenHasScope()]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ProgramApplicationCreateSerializer
+        return ProgramApplicationReadSerializer
+
+    def get_program(self):
+        return get_object_or_404(Program, program_id=self.kwargs["program_id"])
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.kwargs.get("program_id"):
+            context["program"] = self.get_program()
+        return context
+
+    def get_queryset(self):
+        return ProgramApplication.objects.filter(program__program_id=self.kwargs["program_id"]).order_by(
             "-date_created"
         )
