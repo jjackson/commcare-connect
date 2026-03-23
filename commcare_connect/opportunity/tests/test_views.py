@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from django.contrib.messages import get_messages
 from django.core.files.storage.handler import StorageHandler
+from django.template import Context
 from django.test import Client
 from django.urls import get_resolver, reverse
 from django.utils.timezone import now
@@ -2356,6 +2357,7 @@ class TestTaskTable:
             opp_id=opportunity.opportunity_id,
         )
         RequestConfig(request).configure(table)
+        table.context = Context({"table": table})
         html = table.rows[0].get_cell("actions")
         expected_url = reverse(
             "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task.pk)
