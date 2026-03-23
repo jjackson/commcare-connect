@@ -39,21 +39,31 @@ class ProgramViewSet(viewsets.ModelViewSet):
         return qs.distinct().order_by("-start_date")
 
 
-class ManagedOpportunityViewSet(viewsets.ModelViewSet):
-    serializer_class = ManagedOpportunityReadSerializer
-    permission_classes = [IsAuthenticated]
-    required_scopes = ["create"]
-    http_method_names = ["get", "post", "patch", "head", "options"]
+class ProgramNestedViewMixin:
+    """Shared logic for viewsets nested under a Program."""
 
     def initial(self, request, *args, **kwargs):
         """Inject PM org slug for permission checking on nested program routes."""
         if self.kwargs.get("program_id"):
-            try:
-                program = Program.objects.get(program_id=self.kwargs["program_id"])
-                self.kwargs["org_slug"] = program.organization.slug
-            except Program.DoesNotExist:
-                pass
+            program = get_object_or_404(Program, program_id=self.kwargs["program_id"])
+            self.kwargs["org_slug"] = program.organization.slug
         super().initial(request, *args, **kwargs)
+
+    def get_program(self):
+        return get_object_or_404(Program, program_id=self.kwargs["program_id"])
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.kwargs.get("program_id"):
+            context["program"] = self.get_program()
+        return context
+
+
+class ManagedOpportunityViewSet(ProgramNestedViewMixin, viewsets.ModelViewSet):
+    serializer_class = ManagedOpportunityReadSerializer
+    permission_classes = [IsAuthenticated]
+    required_scopes = ["create"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_permissions(self):
         if self.action in ("create", "partial_update"):
@@ -65,36 +75,18 @@ class ManagedOpportunityViewSet(viewsets.ModelViewSet):
             return ManagedOpportunityCreateSerializer
         return ManagedOpportunityReadSerializer
 
-    def get_program(self):
-        return get_object_or_404(Program, program_id=self.kwargs["program_id"])
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        if self.kwargs.get("program_id"):
-            context["program"] = self.get_program()
-        return context
-
     def get_queryset(self):
-        return ManagedOpportunity.objects.filter(program__program_id=self.kwargs["program_id"]).order_by(
-            "-date_created"
-        )
+        return ManagedOpportunity.objects.filter(
+            program__program_id=self.kwargs["program_id"],
+            program__organization__memberships__user=self.request.user,
+        ).order_by("-date_created")
 
 
-class ProgramApplicationViewSet(viewsets.ModelViewSet):
+class ProgramApplicationViewSet(ProgramNestedViewMixin, viewsets.ModelViewSet):
     serializer_class = ProgramApplicationReadSerializer
     permission_classes = [IsAuthenticated]
     required_scopes = ["create"]
     http_method_names = ["get", "post", "head", "options"]
-
-    def initial(self, request, *args, **kwargs):
-        """Inject PM org slug for permission checking."""
-        if self.kwargs.get("program_id"):
-            try:
-                program = Program.objects.get(program_id=self.kwargs["program_id"])
-                self.kwargs["org_slug"] = program.organization.slug
-            except Program.DoesNotExist:
-                pass
-        super().initial(request, *args, **kwargs)
 
     def get_permissions(self):
         if self.action == "create":
@@ -106,16 +98,8 @@ class ProgramApplicationViewSet(viewsets.ModelViewSet):
             return ProgramApplicationCreateSerializer
         return ProgramApplicationReadSerializer
 
-    def get_program(self):
-        return get_object_or_404(Program, program_id=self.kwargs["program_id"])
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        if self.kwargs.get("program_id"):
-            context["program"] = self.get_program()
-        return context
-
     def get_queryset(self):
-        return ProgramApplication.objects.filter(program__program_id=self.kwargs["program_id"]).order_by(
-            "-date_created"
-        )
+        return ProgramApplication.objects.filter(
+            program__program_id=self.kwargs["program_id"],
+            program__organization__memberships__user=self.request.user,
+        ).order_by("-date_created")

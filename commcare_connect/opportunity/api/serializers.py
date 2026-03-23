@@ -85,6 +85,12 @@ class DeliverUnitCreateSerializer(serializers.ModelSerializer):
         model = DeliverUnit
         fields = ["slug", "name", "payment_unit", "app", "optional"]
 
+    def validate_payment_unit(self, payment_unit):
+        opportunity = self.context.get("opportunity")
+        if opportunity and payment_unit.opportunity_id != opportunity.id:
+            raise serializers.ValidationError("Payment unit does not belong to this opportunity.")
+        return payment_unit
+
 
 class OpportunityClaimLimitSerializer(serializers.ModelSerializer):
     payment_unit_id = serializers.UUIDField(

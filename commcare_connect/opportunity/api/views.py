@@ -221,7 +221,18 @@ class PaymentUnitViewSet(viewsets.ModelViewSet):
         return context
 
     def get_queryset(self):
-        return PaymentUnit.objects.filter(opportunity__opportunity_id=self.kwargs["opportunity_id"]).order_by("pk")
+        user = self.request.user
+        return (
+            PaymentUnit.objects.filter(
+                opportunity__opportunity_id=self.kwargs["opportunity_id"],
+            )
+            .filter(
+                Q(opportunity__organization__memberships__user=user)
+                | Q(opportunity__managedopportunity__program__organization__memberships__user=user)
+            )
+            .distinct()
+            .order_by("pk")
+        )
 
 
 class DeliverUnitViewSet(viewsets.ModelViewSet):
@@ -240,11 +251,29 @@ class DeliverUnitViewSet(viewsets.ModelViewSet):
             return DeliverUnitCreateSerializer
         return DeliverUnitReadSerializer
 
+    def get_opportunity(self):
+        return get_object_or_404(Opportunity, opportunity_id=self.kwargs["opportunity_id"])
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.kwargs.get("opportunity_id"):
+            context["opportunity"] = self.get_opportunity()
+        return context
+
     def get_queryset(self):
         """Filter deliver units by those linked to payment units of this opportunity."""
-        return DeliverUnit.objects.filter(
-            payment_unit__opportunity__opportunity_id=self.kwargs["opportunity_id"]
-        ).order_by("pk")
+        user = self.request.user
+        return (
+            DeliverUnit.objects.filter(
+                payment_unit__opportunity__opportunity_id=self.kwargs["opportunity_id"],
+            )
+            .filter(
+                Q(payment_unit__opportunity__organization__memberships__user=user)
+                | Q(payment_unit__opportunity__managedopportunity__program__organization__memberships__user=user)
+            )
+            .distinct()
+            .order_by("pk")
+        )
 
 
 class InviteUsersView(APIView):
@@ -253,6 +282,11 @@ class InviteUsersView(APIView):
 
     def post(self, request, opportunity_id):
         opportunity = get_object_or_404(Opportunity, opportunity_id=opportunity_id)
+        if opportunity.has_ended:
+            return Response(
+                {"error": "This opportunity has ended. You cannot invite more workers."},
+                status=400,
+            )
         serializer = InviteUsersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         phone_numbers = serializer.validated_data["phone_numbers"]

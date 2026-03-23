@@ -35,34 +35,3 @@ class IsOrgProgramManagerAdmin(IsAuthenticated):
             return False
 
         return membership.is_admin and membership.organization.program_manager
-
-
-class IsOrgAdmin(IsAuthenticated):
-    """
-    Allows access to authenticated users who are admins of the organization
-    identified by 'organization' slug in request data or URL kwargs.
-    """
-
-    def _get_org_slug(self, request, view):
-        org_slug = view.kwargs.get("org_slug")
-        if org_slug:
-            return org_slug
-        return request.data.get("organization") or request.query_params.get("organization")
-
-    def has_permission(self, request, view):
-        if not super().has_permission(request, view):
-            return False
-
-        org_slug = self._get_org_slug(request, view)
-        if not org_slug:
-            return False
-
-        try:
-            membership = UserOrganizationMembership.objects.get(
-                user=request.user,
-                organization__slug=org_slug,
-            )
-        except UserOrganizationMembership.DoesNotExist:
-            return False
-
-        return membership.is_admin
