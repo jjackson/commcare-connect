@@ -1,4 +1,5 @@
 import csv
+import io
 import json
 import logging
 import uuid
@@ -14,7 +15,7 @@ from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import F
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -73,6 +74,11 @@ def microplanning_home(request, *args, **kwargs):
         args=[request.org.slug, opportunity.opportunity_id, 0],
     ).replace("/0/", "/")
 
+    download_url = reverse(
+        "microplanning:download_work_areas",
+        kwargs={"org_slug": request.org.slug, "opp_id": opportunity.opportunity_id},
+    )
+
     status_meta = {
         status.value: {
             "label": status.label,
@@ -100,6 +106,7 @@ def microplanning_home(request, *args, **kwargs):
             "status_meta": status_meta,
             "workarea_min_zoom": WORKAREA_MIN_ZOOM,
             "edit_work_area_url": edit_work_area_url,
+            "download_url": download_url,
             "filter_form": filterset.form,
         },
     )
@@ -254,6 +261,60 @@ def workareas_group_geojson(request, org_slug, opp_id):
     ]
     extent = qs.aggregate(extent=Extent("boundary"))["extent"]
     return JsonResponse({"group_features": group_features, "workarea_bounds": extent})
+
+
+@require_GET
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def download_work_areas(request, org_slug, opp_id):
+    opportunity = request.opportunity
+    headers = {
+        **WorkAreaCSVImporter.HEADERS,
+        **{
+            "group_name": "Work Area Group Name",
+        },
+    }
+
+    def get_row(wa):
+        # Maps row values to HEADERS key order so column changes don't break the CSV
+        props = wa.case_properties or {}
+        field_map = {
+            "slug": wa.slug,
+            "ward": wa.ward,
+            "centroid": f"{wa.centroid.x} {wa.centroid.y}",
+            "boundary": wa.boundary.wkt,
+            "building_count": wa.building_count,
+            "visit_count": wa.expected_visit_count,
+            "max_wag": props.get("max_wag", ""),
+            "wag_serial_number": props.get("wag_serial_number", ""),
+            "lga": props.get("lga", ""),
+            "state": props.get("state", ""),
+            "group_name": wa.group_name,
+        }
+        return [field_map[key] for key in headers]
+
+    def rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+
+        writer.writerow(headers.values())
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        filterset = WorkAreaMapFilterSet(
+            request.GET, queryset=WorkArea.objects.filter(opportunity=opportunity), opportunity=opportunity
+        )
+        for wa in filterset.qs.annotate(group_name=F("work_area_group__name")).iterator(chunk_size=2000):
+            writer.writerow(get_row(wa))
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    response = StreamingHttpResponse(rows(), content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="work_area_summary_{opportunity.opportunity_id}.csv"'
+    return response
 
 
 @method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
