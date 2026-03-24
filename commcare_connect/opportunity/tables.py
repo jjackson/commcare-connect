@@ -1052,7 +1052,7 @@ class SuspendedIndicatorColumn(tables.Column):
 
 
 class StatusIndicatorColumn(tables.Column):
-    def _init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         kwargs.setdefault("verbose_name", "Status")
         super().__init__(*args, **kwargs)
 
