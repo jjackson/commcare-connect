@@ -13,6 +13,14 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from commcare_connect.data_export.const import (
+    APP_TYPE_BOTH,
+    APP_TYPE_DELIVER,
+    APP_TYPE_LEARN,
+    DELIVER_APP_KEY,
+    LEARN_APP_KEY,
+    VALID_APP_TYPES,
+)
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
     CompletedModuleDataSerializer,
@@ -43,6 +51,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
 
 
 class BaseDataExportView(APIView):
@@ -399,6 +408,35 @@ class ImageView(OpportunityDataExportView):
         _get_opportunity_or_404(request.user, form.opportunity_id)
         attachment = storages["default"].open(blob_id)
         return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
+
+
+class AppStructureView(OpportunityDataExportView):
+    def get(self, request, opp_id):
+        app_type = request.query_params.get("app_type", APP_TYPE_BOTH)
+        if app_type not in VALID_APP_TYPES:
+            return Response(
+                {"error": f"Invalid app_type. Must be one of: {', '.join(VALID_APP_TYPES)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not self.opportunity.api_key:
+            raise NotFound("Opportunity does not have an associated API key.")
+
+        result = {LEARN_APP_KEY: None, DELIVER_APP_KEY: None}
+
+        try:
+            if app_type in (APP_TYPE_LEARN, APP_TYPE_BOTH) and self.opportunity.learn_app:
+                result[LEARN_APP_KEY] = get_app_structure(self.opportunity.api_key, self.opportunity.learn_app)
+
+            if app_type in (APP_TYPE_DELIVER, APP_TYPE_BOTH) and self.opportunity.deliver_app:
+                result[DELIVER_APP_KEY] = get_app_structure(self.opportunity.api_key, self.opportunity.deliver_app)
+        except CommCareHQAPIException:
+            return Response(
+                {"error": "Failed to fetch app structure from CommCare HQ."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(result)
 
 
 class OrganizationProgramDataView(BaseStreamingCSVExportView):
