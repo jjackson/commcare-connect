@@ -233,6 +233,17 @@ class UserVisitDataView(OpportunityScopedDataView):
             .select_related("user")
         )
 
+    def get(self, *args, **kwargs):
+        if self.request.version == "2.0":
+            queryset = self.get_queryset(*args, **kwargs)
+            page = self.paginate_queryset(queryset)
+            if self._include_images():
+                self._prefetch_images(page)
+            serializer_class = self.get_serializer_class()
+            serializer = serializer_class(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
+
     def get_data_generator(self, *args, **kwargs):
         serializer_class = self.get_serializer_class()
         fieldnames = serializer_class().get_fields().keys()
