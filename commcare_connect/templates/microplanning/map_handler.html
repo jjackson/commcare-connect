@@ -28,6 +28,30 @@
                 }, duration);
             },
 
+            applyFilters() {
+                if (!this.map) return;
+                const form = document.getElementById('workarea-filter-form');
+                const query = new URLSearchParams(new FormData(form)).toString();
+                const baseUrl = `${window.location.origin}{{ tiles_url|escapejs }}`;
+                const newUrl = query ? `${baseUrl}?${query}` : baseUrl;
+                const source = this.map.getSource('workareas');
+                if (source) {
+                    source.setTiles([newUrl]);
+                    this.selectedFeature = null; // Clear selection on filter change
+                    this.showToast("{% translate 'Filters updated!' %}", false, 500);
+                }
+            },
+
+            clearFilters() {
+                const form = document.getElementById('workarea-filter-form');
+                form.reset();
+                // Clear TomSelect instances
+                form.querySelectorAll('select[data-tomselect]').forEach(el => {
+                    if (el.tomselect) el.tomselect.clear();
+                });
+                this.applyFilters();
+            },
+
             init() {
                 this.$nextTick(() => {
                     this.initializeMap();
