@@ -21,6 +21,7 @@ from commcare_connect.data_export.const import (
     LEARN_APP_KEY,
     VALID_APP_TYPES,
 )
+from commcare_connect.data_export.pagination import IdKeysetPagination
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
     CompletedModuleDataSerializer,
@@ -76,8 +77,9 @@ class EchoWriter:
         return value
 
 
-class BaseStreamingCSVExportView(BaseDataExportView):
+class BaseDataExportListView(BaseDataExportView):
     serializer_class = None
+    pagination_class = IdKeysetPagination
 
     def get_serializer_class(self, *args, **kwargs):
         return self.serializer_class
@@ -96,13 +98,25 @@ class BaseStreamingCSVExportView(BaseDataExportView):
             serialized_data = serializer_class(obj).data
             yield writer.writerow(serialized_data)
 
+    def paginate_queryset(self, queryset):
+        self._paginator = self.pagination_class()
+        return self._paginator.paginate_queryset(queryset, self.request)
+
+    def get_paginated_response(self, data):
+        return self._paginator.get_paginated_response(data)
+
     @extend_schema(
         description=(
-            "This API returns a CSV text StreamingHttpResponse. "
-            "The values shown in the example will be in CSV text format."
+            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
+        if self.request.version == "2.0":
+            queryset = self.get_queryset(*args, **kwargs)
+            page = self.paginate_queryset(queryset)
+            serializer_class = self.get_serializer_class()
+            serializer = serializer_class(page, many=True)
+            return self.get_paginated_response(serializer.data)
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
 
 
@@ -184,7 +198,7 @@ class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
         return _get_opportunity_or_404(self.request.user, self.kwargs.get("opp_id"))
 
 
-class OpportunityScopedDataView(OpportunityDataExportView, BaseStreamingCSVExportView):
+class OpportunityScopedDataView(OpportunityDataExportView, BaseDataExportListView):
     pass
 
 
@@ -439,14 +453,14 @@ class AppStructureView(OpportunityDataExportView):
         return Response(result)
 
 
-class OrganizationProgramDataView(BaseStreamingCSVExportView):
+class OrganizationProgramDataView(BaseDataExportListView):
     serializer_class = ProgramDataExportSerializer
 
     def get_queryset(self, request, org_slug):
         return Program.objects.filter(organization__slug=org_slug, organization__memberships__user=self.request.user)
 
 
-class ProgramOpportunityDataView(BaseStreamingCSVExportView):
+class ProgramOpportunityDataView(BaseDataExportListView):
     serializer_class = OpportunitySerializer
 
     def get_queryset(self, request, program_id):
