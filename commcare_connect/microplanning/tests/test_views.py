@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -15,8 +15,10 @@ from django.urls import reverse
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
+from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
+from commcare_connect.microplanning.models import WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
-from commcare_connect.opportunity.tests.factories import OpportunityFactory
+from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 
@@ -264,3 +266,76 @@ class TestModifyWorkAreaUpdateView:
         assert response.context["form"].non_field_errors()
         work_area.refresh_from_db()
         assert work_area.expected_visit_count == 10  # rolled back due to atomic transaction
+
+
+@pytest.mark.django_db
+class TestWorkAreaMapFilterSet:
+    @pytest.fixture
+    def work_areas(self, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+
+        wa_not_started = WorkAreaFactory(
+            opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.NOT_STARTED
+        )
+        wa_visited = WorkAreaFactory(opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.VISITED)
+        wa_unassigned = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
+        return SimpleNamespace(
+            access=access,
+            group=group,
+            wa_not_started=wa_not_started,
+            wa_visited=wa_visited,
+            wa_unassigned=wa_unassigned,
+        )
+
+    def _filter_ids(self, params, opportunity):
+        qs = WorkAreaFactory._meta.model.objects.filter(opportunity=opportunity)
+        return set(WorkAreaMapFilterSet(params, queryset=qs, opportunity=opportunity).qs.values_list("id", flat=True))
+
+    @pytest.mark.parametrize(
+        "statuses, expected_attrs",
+        [
+            ([WorkAreaStatus.VISITED], ["wa_visited"]),
+            ([WorkAreaStatus.NOT_STARTED, WorkAreaStatus.UNASSIGNED], ["wa_not_started", "wa_unassigned"]),
+        ],
+        ids=["single_status", "multiple_statuses"],
+    )
+    def test_status_filter(self, opportunity, work_areas, statuses, expected_attrs):
+        expected = {getattr(work_areas, attr).id for attr in expected_attrs}
+        assert self._filter_ids({"status": statuses}, opportunity) == expected
+
+    def test_assignee_filter_excludes_unassigned(self, opportunity, work_areas):
+        result = self._filter_ids({"assignee": [work_areas.access.user.pk]}, opportunity)
+        assert result == {work_areas.wa_not_started.id, work_areas.wa_visited.id}
+
+    @pytest.mark.parametrize(
+        "params, expected_attrs",
+        [
+            ({"start_date": "2026-03-15"}, ["wa_not_started"]),
+            ({"end_date": "2026-03-15"}, ["wa_visited"]),
+            ({"start_date": "2026-03-15", "end_date": "2026-03-22"}, ["wa_not_started"]),
+        ],
+        ids=["start_date_gte", "end_date_lte", "date_range"],
+    )
+    def test_date_filters(self, opportunity, work_areas, params, expected_attrs):
+        # wa_visited has visit on Mar 10, wa_not_started on Mar 20
+        for wa_attr, visit_date in [("wa_visited", "2026-03-10"), ("wa_not_started", "2026-03-20")]:
+            UserVisitFactory(
+                opportunity=opportunity,
+                user=work_areas.access.user,
+                work_area=getattr(work_areas, wa_attr),
+                visit_date=datetime.fromisoformat(f"{visit_date}T00:00:00+00:00"),
+            )
+        expected = {getattr(work_areas, attr).id for attr in expected_attrs}
+        assert self._filter_ids(params, opportunity) == expected
+
+    def test_combined_status_and_assignee(self, opportunity, work_areas):
+        result = self._filter_ids(
+            {"status": [WorkAreaStatus.NOT_STARTED], "assignee": [work_areas.access.user.pk]}, opportunity
+        )
+        assert result == {work_areas.wa_not_started.id}
+
+    def test_assignee_queryset_requires_opportunity(self):
+        empty_qs = WorkAreaFactory._meta.model.objects.none()
+        fs = WorkAreaMapFilterSet({}, queryset=empty_qs)
+        assert fs.filters["assignee"].queryset.count() == 0
