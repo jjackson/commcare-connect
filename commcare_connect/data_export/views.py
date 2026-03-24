@@ -54,6 +54,8 @@ from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
 
+STREAM_CHUNK_SIZE = 2000
+
 
 class BaseDataExportView(APIView):
     permission_classes = [IsAuthenticated, TokenHasScope]
@@ -91,7 +93,7 @@ class BaseDataExportListView(BaseDataExportView):
         serializer_class = self.get_serializer_class()
         fieldnames = serializer_class().get_fields().keys()
         writer = csv.DictWriter(EchoWriter(), fieldnames=fieldnames)
-        objects = self.get_queryset(*args, **kwargs).iterator(chunk_size=2000)
+        objects = self.get_queryset(*args, **kwargs).iterator(chunk_size=STREAM_CHUNK_SIZE)
         yield writer.writeheader()
 
         for obj in objects:
@@ -252,13 +254,13 @@ class UserVisitDataView(OpportunityScopedDataView):
         include_images = self._include_images()
 
         if not include_images:
-            for obj in queryset.iterator(chunk_size=2000):
+            for obj in queryset.iterator(chunk_size=STREAM_CHUNK_SIZE):
                 yield writer.writerow(serializer_class(obj).data)
         else:
             batch = []
-            for obj in queryset.iterator(chunk_size=2000):
+            for obj in queryset.iterator(chunk_size=STREAM_CHUNK_SIZE):
                 batch.append(obj)
-                if len(batch) >= 2000:
+                if len(batch) >= STREAM_CHUNK_SIZE:
                     self._prefetch_images(batch)
                     for visit in batch:
                         yield writer.writerow(serializer_class(visit).data)
