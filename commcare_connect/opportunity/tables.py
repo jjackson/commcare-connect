@@ -1303,6 +1303,49 @@ class GroupedByWorkerMixin:
         return next(self._row_counter)
 
 
+class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
+    index = IndexColumn()
+    worker_status = StatusIndicatorColumn(empty_values=())
+    user = tables.Column(verbose_name="Name", orderable=True, order_by="user__name")
+    task_name = tables.Column(verbose_name="Task Name", empty_values=())
+    date_assigned = DMYTColumn(verbose_name="Date Assigned")
+    due_date = DMYTColumn(verbose_name="Due Date", accessor="task_due_date")
+    task_status = TaskStatusColumn(verbose_name="Task Status", empty_values=())
+
+    class Meta:
+        fields = ()
+        orderable = False
+        sequence = (
+            "index",
+            "worker_status",
+            "user",
+            "task_name",
+            "date_assigned",
+            "due_date",
+            "task_status",
+        )
+        row_attrs = {"class": "group"}
+        empty_text = gettext_lazy("No workers have accepted this opportunity yet.")
+
+    def __init__(self, *args, **kwargs):
+        self.opp_id = kwargs.pop("opp_id")
+        super().__init__(*args, **kwargs)
+
+    def render_worker_status(self, record, value):
+        if self._is_seen(record):
+            return ""
+        return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
+
+    def render_task_name(self, value):
+        if value is None:
+            return format_html('<span class="italic text-slate-400">{}</span>', _("No assigned tasks"))
+        return value
+
+    def render_task_status(self, value, record):
+        self.run_after_every_row(record)
+        return TaskStatusColumn.render(self.columns["task_status"].column, value)
+
+
 class WorkerLearnTable(OrgContextTable):
     index = IndexColumn()
     user = UserInfoColumn()
