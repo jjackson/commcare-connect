@@ -214,7 +214,7 @@ class WorkAreaVectorLayer(VectorLayer):
             assignee_name=F("work_area_group__opportunity_access__user__name"),
         )
         filterset = WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity)
-        qs = filterset.qs
+        qs = filterset.qs.distinct()
         return qs
 
 
