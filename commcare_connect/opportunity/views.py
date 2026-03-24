@@ -181,12 +181,12 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
-    _request_user_is_program_manager,
     opportunity_required,
     org_admin_required,
     org_member_required,
     org_program_manager_required,
     org_viewer_required,
+    request_user_is_program_manager,
 )
 from commcare_connect.program.forms import ManagedOpportunityInitUpdateForm
 from commcare_connect.program.utils import is_program_manager
@@ -1318,7 +1318,7 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
 @org_member_required
 @opportunity_required
 def suspended_users_list(request, org_slug=None, opp_id=None):
-    is_org_pm = _request_user_is_program_manager(request)
+    is_org_pm = request_user_is_program_manager(request)
     access_objects = OpportunityAccess.objects.filter(opportunity=request.opportunity, suspended=True)
     table = SuspendedUsersTable(access_objects, is_org_pm=is_org_pm)
     path = []
@@ -2088,7 +2088,7 @@ def user_visit_verification(request, org_slug, opp_id):
             "filters_applied_count": filters_applied_count,
             "user_visit_filters_enabled": user_visit_filters_enabled,
             "path": path,
-            "is_org_pm": _request_user_is_program_manager(request),
+            "is_org_pm": request_user_is_program_manager(request),
         },
     )
     return response
@@ -2645,7 +2645,7 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
             "table": table,
             "access": access,
             "path": path,
-            "is_org_pm": _request_user_is_program_manager(request),
+            "is_org_pm": request_user_is_program_manager(request),
         },
     )
 
