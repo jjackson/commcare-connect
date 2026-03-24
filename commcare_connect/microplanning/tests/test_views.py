@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -17,6 +17,7 @@ from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
+from commcare_connect.microplanning.tasks import WorkAreaCSVImporter
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
@@ -358,3 +359,164 @@ class TestWorkAreaMapFilterSet:
         empty_qs = WorkAreaFactory._meta.model.objects.none()
         fs = WorkAreaMapFilterSet({}, queryset=empty_qs)
         assert fs.filters["assignee"].queryset.count() == 0
+
+
+class TestDownloadWorkAreas:
+    @pytest.fixture(autouse=True)
+    def setup_flag(self, opportunity):
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(opportunity)
+        flag.flush()
+
+    def url(self, opportunity):
+        return reverse(
+            "microplanning:download_work_areas",
+            kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.opportunity_id},
+        )
+
+    def _parse_csv(self, response):
+        import csv as csv_mod
+        import io
+
+        content = b"".join(response.streaming_content).decode("utf-8")
+        return list(csv_mod.reader(io.StringIO(content)))
+
+    def test_streams_csv_with_correct_headers_and_data(self, client, org_user_admin, opportunity):
+        wa = WorkAreaFactory(
+            opportunity=opportunity,
+            slug="area-x",
+            ward="ward-x",
+            building_count=10,
+            expected_visit_count=5,
+            case_properties={"max_wag": "3", "wag_serial_number": "42", "lga": "LGA1", "state": "State1"},
+            work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Group A"),
+        )
+        client.force_login(org_user_admin)
+        response = client.get(self.url(opportunity))
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "text/csv"
+        assert f"work_area_summary_{opportunity.opportunity_id}.csv" in response["Content-Disposition"]
+
+        rows = self._parse_csv(response)
+        headers = list(WorkAreaCSVImporter.HEADERS.values())
+        headers.append("Work Area Group Name")
+        assert rows[0] == headers
+        assert rows[1] == [
+            "area-x",
+            "ward-x",
+            f"{wa.centroid.x} {wa.centroid.y}",
+            wa.boundary.wkt,
+            "10",
+            "5",
+            "3",
+            "42",
+            "LGA1",
+            "State1",
+            wa.work_area_group.name,
+        ]
+
+    @pytest.mark.parametrize(
+        "count, expected_rows",
+        [
+            (0, 1),  # no work areas, only header row
+            (3, 4),  # 3 work areas + header
+        ],
+    )
+    def test_row_counts(self, client, org_user_admin, opportunity, count, expected_rows):
+        WorkAreaFactory.create_batch(count, opportunity=opportunity)
+        client.force_login(org_user_admin)
+        rows = self._parse_csv(client.get(self.url(opportunity)))
+
+        assert len(rows) == expected_rows
+
+    def test_null_case_properties_yields_empty_strings(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, case_properties=None, work_area_group=None)
+        client.force_login(org_user_admin)
+        row = self._parse_csv(client.get(self.url(opportunity)))[1]
+        assert row[6:] == ["", "", "", "", ""]
+
+    @pytest.mark.parametrize(
+        "login_as, method, expected_status",
+        [
+            ("org_user_member", "get", 404),
+            ("org_user_admin", "post", 405),
+        ],
+    )
+    def test_access_denied(self, client, login_as, method, expected_status, request, opportunity):
+        user = request.getfixturevalue(login_as)
+        client.force_login(user)
+        response = getattr(client, method)(self.url(opportunity))
+        assert response.status_code == expected_status
+
+    def test_status_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_STARTED}"))
+        assert len(rows) == 2
+
+    def test_assignee_filter(self, client, org_user_admin, opportunity):
+        from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory
+
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+        WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+        WorkAreaFactory(opportunity=opportunity)  # unassigned, no group
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + f"?assignee={access.user.id}"))
+        assert len(rows) == 2
+
+    def test_date_filter(self, client, org_user_admin, opportunity):
+        wa_with_visit = WorkAreaFactory(opportunity=opportunity)
+        wa_without_visit = WorkAreaFactory(opportunity=opportunity)
+        UserVisitFactory(
+            opportunity=opportunity,
+            work_area=wa_with_visit,
+            visit_date=datetime(2025, 6, 15, tzinfo=timezone.utc),
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            work_area=wa_without_visit,
+            visit_date=datetime(2025, 3, 1, tzinfo=timezone.utc),
+        )
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + "?start_date=2025-06-01&end_date=2025-06-30"))
+        assert len(rows) == 2
+
+    def test_reordered_headers_still_produces_valid_csv(self, client, org_user_admin, opportunity):
+        reversed_headers = dict(reversed(list(WorkAreaCSVImporter.HEADERS.items())))
+
+        WorkAreaFactory(
+            opportunity=opportunity,
+            slug="slug-rev",
+            ward="ward-rev",
+            building_count=4,
+            expected_visit_count=2,
+            work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Rev Group"),
+            case_properties={"max_wag": "1", "wag_serial_number": "77", "lga": "RevLGA", "state": "RevState"},
+        )
+        client.force_login(org_user_admin)
+
+        with patch.object(WorkAreaCSVImporter, "HEADERS", reversed_headers):
+            response = client.get(self.url(opportunity))
+
+        rows = self._parse_csv(response)
+        csv_headers = rows[0]
+
+        expected_columns = set(WorkAreaCSVImporter.HEADERS.values()) | {"Work Area Group Name"}
+        assert set(csv_headers) == expected_columns
+
+        row_dict = dict(zip(csv_headers, rows[1]))
+        assert row_dict["Area Slug"] == "slug-rev"
+        assert row_dict["Ward"] == "ward-rev"
+        assert row_dict["Building Count"] == "4"
+        assert row_dict["Expected Visit Count"] == "2"
+        assert row_dict["Max WAG"] == "1"
+        assert row_dict["WAG Serial Number"] == "77"
+        assert row_dict["LGA"] == "RevLGA"
+        assert row_dict["State"] == "RevState"
+        assert row_dict["Work Area Group Name"] == "Rev Group"
