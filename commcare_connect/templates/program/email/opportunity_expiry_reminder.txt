@@ -1,7 +1,7 @@
 {% extends "email/base.txt" %}
 {% block content %}Hi,
 
-This is a reminder that the following {{ opportunities|length }} opportunit{{ opportunities|length|pluralize:"y,ies" }} will end in {{ days_before }} day{{ days_before|pluralize }}:
+This is a reminder that the following {{ opportunities|length }} opportunit{{ opportunities|length|pluralize:"y,ies" }} will end on {{ target_date }}:
 
 {% for opp in opportunities %}
 - {{ opp.name }}

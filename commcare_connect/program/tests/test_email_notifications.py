@@ -156,7 +156,8 @@ class TestOpportunityExpiryReminderEmails:
 
         assert mock_send_mail.delay.called
         call_kwargs = mock_send_mail.delay.call_args[1]
-        assert "7" in call_kwargs["subject"]
+        expected_date = (datetime.date.today() + datetime.timedelta(days=7)).strftime("%d %b %Y")
+        assert expected_date in call_kwargs["subject"]
         for email in pm_org.get_member_emails():
             assert email in call_kwargs["recipient_list"]
 
@@ -173,7 +174,8 @@ class TestOpportunityExpiryReminderEmails:
 
         assert mock_send_mail.delay.called
         call_kwargs = mock_send_mail.delay.call_args[1]
-        assert "3" in call_kwargs["subject"]
+        expected_date = (datetime.date.today() + datetime.timedelta(days=3)).strftime("%d %b %Y")
+        assert expected_date in call_kwargs["subject"]
 
     def test_no_email_sent_for_non_expiring_opportunity(self, mock_send_mail):
         pm_org = ProgramManagerOrgWithUsersFactory()

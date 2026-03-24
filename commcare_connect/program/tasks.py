@@ -205,7 +205,7 @@ def send_opportunity_expiry_reminder_emails(days_before: int):
             None,
             reverse(
                 "opportunity:detail",
-                kwargs={"org_slug": opp.organization.slug, "opp_id": opp.id},
+                kwargs={"org_slug": pm_org.slug, "opp_id": opp.id},
             ),
         )
         pm_org_opportunities[pm_org.id].append(
@@ -236,9 +236,11 @@ def send_opportunity_expiry_reminder_emails(days_before: int):
             continue
 
         opp_count = len(opps)
-        subject = f"Reminder: {opp_count} opportunit{'y' if opp_count == 1 else 'ies'} ending in {days_before} days"
+        date_str = target_date.strftime("%d %b %Y")
+        opp_word = "opportunity" if opp_count == 1 else "opportunities"
+        subject = f"Reminder: {opp_count} {opp_word} ending on {date_str}"
         context = {
-            "days_before": days_before,
+            "target_date": target_date,
             "opportunities": opps,
             "organization": pm_org,
         }
