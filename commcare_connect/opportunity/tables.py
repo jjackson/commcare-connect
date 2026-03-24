@@ -1247,6 +1247,62 @@ class WorkerPaymentsTable(tables.Table):
         )
 
 
+class GroupedByWorkerMixin:
+    """Mixin for tables that show multiple rows per worker, hiding worker-level
+    columns on sub-rows. Subclasses must call `run_after_every_row(record)`
+    in their last rendered column."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seen_users = set()
+
+    def _is_seen(self, record):
+        return record.pk in self._seen_users
+
+    def run_after_every_row(self, record):
+        self._seen_users.add(record.pk)
+
+    def _get_user_url(self, record):
+        base_url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id))
+        return f"{base_url}?{urlencode({'user': record.user.user_id})}"
+
+    def render_user(self, value, record):
+        if self._is_seen(record):
+            return ""
+        return format_html(
+            '<a href="{}" class="w-40">'
+            '<p class="text-sm text-slate-900">{}</p>'
+            '<p class="text-xs text-slate-400">{}</p>'
+            "</a>",
+            self._get_user_url(record),
+            value.name,
+            value.username,
+        )
+
+    def render_index(self, value, record):
+        page = getattr(self, "page", None)
+
+        if not hasattr(self, "_row_counter"):
+            unique_before_page = 0
+
+            if page:
+                per_page = page.paginator.per_page
+                page_start_index = (page.number - 1) * per_page
+                seen_ids = set()
+
+                for d in self.data[:page_start_index]:
+                    if d.pk not in seen_ids:
+                        seen_ids.add(d.pk)
+                        unique_before_page += 1
+
+            self._row_counter = itertools.count(start=unique_before_page + 1)
+
+        if self._is_seen(record):
+            return ""
+
+        return next(self._row_counter)
+
+
 class WorkerLearnTable(OrgContextTable):
     index = IndexColumn()
     user = UserInfoColumn()
@@ -1378,7 +1434,7 @@ class TotalDeliveredColumn(tables.Column):
         )
 
 
-class WorkerDeliveryTable(OrgContextTable):
+class WorkerDeliveryTable(GroupedByWorkerMixin, OrgContextTable):
     id = tables.Column(visible=False)
     index = IndexColumn()
     user = tables.Column(orderable=False, verbose_name="Name", footer="Total")
@@ -1440,7 +1496,6 @@ class WorkerDeliveryTable(OrgContextTable):
         self.opp_id = kwargs.pop("opp_id")
         self.use_view_url = False
         super().__init__(*args, **kwargs)
-        self._seen_users = set()
 
     def render_delivery_progress(self, record):
         current = record.completed
@@ -1471,54 +1526,10 @@ class WorkerDeliveryTable(OrgContextTable):
         self.run_after_every_row(record)
         return format_html(template, url)
 
-    def render_user(self, value, record):
-        if record.id in self._seen_users:
-            return ""
-
-        base_url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id))
-        url = f"{base_url}?{urlencode({'user': record.user.user_id})}"
-
-        return format_html(
-            """
-                <a href="{}" class="w-40">
-                    <p class="text-sm text-slate-900">{}</p>
-                    <p class="text-xs text-slate-400">{}</p>
-                </a>
-            """,
-            url,
-            value.name,
-            value.username,
-        )
-
     def render_suspended(self, record, value):
-        if record.id in self._seen_users:
+        if self._is_seen(record):
             return ""
         return SuspendedIndicatorColumn().render(value)
-
-    def run_after_every_row(self, record):
-        self._seen_users.add(record.id)
-
-    def render_index(self, value, record):
-        page = getattr(self, "page", None)
-
-        if not hasattr(self, "_row_counter"):
-            seen_ids = set()
-            unique_before_page = 0
-
-            per_page = page.paginator.per_page
-            page_start_index = (page.number - 1) * per_page
-
-            for d in self.data[:page_start_index]:
-                if d.id not in seen_ids:
-                    seen_ids.add(d.id)
-                    unique_before_page += 1
-
-            self._row_counter = itertools.count(start=unique_before_page + 1)
-
-        if record.id in self._seen_users:
-            return ""
-
-        return next(self._row_counter)
 
     def render_delivered(self, record, value):
         rows = [
@@ -1563,7 +1574,7 @@ class WorkerDeliveryTable(OrgContextTable):
         return self._render_flag_counts(record, value, status=CompletedWorkStatus.rejected)
 
     def render_last_active(self, record, value):
-        if record.id in self._seen_users:
+        if self._is_seen(record):
             return ""
 
         return DMYTColumn().render(value)
