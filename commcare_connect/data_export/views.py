@@ -105,6 +105,10 @@ class BaseDataExportListView(BaseDataExportView):
     def get_paginated_response(self, data):
         return self._paginator.get_paginated_response(data)
 
+    def post_paginate(self, page):
+        """Hook called after pagination, before serialization. Override to modify the page list in-place."""
+        pass
+
     @extend_schema(
         description=(
             "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
@@ -114,6 +118,7 @@ class BaseDataExportListView(BaseDataExportView):
         if self.request.version == "2.0":
             queryset = self.get_queryset(*args, **kwargs)
             page = self.paginate_queryset(queryset)
+            self.post_paginate(page)
             serializer_class = self.get_serializer_class()
             serializer = serializer_class(page, many=True)
             return self.get_paginated_response(serializer.data)
@@ -233,16 +238,9 @@ class UserVisitDataView(OpportunityScopedDataView):
             .select_related("user")
         )
 
-    def get(self, *args, **kwargs):
-        if self.request.version == "2.0":
-            queryset = self.get_queryset(*args, **kwargs)
-            page = self.paginate_queryset(queryset)
-            if self._include_images():
-                self._prefetch_images(page)
-            serializer_class = self.get_serializer_class()
-            serializer = serializer_class(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
+    def post_paginate(self, page):
+        if self._include_images():
+            self._prefetch_images(page)
 
     def get_data_generator(self, *args, **kwargs):
         serializer_class = self.get_serializer_class()
