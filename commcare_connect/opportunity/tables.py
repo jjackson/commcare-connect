@@ -1056,8 +1056,14 @@ class StatusIndicatorColumn(tables.Column):
         kwargs.setdefault("verbose_name", "Status")
         super().__init__(*args, **kwargs)
 
+    def _is_suspended(self, record):
+        opportunity_access = getattr(record, "opportunity_access", None)
+        if opportunity_access:
+            return opportunity_access.suspended
+        return getattr(record, "suspended", False)
+
     def render(self, record):
-        if record.opportunity_access and record.opportunity_access.suspended:
+        if self._is_suspended(record):
             return format_html(
                 '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-minus-square text-black-600"></i>' "</span>",
                 _("User suspended"),
@@ -1079,6 +1085,26 @@ class StatusIndicatorColumn(tables.Column):
                 '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-xmark text-red-600"></i>' "</span>",
                 _("User not found") if record.status == UserInviteStatus.not_found else _("Invite failed"),
             )
+
+
+class TaskStatusColumn(tables.Column):
+    def render(self, value):
+        if value is None:
+            return "—"
+        if value == CompletedTaskStatus.ASSIGNED:
+            status = _("To Do")
+            badge_classes = "bg-amber-100 text-amber-800"
+        elif value == CompletedTaskStatus.COMPLETED:
+            status = _("Complete")
+            badge_classes = "bg-green-100 text-green-800"
+        else:
+            return str(value)
+        return format_html(
+            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
+            "{}</span>",
+            badge_classes,
+            status,
+        )
 
 
 class WorkerStatusTable(tables.Table):
@@ -1696,7 +1722,7 @@ class InvoiceDeliveriesTable(tables.Table):
 class AssignedTaskListTable(OrgContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
-    status = tables.Column(verbose_name=gettext_lazy("Status"), accessor="status")
+    status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
     task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
     assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
@@ -1741,20 +1767,6 @@ class AssignedTaskListTable(OrgContextTable):
             "</div>",
             value.name,
             value.username,
-        )
-
-    def render_status(self, value):
-        if value == CompletedTaskStatus.ASSIGNED:
-            status = _("To Do")
-            badge_classes = "bg-amber-100 text-amber-800"
-        else:
-            status = _("Complete")
-            badge_classes = "bg-green-100 text-green-800"
-        return format_html(
-            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
-            "{}</span>",
-            badge_classes,
-            status,
         )
 
     def render_action(self, record):
