@@ -181,7 +181,7 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
-    opportunity_program_manager_required,
+    _request_user_is_program_manager,
     opportunity_required,
     org_admin_required,
     org_member_required,
@@ -1287,7 +1287,7 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
     return redirect("opportunity:detail", org_slug, opp_id)
 
 
-@opportunity_program_manager_required
+@org_program_manager_required
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
@@ -1305,7 +1305,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @require_POST
-@opportunity_program_manager_required
+@org_program_manager_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
@@ -1318,8 +1318,9 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
 @org_member_required
 @opportunity_required
 def suspended_users_list(request, org_slug=None, opp_id=None):
+    is_org_pm = _request_user_is_program_manager(request)
     access_objects = OpportunityAccess.objects.filter(opportunity=request.opportunity, suspended=True)
-    table = SuspendedUsersTable(access_objects)
+    table = SuspendedUsersTable(access_objects, is_org_pm=is_org_pm)
     path = []
     if request.opportunity.managed:
         path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
@@ -2087,6 +2088,7 @@ def user_visit_verification(request, org_slug, opp_id):
             "filters_applied_count": filters_applied_count,
             "user_visit_filters_enabled": user_visit_filters_enabled,
             "path": path,
+            "is_org_pm": _request_user_is_program_manager(request),
         },
     )
     return response
@@ -2638,7 +2640,13 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
     return render(
         request,
         "opportunity/opportunity_worker_learn.html",
-        {"total_learn_duration": total_duration, "table": table, "access": access, "path": path},
+        {
+            "total_learn_duration": total_duration,
+            "table": table,
+            "access": access,
+            "path": path,
+            "is_org_pm": _request_user_is_program_manager(request),
+        },
     )
 
 
