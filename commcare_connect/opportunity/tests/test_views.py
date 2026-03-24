@@ -2013,6 +2013,18 @@ class TestSuspendUser:
         access.refresh_from_db()
         assert access.suspended is False
 
+    def test_suspend_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=False)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
 
 @pytest.mark.django_db
 class TestRevokeUserSuspension:
@@ -2048,6 +2060,18 @@ class TestRevokeUserSuspension:
         assert response.status_code == HTTPStatus.NOT_FOUND
         access.refresh_from_db()
         assert access.suspended is True
+
+    def test_revoke_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=True)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        access.refresh_from_db()
+        assert access.suspended is False
 
 
 @pytest.mark.django_db
