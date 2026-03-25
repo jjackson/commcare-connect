@@ -73,13 +73,24 @@
 
     <div class="flex flex-col gap-2 xl:flex-row xl:items-stretch xl:h-[max(calc(100vh-300px),200px)]" x-data="mapController()">
         <!-- Map section -->
-        <div id="map-wrapper" x-ref="mapContainer" class="relative min-w-0 flex-1 shadow-md h-[max(calc(100vh-300px),200px)] xl:h-full">
-            <div id="toast-container"
-                class="absolute top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm text-white opacity-0 transition-opacity duration-300">
-                <i id="toast-icon" class="text-lg"></i>
-                <span id="toast-message"></span>
+        <div class="flex flex-col min-w-0 flex-1 gap-2">
+            <div id="map-wrapper" x-ref="mapContainer"
+                class="relative min-w-0 flex-1 shadow-md h-[max(calc(100vh-300px),200px)] xl:h-full">
+                <div id="toast-container"
+                    class="absolute top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm text-white opacity-0 transition-opacity duration-300">
+                    <i id="toast-icon" class="text-lg"></i>
+                    <span id="toast-message"></span>
+                </div>
+                <div id="map" class="w-full h-full"></div>
             </div>
-            <div id="map" class="w-full h-full"></div>
+            <div>
+                <a :href="getDownloadUrl()" class="button button-md primary-dark" + x-data="{ disabled: false }"
+                    @click="if (disabled) { $event.preventDefault(); return; } disabled = true; setTimeout(() => disabled = false, 3000)"
+                    :class="{ 'opacity-50 pointer-events-none': disabled }">
+                    <i class="fa-solid fa-download"></i>
+                    {% translate "Download Work Area Summary" %}
+                </a>
+            </div>
         </div>
 
         <!-- Sidebars (stacked) -->
