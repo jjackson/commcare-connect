@@ -424,6 +424,7 @@ class CompletedTaskStatus(models.TextChoices):
     COMPLETED = "completed", gettext("completed")
 
 
+@pghistory.track(pghistory.UpdateEvent(), fields=["due_date"])
 class CompletedTask(XFormBaseModel):
     assigned_task_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     task = models.ForeignKey(Task, on_delete=models.PROTECT)
