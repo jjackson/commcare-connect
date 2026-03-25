@@ -7,7 +7,6 @@ from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
@@ -23,8 +22,20 @@ from commcare_connect.opportunity.tests.factories import OpportunityAccessFactor
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 
+class BaseMicroplanningFlagTest:
+    @pytest.fixture(autouse=True)
+    def setup_microplanning_flag(self, opportunity, request):
+        enabled = getattr(request, "param", True)
+        if not enabled:
+            return
+
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(opportunity)
+        flag.flush()
+
+
 @pytest.mark.django_db
-class TestWorkAreaUpload:
+class TestWorkAreaUpload(BaseMicroplanningFlagTest):
     # --- Common CSV for all tests ---
     CSV_CONTENT = (
         b"Area Slug,Ward,Centroid,Boundary,Building Count,Expected Visit Count\n"
@@ -46,12 +57,6 @@ class TestWorkAreaUpload:
         url = self.get_url(opportunity.organization.slug, opportunity.opportunity_id)
         client.force_login(org_user_admin)
 
-        # Flag opportunity as allowed
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.save()
-        cache.clear()
-
         # Mock celery task
         mock_task = MagicMock()
         mock_task.id = "task-123"
@@ -72,6 +77,7 @@ class TestWorkAreaUpload:
         assert "An import for this opportunity is already in progress." in str(messages[1])
         assert mock_delay.call_count == 1  # No new task
 
+    @pytest.mark.parametrize("setup_microplanning_flag", [False], indirect=True)
     @patch("commcare_connect.microplanning.views.import_work_areas_task.delay")
     def test_flagged_permission_required(self, mock_delay, client, org_user_admin, opportunity, csv_file):
         """
@@ -79,9 +85,6 @@ class TestWorkAreaUpload:
         """
         url = self.get_url(opportunity.organization.slug, opportunity.opportunity_id)
         client.force_login(org_user_admin)
-        # Ensure opportunity is NOT flagged
-        Flag.objects.filter(name=MICROPLANNING).delete()
-        cache.clear()
 
         response = client.post(url, {"csv_file": csv_file})
         assert response.status_code == 404
@@ -109,45 +112,34 @@ class TestGetMetricsForMicroplanning:
 
 
 @pytest.mark.django_db
-class TestMicroplanningHomeView:
+class TestMicroplanningHomeView(BaseMicroplanningFlagTest):
     def url(self, org_slug: str, opp_id: str):
         return reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
 
     def test_success(self, client: Client, settings, organization, org_user_admin, opportunity):
         settings.MAPBOX_TOKEN = "test-mapbox-token"
-        cache.clear()
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-
         client.force_login(org_user_admin)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
 
         assert response.status_code == 200
         assert any(t.name == "microplanning/home.html" for t in response.templates)
 
+    @pytest.mark.parametrize("setup_microplanning_flag", [False], indirect=True)
     def test_flag_disabled(self, client: Client, organization, org_user_admin, opportunity):
+        self.ENABLE_FLAG = False
         client.force_login(org_user_admin)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
 
     def test_unauthenticated(self, client: Client, organization, org_user_member, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-
         client.force_login(org_user_member)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
 
 
 @pytest.mark.django_db
-class TestModifyWorkAreaUpdateView:
+class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
     template_name = "microplanning/work_area_form.html"
-
-    @pytest.fixture(autouse=True)
-    def setup_flag(self, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.flush()
 
     def url(self, org_slug, opp_id, work_area_id):
         return reverse("microplanning:modify_work_area", args=(org_slug, opp_id, work_area_id))
@@ -270,7 +262,7 @@ class TestModifyWorkAreaUpdateView:
 
 
 @pytest.mark.django_db
-class TestWorkAreaMapFilterSet:
+class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
     @pytest.fixture
     def work_areas(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
@@ -361,13 +353,7 @@ class TestWorkAreaMapFilterSet:
         assert fs.filters["assignee"].queryset.count() == 0
 
 
-class TestDownloadWorkAreas:
-    @pytest.fixture(autouse=True)
-    def setup_flag(self, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.flush()
-
+class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
     def url(self, opportunity):
         return reverse(
             "microplanning:download_work_areas",
