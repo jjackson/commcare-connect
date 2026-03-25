@@ -2,15 +2,17 @@ import pytest
 from waffle.testutils import override_switch
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
-from commcare_connect.opportunity.filters import UserVisitFilterSet
-from commcare_connect.opportunity.models import UserVisit
+from commcare_connect.opportunity.filters import TasksFilterSet, UserVisitFilterSet
+from commcare_connect.opportunity.models import CompletedTaskStatus, OpportunityAccess, UserVisit
 from commcare_connect.opportunity.tests.factories import (
+    CompletedTaskFactory,
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
     OpportunityFactory,
     OpportunityVerificationFlagsFactory,
     PaymentUnitFactory,
+    TaskFactory,
     UserVisitFactory,
 )
 from commcare_connect.utils.flags import Flags
@@ -102,3 +104,76 @@ def test_uservisit_filterset_filters_by_user_id():
     filtered_visits = set(filterset.qs.values_list("id", flat=True))
     assert visit_1.id in filtered_visits
     assert visit_2.id not in filtered_visits
+
+
+@pytest.mark.django_db
+def test_tasks_filterset_worker_name():
+    opp = OpportunityFactory()
+    access_alice = OpportunityAccessFactory(opportunity=opp, accepted=True, user__name="Alice Smith")
+    access_bob = OpportunityAccessFactory(opportunity=opp, accepted=True, user__name="Bob Jones")
+    task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
+    CompletedTaskFactory(opportunity_access=access_alice, task=task)
+    CompletedTaskFactory(opportunity_access=access_bob, task=task)
+
+    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    filterset = TasksFilterSet(data={"worker_name": "alice"}, queryset=qs, opportunity=opp)
+
+    result_pks = set(filterset.qs.values_list("pk", flat=True))
+    assert access_alice.pk in result_pks
+    assert access_bob.pk not in result_pks
+
+
+@pytest.mark.django_db
+def test_tasks_filterset_task_status_single():
+    opp = OpportunityFactory()
+    access = OpportunityAccessFactory(opportunity=opp, accepted=True)
+    task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
+    CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.ASSIGNED)
+    CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.COMPLETED)
+
+    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    filterset = TasksFilterSet(data={"task_status": [CompletedTaskStatus.COMPLETED]}, queryset=qs, opportunity=opp)
+
+    assert filterset.form.is_valid()
+
+
+@pytest.mark.django_db
+def test_tasks_filterset_task_type():
+    opp = OpportunityFactory()
+    access = OpportunityAccessFactory(opportunity=opp, accepted=True)
+    task_a = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Survey")
+    task_b = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Follow-up")
+    CompletedTaskFactory(opportunity_access=access, task=task_a)
+    CompletedTaskFactory(opportunity_access=access, task=task_b)
+
+    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    filterset = TasksFilterSet(data={"task_type": [str(task_a.pk)]}, queryset=qs, opportunity=opp)
+
+    assert filterset.form.is_valid()
+    choices = dict(filterset.form.fields["task_type"].choices)
+    assert str(task_a.pk) in choices
+    assert str(task_b.pk) in choices
+
+
+@pytest.mark.django_db
+def test_tasks_filterset_task_type_excludes_inactive():
+    opp = OpportunityFactory()
+    active_task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Active")
+    inactive_task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=False, name="Inactive")
+
+    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    filterset = TasksFilterSet(data={}, queryset=qs, opportunity=opp)
+
+    choices = dict(filterset.form.fields["task_type"].choices)
+    assert str(active_task.pk) in choices
+    assert str(inactive_task.pk) not in choices
+
+
+@pytest.mark.django_db
+def test_tasks_filterset_no_tasks_status():
+    """The 'no_tasks' status option should be available."""
+    opp = OpportunityFactory()
+    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    filterset = TasksFilterSet(data={"task_status": ["no_tasks"]}, queryset=qs, opportunity=opp)
+
+    assert filterset.form.is_valid()

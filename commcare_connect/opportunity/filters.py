@@ -5,9 +5,11 @@ from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.models import (
+    CompletedTaskStatus,
     DeliverUnitFlagRules,
     OpportunityAccess,
     OpportunityVerificationFlags,
+    Task,
     UserVisit,
     VisitValidationStatus,
 )
@@ -252,3 +254,84 @@ class UserVisitFilterSet(django_filters.FilterSet):
             if rule.check_attachments:
                 enabled_flags.append(Flags.ATTACHMENT_MISSING.value)
         return [(flag, FlagLabels.get_label(flag)) for flag in set(enabled_flags)]
+
+
+TASK_STATUS_CHOICES = [
+    (CompletedTaskStatus.ASSIGNED, "To Do"),
+    (CompletedTaskStatus.COMPLETED, "Complete"),
+    ("no_tasks", "No Tasks"),
+]
+
+
+class TasksFilterSet(django_filters.FilterSet):
+    worker_name = django_filters.CharFilter(
+        label="Worker Name",
+        field_name="user__name",
+        lookup_expr="icontains",
+    )
+    task_status = django_filters.MultipleChoiceFilter(
+        label="Task Status",
+        choices=TASK_STATUS_CHOICES,
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        method="filter_task_status",
+    )
+    task_type = django_filters.MultipleChoiceFilter(
+        label="Task Type",
+        choices=[],
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        method="filter_task_type",
+    )
+    date_assigned_after = django_filters.DateFilter(
+        label="Date Assigned From",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        method="filter_date_assigned_after",
+    )
+    date_assigned_before = django_filters.DateFilter(
+        label="Date Assigned To",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        method="filter_date_assigned_before",
+    )
+    due_date_after = django_filters.DateFilter(
+        label="Due Date From",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        method="filter_due_date_after",
+    )
+    due_date_before = django_filters.DateFilter(
+        label="Due Date To",
+        widget=forms.DateInput(attrs={"type": "date"}),
+        method="filter_due_date_before",
+    )
+
+    class Meta:
+        form = CSRFExemptForm
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity", None)
+        super().__init__(*args, **kwargs)
+        if self.opportunity:
+            active_tasks = Task.objects.filter(opportunity=self.opportunity, is_active=True)
+            self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
+
+    def filter_task_status(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
+
+    def filter_task_type(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
+
+    def filter_date_assigned_after(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
+
+    def filter_date_assigned_before(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
+
+    def filter_due_date_after(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
+
+    def filter_due_date_before(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
