@@ -63,6 +63,7 @@ from commcare_connect.opportunity.filters import (
     DeliverFilterSet,
     FilterMixin,
     OpportunityListFilterSet,
+    TasksFilterSet,
     UserVisitFilterSet,
 )
 from commcare_connect.opportunity.forms import (
@@ -2616,12 +2617,23 @@ class WorkerPaymentsView(BaseWorkerListView):
         return table
 
 
-class WorkerTaskView(BaseWorkerListView):
+class WorkerTaskView(BaseWorkerListView, FilterMixin):
     hx_template_name = "opportunity/tasks.html"
     active_tab = "tasks"
+    filter_class = TasksFilterSet
+
+    def get_filter_kwargs(self):
+        return {
+            "queryset": OpportunityAccess.objects.none(),
+            "request": self.request,
+            "opportunity": self.get_opportunity(),
+        }
+
+    def get_extra_context(self, opportunity, org_slug):
+        return self.get_filter_context()
 
     def get_table(self, opportunity, org_slug):
-        data = get_worker_tasks_table_data(opportunity)
+        data = get_worker_tasks_table_data(opportunity, filters=self.get_filter_values())
         table = WorkerTasksTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
