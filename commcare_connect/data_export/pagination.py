@@ -51,7 +51,7 @@ class IdKeysetPagination(BasePagination):
             raise ValidationError({"cursor_order": f"Must be one of {', '.join(VALID_CURSOR_ORDERS)}."})
 
         raw_last_id = request.query_params.get(self.last_id_query_param)
-        self.last_id = _parse_int(raw_last_id, "last_id") if raw_last_id is not None else None
+        self.last_id = _parse_int(raw_last_id, "last_id", positive=True) if raw_last_id is not None else None
 
         raw_page_size = request.query_params.get(self.page_size_query_param)
         if raw_page_size is not None:

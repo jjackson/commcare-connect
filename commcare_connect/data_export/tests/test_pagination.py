@@ -207,6 +207,7 @@ class TestIdKeysetPaginationEdgeCases:
             {"page_size": -1},
             {"cursor_order": "random"},
             {"page_size": "abc"},
+            {"last_id": -5},
         ],
     )
     def test_invalid_query_params_raise_validation_error(self, paginator, api_rf, params):
