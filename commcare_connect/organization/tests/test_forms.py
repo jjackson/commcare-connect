@@ -273,3 +273,31 @@ class TestOrganizationSelectOrCreateForm:
         assert form.errors["llo_entity"] == [
             "Selected LLO Entity does not match the existing organization's LLO Entity."
         ]
+
+    def test_create_new_llo_entity_with_short_name(self):
+        form = OrganizationSelectOrCreateForm(
+            data={
+                "org": TOMSELECT_NEW_ENTRY_PREFIX + "New Org",
+                "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO",
+                "llo_entity_short_name": "NL",
+            }
+        )
+        assert form.is_valid(), form.errors
+        org, is_new_org = form.save()
+        assert org.llo_entity is not None
+        assert org.llo_entity.name == "New LLO"
+        assert org.llo_entity.short_name == "NL"
+
+    def test_existing_llo_entity_short_name_not_updated(self):
+        existing_llo = LLOEntity.objects.create(name="Existing LLO", short_name="EL")
+        form = OrganizationSelectOrCreateForm(
+            data={
+                "org": TOMSELECT_NEW_ENTRY_PREFIX + "New Org",
+                "llo_entity": str(existing_llo.pk),
+                "llo_entity_short_name": "CHANGED",
+            }
+        )
+        assert form.is_valid(), form.errors
+        form.save()
+        existing_llo.refresh_from_db()
+        assert existing_llo.short_name == "EL"

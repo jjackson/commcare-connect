@@ -180,6 +180,11 @@ class OrganizationSelectOrCreateForm(forms.Form):
         empty_label=gettext_lazy("Select a LLO Entity"),
         create_key_name="name",
     )
+    llo_entity_short_name = forms.CharField(
+        label=gettext_lazy("LLO Entity Short Name"),
+        max_length=40,
+        required=False,
+    )
     org = DynamicCreatableChoiceField(
         queryset=Organization.objects.order_by("name"),
         create_key_name="name",
@@ -230,6 +235,8 @@ class OrganizationSelectOrCreateForm(forms.Form):
         org.llo_entity = llo_entity
         if commit:
             if llo_entity and not llo_entity.pk:
+                if short_name := self.cleaned_data.get("llo_entity_short_name") or None:
+                    llo_entity.short_name = short_name
                 llo_entity.save()
             if is_new_org:
                 org.save()
