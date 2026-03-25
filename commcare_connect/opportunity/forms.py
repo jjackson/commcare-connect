@@ -22,6 +22,7 @@ from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.app_xml import get_task_units_for_app
 from commcare_connect.opportunity.models import (
     CommCareApp,
+    CompletedTask,
     CompletedWork,
     CompletedWorkStatus,
     Country,
@@ -2011,3 +2012,34 @@ class EditTaskTypeForm(forms.ModelForm):
         if commit:
             instance.save()
         return instance
+
+
+class EditAssignedTaskForm(forms.ModelForm):
+    reason = forms.CharField(
+        required=False,
+        label=_("Reason for change (Optional)"),
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": _("Enter reason...")}),
+    )
+
+    class Meta:
+        model = CompletedTask
+        fields = ["due_date"]
+        widgets = {
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["due_date"].widget.attrs["min"] = datetime.date.today().isoformat()
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+
+    def clean_due_date(self):
+        due_date = self.cleaned_data["due_date"]
+        if due_date < datetime.date.today():
+            raise ValidationError(_("Due date cannot be in the past."))
+        return due_date
+
+    def has_changed(self):
+        # Ignore "reason" field if no updated due date is given
+        return "due_date" in self.changed_data
