@@ -251,6 +251,12 @@ class UserVisitVectorLayer(VectorLayer):
         super().__init__(*args, **kwargs)
 
     def get_queryset(self):
+        """
+        Returns the user visits with location_point annotated.
+
+        The user visit location is assumed to be a string in the format:
+        <lat> <lng> <altitude> <accuracy>
+        """
         return (
             UserVisit.objects.filter(opportunity=self.opportunity, location__isnull=False)
             .exclude(location="")
