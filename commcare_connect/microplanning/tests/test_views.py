@@ -126,7 +126,6 @@ class TestMicroplanningHomeView(BaseMicroplanningFlagTest):
 
     @pytest.mark.parametrize("setup_microplanning_flag", [False], indirect=True)
     def test_flag_disabled(self, client: Client, organization, org_user_admin, opportunity):
-        self.ENABLE_FLAG = False
         client.force_login(org_user_admin)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
@@ -353,6 +352,7 @@ class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
         assert fs.filters["assignee"].queryset.count() == 0
 
 
+@pytest.mark.django_db
 class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
     def url(self, opportunity):
         return reverse(
