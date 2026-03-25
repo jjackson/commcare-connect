@@ -828,14 +828,8 @@ class DateRanges(TextChoices):
 
 class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    from_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    to_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-        required=False,
-        initial=datetime.date.today().strftime("%Y-%m-%d"),
-    )
+    from_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    to_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     status = forms.MultipleChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
         widget=forms.SelectMultiple(
