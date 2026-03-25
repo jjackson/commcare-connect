@@ -213,9 +213,7 @@ class WorkAreaVectorLayer(VectorLayer):
             group_name=F("work_area_group__name"),
             assignee_name=F("work_area_group__opportunity_access__user__name"),
         )
-        filterset = WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity)
-        qs = filterset.qs
-        return qs
+        return WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
 
 
 @method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
