@@ -45,6 +45,10 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
         fields = []
         form = CSRFExemptForm
 
+    @property
+    def qs(self):
+        return super().qs.distinct()
+
     def __init__(self, *args, opportunity=None, **kwargs):
         super().__init__(*args, **kwargs)
         if opportunity:

@@ -16,7 +16,7 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
-from commcare_connect.microplanning.models import WorkAreaStatus
+from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
@@ -328,6 +328,25 @@ class TestWorkAreaMapFilterSet:
             )
         expected = {getattr(work_areas, attr).id for attr in expected_attrs}
         assert self._filter_ids(params, opportunity) == expected
+
+    def test_date_filter_no_duplicates(self, opportunity, work_areas):
+        """A work area with multiple visits in the range should appear only once."""
+        for day in ("2026-03-10", "2026-03-12", "2026-03-14"):
+            UserVisitFactory(
+                opportunity=opportunity,
+                user=work_areas.access.user,
+                work_area=work_areas.wa_visited,
+                visit_date=datetime.fromisoformat(f"{day}T00:00:00+00:00"),
+            )
+        qs = WorkArea.objects.filter(opportunity=opportunity)
+        result = list(
+            WorkAreaMapFilterSet(
+                {"start_date": "2026-03-11", "end_date": "2026-03-15"},
+                queryset=qs,
+                opportunity=opportunity,
+            ).qs.values_list("id", flat=True)
+        )
+        assert result == [work_areas.wa_visited.id]
 
     def test_combined_status_and_assignee(self, opportunity, work_areas):
         result = self._filter_ids(
