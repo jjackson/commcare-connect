@@ -1305,12 +1305,12 @@ class GroupedByWorkerMixin:
 
 class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
     index = IndexColumn()
-    worker_status = StatusIndicatorColumn(empty_values=())
-    user = tables.Column(verbose_name="Name", orderable=True, order_by="user__name")
-    task_name = tables.Column(verbose_name="Task Name", empty_values=())
-    date_assigned = DMYTColumn(verbose_name="Date Assigned")
-    due_date = DMYTColumn(verbose_name="Due Date", accessor="task_due_date")
-    task_status = TaskStatusColumn(verbose_name="Task Status", empty_values=())
+    worker_status = StatusIndicatorColumn(verbose_name=_("Status"), empty_values=())
+    user = tables.Column(verbose_name=_("Name"), orderable=True, order_by="user__name")
+    task_name = tables.Column(verbose_name=_("Task Name"), empty_values=())
+    date_assigned = DMYTColumn(verbose_name=_("Date Assigned"))
+    due_date = DMYTColumn(verbose_name=_("Due Date"), accessor="task_due_date")
+    task_status = TaskStatusColumn(verbose_name=_("Task Status"), empty_values=())
 
     class Meta:
         fields = ()
