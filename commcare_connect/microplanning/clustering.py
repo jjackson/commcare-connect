@@ -4,10 +4,9 @@ from dataclasses import dataclass
 
 from django.db import transaction
 from pyproj import Transformer
-from shapely import unary_union, wkb
+from shapely import get_dimensions, unary_union, wkb
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
-from shapely.prepared import prep
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
@@ -182,14 +181,11 @@ class WorkAreaGrouper:
             transformed_geoms[wa_id] = transform(self.transformer.transform, wa.boundary)
 
         wa_ids_list = list(transformed_geoms.keys())
-        geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
-
-        spatial_index = STRtree(geometries)
+        spatial_index = STRtree([transformed_geoms[wa_id] for wa_id in wa_ids_list])
 
         for work_area_id, geom in transformed_geoms.items():
             query_geom = geom.buffer(self.buffer_distance)
             candidate_indices = spatial_index.query(query_geom, predicate="intersects")
-            prepared_geom = prep(geom)
 
             for idx in candidate_indices:
                 neighbour_id = wa_ids_list[idx]
@@ -197,8 +193,9 @@ class WorkAreaGrouper:
                     continue
 
                 candidate_geom = transformed_geoms[neighbour_id]
+                shared_edge = geom.intersection(candidate_geom)
 
-                if prepared_geom.intersects(candidate_geom) or geom.distance(candidate_geom) <= self.buffer_distance:
+                if get_dimensions(shared_edge) >= 1 or geom.distance(candidate_geom) <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
                     adjacency[neighbour_id].add(work_area_id)
 
