@@ -264,10 +264,11 @@ TASK_STATUS_CHOICES = [
 
 
 class TasksFilterSet(django_filters.FilterSet):
-    worker_name = django_filters.CharFilter(
+    worker_name = django_filters.MultipleChoiceFilter(
         label="Worker Name",
-        field_name="user__name",
-        lookup_expr="icontains",
+        choices=[],
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        method="filter_worker_name",
     )
     task_status = django_filters.MultipleChoiceFilter(
         label="Task Status",
@@ -311,6 +312,22 @@ class TasksFilterSet(django_filters.FilterSet):
         if self.opportunity:
             active_tasks = Task.objects.filter(opportunity=self.opportunity, is_active=True)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
+
+            worker_queryset = (
+                User.objects.filter(
+                    opportunityaccess__opportunity=self.opportunity,
+                    opportunityaccess__accepted=True,
+                )
+                .distinct()
+                .order_by("name", "username")
+            )
+            self.filters["worker_name"].extra["choices"] = [
+                (str(user.pk), f"{user.name} ({user.username})") for user in worker_queryset
+            ]
+
+    def filter_worker_name(self, queryset, name, value):
+        """No-op: actual row-level filtering done in helper."""
+        return queryset
 
     def filter_task_status(self, queryset, name, value):
         """No-op: actual row-level filtering done in helper."""

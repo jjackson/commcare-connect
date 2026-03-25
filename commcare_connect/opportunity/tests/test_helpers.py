@@ -563,7 +563,7 @@ def test_get_worker_tasks_table_data_filter_worker_name(opportunity):
     CompletedTaskFactory(opportunity_access=access_alice, task=task)
     CompletedTaskFactory(opportunity_access=access_bob, task=task)
 
-    result = list(get_worker_tasks_table_data(opportunity, filters={"worker_name": "alice"}))
+    result = list(get_worker_tasks_table_data(opportunity, filters={"worker_name": [str(access_alice.user.pk)]}))
     assert len(result) == 1
     assert result[0].user.name == "Alice"
 
@@ -661,7 +661,7 @@ def test_get_worker_tasks_table_data_combined_filters(opportunity):
     result = list(
         get_worker_tasks_table_data(
             opportunity,
-            filters={"worker_name": "alice", "task_status": [CompletedTaskStatus.COMPLETED]},
+            filters={"worker_name": [str(access_alice.user.pk)], "task_status": [CompletedTaskStatus.COMPLETED]},
         )
     )
     assert len(result) == 1

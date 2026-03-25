@@ -631,7 +631,7 @@ def get_worker_tasks_table_data(opportunity, filters=None):
     )
 
     if worker_name := filters.get("worker_name"):
-        queryset = queryset.filter(user__name__icontains=worker_name)
+        queryset = queryset.filter(user__pk__in=[int(pk) for pk in worker_name])
 
     if task_status := filters.get("task_status"):
         status_q = Q()

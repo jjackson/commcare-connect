@@ -42,4 +42,14 @@
       </div>
     </div>
   </div>
+  <script>
+    document.querySelectorAll('[data-tomselect]').forEach(function (el) {
+        if (el.tomselect) return;
+        el.removeAttribute('class');
+        var plugins = el.hasAttribute('data-tomselect:no-remove-button')
+            ? []
+            : ['remove_button'];
+        new TomSelect(el, { plugins: plugins });
+    });
+  </script>
 {% endblock %}

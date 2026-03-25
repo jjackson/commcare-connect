@@ -116,11 +116,12 @@ def test_tasks_filterset_worker_name():
     CompletedTaskFactory(opportunity_access=access_bob, task=task)
 
     qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
-    filterset = TasksFilterSet(data={"worker_name": "alice"}, queryset=qs, opportunity=opp)
+    filterset = TasksFilterSet(data={"worker_name": [str(access_alice.user.pk)]}, queryset=qs, opportunity=opp)
 
-    result_pks = set(filterset.qs.values_list("pk", flat=True))
-    assert access_alice.pk in result_pks
-    assert access_bob.pk not in result_pks
+    assert filterset.form.is_valid()
+    choices = dict(filterset.form.fields["worker_name"].choices)
+    assert str(access_alice.user.pk) in choices
+    assert str(access_bob.user.pk) in choices
 
 
 @pytest.mark.django_db
