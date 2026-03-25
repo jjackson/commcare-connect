@@ -358,7 +358,7 @@ class TestUserVisitVectorLayer:
             work_area=visit_data.work_area,
             location="28.6 77.1 0 0",
         )
-        layer = UserVisitVectorLayer(opp_id=opportunity.id)
+        layer = UserVisitVectorLayer(opportunity=opportunity)
         qs = layer.get_queryset()
         assert qs.filter(id=visit.id).exists()
 
@@ -375,7 +375,7 @@ class TestUserVisitVectorLayer:
             work_area=visit_data.work_area,
             location="",
         )
-        layer = UserVisitVectorLayer(opp_id=opportunity.id)
+        layer = UserVisitVectorLayer(opportunity=opportunity)
         assert layer.get_queryset().count() == 0
 
     def test_queryset_annotates_location_point(self, opportunity, visit_data):
@@ -385,7 +385,7 @@ class TestUserVisitVectorLayer:
             work_area=visit_data.work_area,
             location="28.6 77.1 0 0",
         )
-        layer = UserVisitVectorLayer(opp_id=opportunity.id)
+        layer = UserVisitVectorLayer(opportunity=opportunity)
         visit = layer.get_queryset().first()
         # location format is "lat lon ..." so point should be (lon, lat) = (77.1, 28.6)
         assert round(visit.location_point.x, 1) == 77.1
@@ -405,5 +405,5 @@ class TestUserVisitVectorLayer:
             work_area=visit_data.work_area,
             location="28.6 77.1 0 0",
         )
-        layer = UserVisitVectorLayer(opp_id=opportunity.id)
+        layer = UserVisitVectorLayer(opportunity=opportunity)
         assert layer.get_queryset().count() == 1

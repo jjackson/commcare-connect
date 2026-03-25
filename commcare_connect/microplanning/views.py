@@ -246,13 +246,13 @@ class UserVisitVectorLayer(VectorLayer):
     geom_field = "location_point"
     min_zoom = WORKAREA_MIN_ZOOM
 
-    def __init__(self, *args, opp_id=None, **kwargs):
-        self.opp_id = opp_id
+    def __init__(self, *args, opportunity=None, **kwargs):
+        self.opportunity = opportunity
         super().__init__(*args, **kwargs)
 
     def get_queryset(self):
-        res = (
-            UserVisit.objects.filter(opportunity_id=self.opp_id, location__isnull=False)
+        return (
+            UserVisit.objects.filter(opportunity=self.opportunity, location__isnull=False)
             .exclude(location="")
             .annotate(
                 location_point=RawSQL(
@@ -265,7 +265,6 @@ class UserVisitVectorLayer(VectorLayer):
                 )
             )
         )
-        return res
 
 
 @method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
@@ -273,7 +272,7 @@ class UserVisitTileView(MVTView):
     layer_classes = [UserVisitVectorLayer]
 
     def get_layers(self):
-        return [UserVisitVectorLayer(opp_id=self.request.opportunity.id)]
+        return [UserVisitVectorLayer(opportunity=self.request.opportunity)]
 
 
 @org_admin_required
