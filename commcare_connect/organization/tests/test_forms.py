@@ -130,6 +130,56 @@ class TestOrganizationChangeForm:
             assert organization.llo_entity.name == "New LLO Entity"
             assert LLOEntity.objects.count() == 1
 
+    @pytest.mark.parametrize(
+        "has_permission, expected_short_name",
+        [
+            (True, "TL"),
+            (False, "OLD"),
+        ],
+    )
+    def test_update_llo_entity_short_name(
+        self, organization: Organization, user: User, has_permission, expected_short_name
+    ):
+        if has_permission:
+            app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+            user.user_permissions.add(perm)
+            user = User.objects.get(pk=user.pk)
+
+        llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="OLD")
+        organization.llo_entity = llo_entity
+        organization.save()
+
+        form = OrganizationChangeForm(
+            data={"name": organization.name, "llo_entity": llo_entity.pk, "llo_entity_short_name": "TL"},
+            user=user,
+            instance=organization,
+        )
+        assert form.is_valid(), form.errors
+        form.save()
+        llo_entity.refresh_from_db()
+        assert llo_entity.short_name == expected_short_name
+
+    def test_clear_llo_entity_short_name(self, organization: Organization, user: User):
+        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+        user.user_permissions.add(perm)
+        user = User.objects.get(pk=user.pk)
+
+        llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="TL")
+        organization.llo_entity = llo_entity
+        organization.save()
+
+        form = OrganizationChangeForm(
+            data={"name": organization.name, "llo_entity": llo_entity.pk, "llo_entity_short_name": ""},
+            user=user,
+            instance=organization,
+        )
+        assert form.is_valid(), form.errors
+        form.save()
+        llo_entity.refresh_from_db()
+        assert llo_entity.short_name is None
+
 
 @pytest.mark.django_db
 class TestOrganizationSelectOrCreateForm:

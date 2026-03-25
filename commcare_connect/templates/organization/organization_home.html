@@ -60,6 +60,7 @@
     <div x-show="selectedTab === 'details'" class="w-full mt-6">
       <h2 class="text-xl font-semibold text-brand-deep-purple mb-4">{% trans 'Workspace' %}</h2>
       <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-100 mb-10">
+        {{ form.get_entity_short_names|json_script:"entity-short-names" }}
         <form method="post" class="bg-white">
           {% csrf_token %}
           {% crispy form %}
@@ -114,6 +115,14 @@
         this.$watch('selectedTab', (value) => {
           this.updateUrl(value);
           this.loadTabContent(value);
+        });
+
+        document.addEventListener('tomselect-elements:initialized', () => {
+          if (!this.$refs.llo_entity || !this.$refs.llo_entity_short_name) return;
+          const entityShortNames = JSON.parse(document.getElementById('entity-short-names').textContent);
+          this.$refs.llo_entity.tomselect.on('change', (value) => {
+            this.$refs.llo_entity_short_name.value = entityShortNames[value] ?? '';
+          });
         });
       },
 

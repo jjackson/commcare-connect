@@ -41,22 +41,29 @@ class OrganizationChangeForm(forms.ModelForm):
         else:
             del self.fields["program_manager"]
 
+        layout_fields.append(layout.Field("llo_entity"))
         instance_llo = getattr(self.instance, "llo_entity", None)
         if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
             self.fields["llo_entity"] = CreatableModelChoiceField(
                 label=gettext("LLO Entity"),
                 queryset=LLOEntity.objects.order_by("name"),
-                widget=forms.Select(),
+                widget=forms.Select(attrs={"x-ref": "llo_entity"}),
                 empty_label=gettext("Select a LLO Entity"),
                 required=False,
                 create_key_name="name",
             )
             self.fields["llo_entity"].initial = instance_llo
+            self.fields["llo_entity_short_name"] = forms.CharField(
+                label=gettext("LLO Entity Short Name"),
+                max_length=40,
+                required=False,
+                initial=instance_llo.short_name if instance_llo else "",
+                widget=forms.TextInput(attrs={"x-ref": "llo_entity_short_name"}),
+            )
+            layout_fields.append(layout.Field("llo_entity_short_name"))
         else:
             if instance_llo:
                 self.fields["llo_entity"].choices = [(self.instance.llo_entity_id, str(self.instance.llo_entity))]
-
-        layout_fields.append(layout.Field("llo_entity"))
 
         self.helper = helper.FormHelper(self)
         self.helper.layout = layout.Layout(
@@ -67,6 +74,9 @@ class OrganizationChangeForm(forms.ModelForm):
             ),
         )
 
+    def get_entity_short_names(self):
+        return {str(e.id): e.short_name or "" for e in LLOEntity.objects.only("id", "short_name")}
+
     def clean_llo_entity(self):
         if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
             return self.cleaned_data["llo_entity"]
@@ -75,11 +85,14 @@ class OrganizationChangeForm(forms.ModelForm):
     def save(self, commit=True):
         org = super().save(commit=False)
         llo_entity = self.cleaned_data.get("llo_entity")
+        short_name = self.cleaned_data.get("llo_entity_short_name") or None
 
-        org.llo_entity = llo_entity
         if commit:
-            if llo_entity and not llo_entity.pk:
-                llo_entity.save()
+            if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+                if llo_entity and (not llo_entity.pk or llo_entity.short_name != short_name):
+                    llo_entity.short_name = short_name
+                    llo_entity.save()
+                org.llo_entity = llo_entity
             org.save()
         return org
 
