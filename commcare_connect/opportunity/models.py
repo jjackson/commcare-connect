@@ -268,6 +268,7 @@ class Task(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
+    archived = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=False)
     duration = models.IntegerField(null=True, blank=True)
 
