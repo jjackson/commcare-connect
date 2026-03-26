@@ -2013,6 +2013,24 @@ class TestSuspendUser:
         access.refresh_from_db()
         assert access.suspended is False
 
+    def test_suspend_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=False
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is False
+
     def test_suspend_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
         opportunity = OpportunityFactory(organization=program_manager_org)
         access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=False)
@@ -2049,6 +2067,24 @@ class TestRevokeUserSuspension:
     def test_revoke_as_nm_org_admin_returns_404(
         self, client, organization, org_user_admin, mobile_user, managed_opportunity
     ):
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
+    def test_revoke_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
         access = OpportunityAccessFactory(
             opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
         )

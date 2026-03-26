@@ -261,7 +261,7 @@ class SuspendedUsersTable(tables.Table):
         empty_text = "No suspended users."
 
     def __init__(self, *args, **kwargs):
-        self.is_org_pm = kwargs.pop("is_org_pm", False)
+        self.has_suspension_perm = kwargs.pop("has_suspension_perm", False)
         super().__init__(*args, **kwargs)
 
     def render_suspension_date(self, record, value):
@@ -282,7 +282,7 @@ class SuspendedUsersTable(tables.Table):
         )
         return render_to_string(
             "opportunity/partials/revoke_suspension.html",
-            {"revoke_url": revoke_url, "page_url": page_url, "is_org_pm": self.is_org_pm},
+            {"revoke_url": revoke_url, "page_url": page_url, "has_suspension_perm": self.has_suspension_perm},
             request=self.context.request,
         )
 

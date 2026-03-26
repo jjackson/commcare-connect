@@ -8,7 +8,7 @@
     {% else %}
       <span class="badge badge-md positive-dark">{% translate "Active" %}</span>
     {% endif %}
-    {% if is_org_pm %}
+    {% if has_suspension_perm %}
       {% if opportunity_access.suspended %}
         <button
           hx-post="{% url 'opportunity:revoke_user_suspension' org_slug=request.org.slug opp_id=opportunity_access.opportunity.opportunity_id pk=opportunity_access.opportunity_access_id %}"
