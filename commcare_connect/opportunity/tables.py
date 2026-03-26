@@ -1828,13 +1828,31 @@ class AssignedTaskListTable(OrgContextTable):
         return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
 
 
-class TaskTable(tables.Table):
+class TaskTable(OpportunityContextTable):
     index = IndexColumn()
     name = tables.Column(verbose_name=gettext_lazy("Task Type Name"))
     description = tables.Column(verbose_name=gettext_lazy("Description"))
     linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="unit_name")
+    archived = tables.DateColumn(verbose_name=gettext_lazy("Archived"))
+    actions = tables.TemplateColumn(
+        verbose_name=gettext_lazy("Actions"),
+        orderable=False,
+        template_code="""
+            {% load i18n %}
+            <button
+                type="button"
+                class="button button-md outline-style"
+                hx-get="{% url 'opportunity:edit_task_type' table.org_slug table.opp_id record.pk %}"
+                hx-target="#edit-task-form"
+                @htmx:after-request="if ($event.detail.successful) {
+                        showEditTaskTypeModal = true; editTaskError = false
+                    } else { editTaskError = true }">
+                <i class="fa-regular fa-pen-to-square mr-1"></i> {% translate "Edit" %}
+            </button>
+        """,
+    )
 
     class Meta:
         model = Task
-        fields = ("index", "name", "description", "linked_task_unit")
+        fields = ("index", "name", "description", "linked_task_unit", "archived", "actions")
         empty_text = gettext_lazy("No task types configured for this opportunity.")

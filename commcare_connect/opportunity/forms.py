@@ -828,14 +828,8 @@ class DateRanges(TextChoices):
 
 class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    from_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    to_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-        required=False,
-        initial=datetime.date.today().strftime("%Y-%m-%d"),
-    )
+    from_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    to_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     status = forms.MultipleChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
         widget=forms.SelectMultiple(
@@ -1990,3 +1984,30 @@ class AddTaskTypeForm(forms.ModelForm):
         if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
             self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
         return cleaned_data
+
+
+class EditTaskTypeForm(forms.ModelForm):
+    is_archived = forms.BooleanField(required=False, label=_("Archive this task type"))
+
+    class Meta:
+        model = Task
+        fields = ["name", "description"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.archived:
+            self.fields["is_archived"].initial = True
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data["is_archived"]:
+            if not instance.archived:
+                instance.archived = now()
+        else:
+            instance.archived = None
+        if commit:
+            instance.save()
+        return instance

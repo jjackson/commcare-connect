@@ -7,9 +7,11 @@ from uuid import uuid4
 import pytest
 from django.contrib.messages import get_messages
 from django.core.files.storage.handler import StorageHandler
+from django.template import Context
 from django.test import Client
 from django.urls import get_resolver, reverse
 from django.utils.timezone import now
+from django_tables2 import RequestConfig
 from waffle.testutils import override_switch
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
@@ -33,6 +35,7 @@ from commcare_connect.opportunity.models import (
     VisitReviewStatus,
     VisitValidationStatus,
 )
+from commcare_connect.opportunity.tables import TaskTable
 from commcare_connect.opportunity.tasks import invite_user
 from commcare_connect.opportunity.tests.factories import (
     BlobMetaFactory,
@@ -2284,6 +2287,83 @@ class TestTaskTypesConfig:
         assert response.status_code == HTTPStatus.OK
         assert not Task.objects.filter(app=opp.deliver_app).exists()
         assert response.context["form"].errors
+
+    # --- Edit task type tests ---
+
+    @pytest.fixture
+    def task(self, opp):
+        return TaskFactory(app=opp.deliver_app)
+
+    def _edit_url(self, opp, task):
+        return reverse("opportunity:edit_task_type", args=(opp.organization.slug, opp.opportunity_id, task.pk))
+
+    def test_edit_task_type_get_returns_form(self, client, program_manager_org_user_admin, opp, task):
+        client.force_login(program_manager_org_user_admin)
+        response = client.get(self._edit_url(opp, task))
+        assert response.status_code == HTTPStatus.OK
+        assert response.context["form"].instance == task
+
+    @pytest.mark.parametrize(
+        "data, is_valid",
+        [
+            ({"name": "Updated Name", "description": "Updated Desc"}, True),
+            ({"name": "", "description": "Desc"}, False),
+        ],
+    )
+    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task, data, is_valid):
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(self._edit_url(opp, task), data=data)
+        assert response.status_code == HTTPStatus.OK
+        if is_valid:
+            assert response["HX-Redirect"] == self._url(opp)
+            task.refresh_from_db()
+            assert task.name == data["name"]
+            assert task.description == data["description"]
+        else:
+            assert "HX-Redirect" not in response
+            assert response.context["form"].errors
+
+    def test_edit_task_type_requires_org_membership(self, client, user, opp, task):
+        client.force_login(user)
+        response = client.get(self._edit_url(opp, task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_edit_task_type_managed_opp_requires_pm_role(
+        self, client, organization, org_user_admin, program_manager_org
+    ):
+        program = ProgramFactory(organization=program_manager_org)
+        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        task = TaskFactory(app=managed_opp.deliver_app)
+        url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task.pk))
+        client.force_login(org_user_admin)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+
+    def test_edit_task_type_scoped_to_opportunity_app(self, client, program_manager_org_user_admin, opp):
+        other_task = TaskFactory()  # different app
+        client.force_login(program_manager_org_user_admin)
+        response = client.get(self._edit_url(opp, other_task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.django_db
+class TestTaskTable:
+    def test_edit_button_renders_htmx_attributes(self, rf, opportunity, organization):
+        task = TaskFactory(app=opportunity.deliver_app)
+        request = rf.get("/")
+        table = TaskTable(
+            Task.objects.filter(app=opportunity.deliver_app),
+            org_slug=organization.slug,
+            opp_id=opportunity.opportunity_id,
+        )
+        RequestConfig(request).configure(table)
+        table.context = Context({"table": table})
+        html = table.rows[0].get_cell("actions")
+        expected_url = reverse(
+            "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task.pk)
+        )
+        assert f'hx-get="{expected_url}"' in html
+        assert 'hx-target="#edit-task-form"' in html
 
 
 @pytest.mark.django_db
