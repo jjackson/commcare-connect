@@ -574,8 +574,9 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         rows = self._parse_csv(response)
         csv_headers = rows[0]
 
-        expected_columns = set(WorkAreaCSVImporter.HEADERS.values()) | {"Work Area Group Name"}
-        assert set(csv_headers) == expected_columns
+        expected_headers = list(reversed_headers.values()) + ["Work Area Group Name"]
+        assert csv_headers == expected_headers
+        assert len(rows[1]) == len(csv_headers)
 
         row_dict = dict(zip(csv_headers, rows[1]))
         assert row_dict["Area Slug"] == "slug-rev"
