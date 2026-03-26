@@ -2,6 +2,7 @@ import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
 from django.db.models import Q
+from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
@@ -263,9 +264,9 @@ class UserVisitFilterSet(django_filters.FilterSet):
 NO_TASKS_FILTER_VALUE = "no_tasks"
 
 TASK_STATUS_CHOICES = [
-    (CompletedTaskStatus.ASSIGNED, "To Do"),
-    (CompletedTaskStatus.COMPLETED, "Completed"),
-    (NO_TASKS_FILTER_VALUE, "No Tasks"),
+    (CompletedTaskStatus.ASSIGNED, _("To Do")),
+    (CompletedTaskStatus.COMPLETED, _("Completed")),
+    (NO_TASKS_FILTER_VALUE, _("No Tasks")),
 ]
 
 
