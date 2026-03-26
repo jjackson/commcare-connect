@@ -1843,20 +1843,6 @@ class AssignedTaskListTable(OpportunityContextTable):
             value.username,
         )
 
-    def render_status(self, value):
-        if value == CompletedTaskStatus.ASSIGNED:
-            status = _("To Do")
-            badge_classes = "bg-amber-100 text-amber-800"
-        else:
-            status = _("Complete")
-            badge_classes = "bg-green-100 text-green-800"
-        return format_html(
-            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
-            "{}</span>",
-            badge_classes,
-            status,
-        )
-
 
 class TaskTable(OpportunityContextTable):
     index = IndexColumn()
