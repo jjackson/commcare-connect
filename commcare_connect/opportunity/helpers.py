@@ -26,6 +26,7 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, Round
 from django.utils.timezone import now
 
+from commcare_connect.opportunity.filters import NO_TASKS_FILTER_VALUE
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
@@ -635,10 +636,10 @@ def get_worker_tasks_table_data(opportunity, filters=None):
 
     if task_status := filters.get("task_status"):
         status_q = Q()
-        real_statuses = [s for s in task_status if s != "no_tasks"]
+        real_statuses = [s for s in task_status if s != NO_TASKS_FILTER_VALUE]
         if real_statuses:
             status_q |= Q(task_status__in=real_statuses)
-        if "no_tasks" in task_status:
+        if NO_TASKS_FILTER_VALUE in task_status:
             status_q |= Q(task_status__isnull=True)
         queryset = queryset.filter(status_q)
 

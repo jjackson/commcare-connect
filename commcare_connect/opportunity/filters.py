@@ -43,10 +43,13 @@ class FilterMixin:
         }
 
     def _get_filter(self):
-        filter_class = self._get_filter_class()
-        if filter_class:
-            return filter_class(self.request.GET, **self.get_filter_kwargs())
-        return None
+        if not hasattr(self, "_filter_instance"):
+            filter_class = self._get_filter_class()
+            if filter_class:
+                self._filter_instance = filter_class(self.request.GET, **self.get_filter_kwargs())
+            else:
+                self._filter_instance = None
+        return self._filter_instance
 
     def get_filter_form(self):
         f = self._get_filter()
@@ -256,11 +259,18 @@ class UserVisitFilterSet(django_filters.FilterSet):
         return [(flag, FlagLabels.get_label(flag)) for flag in set(enabled_flags)]
 
 
+NO_TASKS_FILTER_VALUE = "no_tasks"
+
 TASK_STATUS_CHOICES = [
     (CompletedTaskStatus.ASSIGNED, "To Do"),
     (CompletedTaskStatus.COMPLETED, "Complete"),
-    ("no_tasks", "No Tasks"),
+    (NO_TASKS_FILTER_VALUE, "No Tasks"),
 ]
+
+
+def _noop_filter(queryset, name, value):
+    """No-op: actual filtering done in the helper, not the FilterSet."""
+    return queryset
 
 
 class TasksFilterSet(django_filters.FilterSet):
@@ -268,39 +278,39 @@ class TasksFilterSet(django_filters.FilterSet):
         label="Worker Name",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_worker_name",
+        method=_noop_filter,
     )
     task_status = django_filters.MultipleChoiceFilter(
         label="Task Status",
         choices=TASK_STATUS_CHOICES,
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_task_status",
+        method=_noop_filter,
     )
     task_type = django_filters.MultipleChoiceFilter(
         label="Task Type",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_task_type",
+        method=_noop_filter,
     )
     date_assigned_after = django_filters.DateFilter(
         label="Date Assigned From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_date_assigned_after",
+        method=_noop_filter,
     )
     date_assigned_before = django_filters.DateFilter(
         label="Date Assigned To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_date_assigned_before",
+        method=_noop_filter,
     )
     due_date_after = django_filters.DateFilter(
         label="Due Date From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_due_date_after",
+        method=_noop_filter,
     )
     due_date_before = django_filters.DateFilter(
         label="Due Date To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_due_date_before",
+        method=_noop_filter,
     )
 
     class Meta:
@@ -324,31 +334,3 @@ class TasksFilterSet(django_filters.FilterSet):
             self.filters["worker_name"].extra["choices"] = [
                 (str(user.pk), f"{user.name} ({user.username})") for user in worker_queryset
             ]
-
-    def filter_worker_name(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_task_status(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_task_type(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_date_assigned_after(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_date_assigned_before(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_due_date_after(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
-
-    def filter_due_date_before(self, queryset, name, value):
-        """No-op: actual row-level filtering done in helper."""
-        return queryset
