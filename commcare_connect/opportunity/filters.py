@@ -1,6 +1,7 @@
 import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
+from django.db.models import Q
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
@@ -268,49 +269,44 @@ TASK_STATUS_CHOICES = [
 ]
 
 
-def _noop_filter(queryset, name, value):
-    """No-op: actual filtering done in the helper, not the FilterSet."""
-    return queryset
-
-
 class TasksFilterSet(django_filters.FilterSet):
     worker_name = django_filters.MultipleChoiceFilter(
         label="Worker Name",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method=_noop_filter,
+        method="filter_worker_name",
     )
     task_status = django_filters.MultipleChoiceFilter(
         label="Task Status",
         choices=TASK_STATUS_CHOICES,
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method=_noop_filter,
+        method="filter_task_status",
     )
     task_type = django_filters.MultipleChoiceFilter(
         label="Task Type",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method=_noop_filter,
+        method="filter_task_type",
     )
     date_assigned_after = django_filters.DateFilter(
         label="Date Assigned From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method=_noop_filter,
+        method="filter_date_assigned_after",
     )
     date_assigned_before = django_filters.DateFilter(
         label="Date Assigned To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method=_noop_filter,
+        method="filter_date_assigned_before",
     )
     due_date_after = django_filters.DateFilter(
         label="Due Date From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method=_noop_filter,
+        method="filter_due_date_after",
     )
     due_date_before = django_filters.DateFilter(
         label="Due Date To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method=_noop_filter,
+        method="filter_due_date_before",
     )
 
     class Meta:
@@ -334,3 +330,44 @@ class TasksFilterSet(django_filters.FilterSet):
             self.filters["worker_name"].extra["choices"] = [
                 (str(user.pk), user.display_name_with_username()) for user in worker_queryset
             ]
+
+    def filter_worker_name(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(user__pk__in=[int(pk) for pk in value])
+
+    def filter_task_status(self, queryset, name, value):
+        if not value:
+            return queryset
+        status_q = Q()
+        real_statuses = [s for s in value if s != NO_TASKS_FILTER_VALUE]
+        if real_statuses:
+            status_q |= Q(task_status__in=real_statuses)
+        if NO_TASKS_FILTER_VALUE in value:
+            status_q |= Q(task_status__isnull=True)
+        return queryset.filter(status_q)
+
+    def filter_task_type(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(task_id__in=[int(t) for t in value])
+
+    def filter_date_assigned_after(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(date_assigned__date__gte=value)
+
+    def filter_date_assigned_before(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(date_assigned__date__lte=value)
+
+    def filter_due_date_after(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(task_due_date__gte=value)
+
+    def filter_due_date_before(self, queryset, name, value):
+        if not value:
+            return queryset
+        return queryset.filter(task_due_date__lte=value)

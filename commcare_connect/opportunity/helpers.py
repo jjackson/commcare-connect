@@ -26,7 +26,6 @@ from django.db.models import (
 from django.db.models.functions import Coalesce, Round
 from django.utils.timezone import now
 
-from commcare_connect.opportunity.filters import NO_TASKS_FILTER_VALUE
 from commcare_connect.opportunity.models import (
     Assessment,
     CompletedModule,
@@ -609,16 +608,15 @@ def get_worker_learn_table_data(opportunity):
     return queryset
 
 
-def get_worker_tasks_table_data(opportunity, filters=None):
-    """Return one row per (worker, task) pair via LEFT JOIN on CompletedTask.
+def get_worker_tasks_base_queryset(opportunity):
+    """Return the annotated queryset for the worker tasks table.
 
+    One row per (worker, task) pair via LEFT JOIN on CompletedTask.
     Workers with no tasks appear as a single row with NULL task fields.
-    Rows are ordered by user name then task creation date, as required by
+    Ordered by user name then task creation date, as required by
     `GroupedByWorkerMixin` for correct row grouping.
     """
-    filters = filters or {}
-
-    queryset = (
+    return (
         OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
         .select_related("user")
         .annotate(
@@ -629,36 +627,8 @@ def get_worker_tasks_table_data(opportunity, filters=None):
             task_due_date=F("completedtask__due_date"),
             task_status=F("completedtask__status"),
         )
+        .order_by("user__name", "completedtask__date_created")
     )
-
-    if worker_name := filters.get("worker_name"):
-        queryset = queryset.filter(user__pk__in=[int(pk) for pk in worker_name])
-
-    if task_status := filters.get("task_status"):
-        status_q = Q()
-        real_statuses = [s for s in task_status if s != NO_TASKS_FILTER_VALUE]
-        if real_statuses:
-            status_q |= Q(task_status__in=real_statuses)
-        if NO_TASKS_FILTER_VALUE in task_status:
-            status_q |= Q(task_status__isnull=True)
-        queryset = queryset.filter(status_q)
-
-    if task_type := filters.get("task_type"):
-        queryset = queryset.filter(task_id__in=[int(t) for t in task_type])
-
-    if date_assigned_after := filters.get("date_assigned_after"):
-        queryset = queryset.filter(date_assigned__date__gte=date_assigned_after)
-
-    if date_assigned_before := filters.get("date_assigned_before"):
-        queryset = queryset.filter(date_assigned__date__lte=date_assigned_before)
-
-    if due_date_after := filters.get("due_date_after"):
-        queryset = queryset.filter(task_due_date__gte=due_date_after)
-
-    if due_date_before := filters.get("due_date_before"):
-        queryset = queryset.filter(task_due_date__lte=due_date_before)
-
-    return queryset.order_by("user__name", "completedtask__date_created")
 
 
 def get_opportunity_delivery_progress(opp_id):

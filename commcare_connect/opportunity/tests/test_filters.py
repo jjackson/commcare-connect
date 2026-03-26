@@ -3,7 +3,8 @@ from waffle.testutils import override_switch
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.filters import TasksFilterSet, UserVisitFilterSet
-from commcare_connect.opportunity.models import CompletedTaskStatus, OpportunityAccess, UserVisit
+from commcare_connect.opportunity.helpers import get_worker_tasks_base_queryset
+from commcare_connect.opportunity.models import CompletedTaskStatus, UserVisit
 from commcare_connect.opportunity.tests.factories import (
     CompletedTaskFactory,
     CompletedWorkFactory,
@@ -115,13 +116,16 @@ def test_tasks_filterset_worker_name():
     CompletedTaskFactory(opportunity_access=access_alice, task=task)
     CompletedTaskFactory(opportunity_access=access_bob, task=task)
 
-    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"worker_name": [str(access_alice.user.pk)]}, queryset=qs, opportunity=opp)
 
     assert filterset.form.is_valid()
     choices = dict(filterset.form.fields["worker_name"].choices)
     assert str(access_alice.user.pk) in choices
     assert str(access_bob.user.pk) in choices
+    result = list(filterset.qs)
+    assert len(result) == 1
+    assert result[0].user == access_alice.user
 
 
 @pytest.mark.django_db
@@ -132,10 +136,13 @@ def test_tasks_filterset_task_status_single():
     CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.ASSIGNED)
     CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.COMPLETED)
 
-    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"task_status": [CompletedTaskStatus.COMPLETED]}, queryset=qs, opportunity=opp)
 
     assert filterset.form.is_valid()
+    result = list(filterset.qs)
+    assert len(result) == 1
+    assert result[0].task_status == CompletedTaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
@@ -147,13 +154,16 @@ def test_tasks_filterset_task_type():
     CompletedTaskFactory(opportunity_access=access, task=task_a)
     CompletedTaskFactory(opportunity_access=access, task=task_b)
 
-    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"task_type": [str(task_a.pk)]}, queryset=qs, opportunity=opp)
 
     assert filterset.form.is_valid()
     choices = dict(filterset.form.fields["task_type"].choices)
     assert str(task_a.pk) in choices
     assert str(task_b.pk) in choices
+    result = list(filterset.qs)
+    assert len(result) == 1
+    assert result[0].task_name == task_a.name
 
 
 @pytest.mark.django_db
@@ -162,7 +172,7 @@ def test_tasks_filterset_task_type_excludes_inactive():
     active_task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Active")
     inactive_task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=False, name="Inactive")
 
-    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={}, queryset=qs, opportunity=opp)
 
     choices = dict(filterset.form.fields["task_type"].choices)
@@ -172,9 +182,17 @@ def test_tasks_filterset_task_type_excludes_inactive():
 
 @pytest.mark.django_db
 def test_tasks_filterset_no_tasks_status():
-    """The 'no_tasks' status option should be available."""
+    """The 'no_tasks' status option filters to workers with no completed tasks."""
     opp = OpportunityFactory()
-    qs = OpportunityAccess.objects.filter(opportunity=opp, accepted=True)
+    access_with_task = OpportunityAccessFactory(opportunity=opp, accepted=True)
+    access_no_task = OpportunityAccessFactory(opportunity=opp, accepted=True)
+    task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
+    CompletedTaskFactory(opportunity_access=access_with_task, task=task)
+
+    qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"task_status": ["no_tasks"]}, queryset=qs, opportunity=opp)
 
     assert filterset.form.is_valid()
+    result = list(filterset.qs)
+    assert len(result) == 1
+    assert result[0].user == access_no_task.user
