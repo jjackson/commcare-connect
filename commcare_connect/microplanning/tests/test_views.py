@@ -342,7 +342,7 @@ class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
 
 
 @pytest.mark.django_db
-class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
+class TestWorkAreaMapFilterSet:
     @pytest.fixture
     def work_areas(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
