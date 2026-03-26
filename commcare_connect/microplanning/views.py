@@ -288,7 +288,7 @@ def download_work_areas(request, org_slug, opp_id):
             "wag_serial_number": props.get("wag_serial_number", ""),
             "lga": props.get("lga", ""),
             "state": props.get("state", ""),
-            "group_name": wa.group_name,
+            "group_name": wa.group_name or "",
         }
         return [field_map[key] for key in headers]
 

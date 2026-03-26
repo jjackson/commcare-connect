@@ -524,8 +524,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert len(rows) == 2
 
     def test_assignee_filter(self, client, org_user_admin, opportunity):
-        from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory
-
         access = OpportunityAccessFactory(opportunity=opportunity)
         group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
         WorkAreaFactory(opportunity=opportunity, work_area_group=group)
