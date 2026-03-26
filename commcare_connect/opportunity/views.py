@@ -98,10 +98,10 @@ from commcare_connect.opportunity.helpers import (
     get_worker_tasks_table_data,
 )
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     BlobMeta,
     CompletedModule,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -3248,7 +3248,7 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
     def get_queryset(self):
         opportunity = self.get_opportunity()
         return (
-            CompletedTask.objects.filter(opportunity_access__opportunity=opportunity)
+            AssignedTask.objects.filter(opportunity_access__opportunity=opportunity)
             .select_related("task", "opportunity_access__user", "assigned_by")
             .order_by("-date_created")
         )
@@ -3257,10 +3257,10 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         context = super().get_context_data(**kwargs)
         opportunity = self.get_opportunity()
 
-        counts = CompletedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
+        counts = AssignedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
             total_tasks=Count("id"),
-            open_tasks=Count("id", filter=Q(status=CompletedTaskStatus.ASSIGNED)),
-            complete_tasks=Count("id", filter=Q(status=CompletedTaskStatus.COMPLETED)),
+            open_tasks=Count("id", filter=Q(status=AssignedTaskStatus.ASSIGNED)),
+            complete_tasks=Count("id", filter=Q(status=AssignedTaskStatus.COMPLETED)),
         )
 
         context["opportunity"] = opportunity

@@ -14,9 +14,9 @@ from django_tables2 import columns
 
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     CatchmentArea,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -1091,10 +1091,10 @@ class TaskStatusColumn(tables.Column):
     def render(self, value):
         if value is None:
             return "—"
-        if value == CompletedTaskStatus.ASSIGNED:
+        if value == AssignedTaskStatus.ASSIGNED:
             status = _("To Do")
             badge_classes = "bg-amber-100 text-amber-800"
-        elif value == CompletedTaskStatus.COMPLETED:
+        elif value == AssignedTaskStatus.COMPLETED:
             status = _("Complete")
             badge_classes = "bg-green-100 text-green-800"
         else:
@@ -1789,7 +1789,7 @@ class AssignedTaskListTable(OrgContextTable):
     action = tables.Column(verbose_name="", orderable=False, empty_values=())
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ()
         sequence = (
             "assigned_task_id",

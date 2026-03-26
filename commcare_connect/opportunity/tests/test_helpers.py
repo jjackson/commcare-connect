@@ -21,8 +21,8 @@ from commcare_connect.opportunity.models import (
 )
 from commcare_connect.opportunity.tests.factories import (
     AssessmentFactory,
+    AssignedTaskFactory,
     CompletedModuleFactory,
-    CompletedTaskFactory,
     CompletedWorkFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
@@ -528,8 +528,8 @@ def test_deliver_status_query_with_filters(opportunity, filters, expected_userna
 def test_get_worker_tasks_table_data(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    CompletedTaskFactory(opportunity_access=access)
-    CompletedTaskFactory(opportunity_access=access)
+    AssignedTaskFactory(opportunity_access=access)
+    AssignedTaskFactory(opportunity_access=access)
 
     result = list(get_worker_tasks_table_data(opportunity))
     assert len(result) == 2
