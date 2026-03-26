@@ -203,7 +203,7 @@ class UserVisitFilterSet(django_filters.FilterSet):
             user_queryset = (
                 User.objects.filter(opportunityaccess__opportunity=opportunity).distinct().order_by("name", "username")
             )
-            user_choices = [(str(user.user_id), f"{user.name} ({user.username})") for user in user_queryset]
+            user_choices = [(str(user.user_id), user.display_name_with_username()) for user in user_queryset]
             user_filter.extra["choices"] = user_choices
 
         if opportunity and "flags" in self.filters:
