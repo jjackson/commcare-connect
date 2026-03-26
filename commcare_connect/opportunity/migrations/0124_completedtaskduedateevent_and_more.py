@@ -9,7 +9,7 @@ import pgtrigger.migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("pghistory", "0007_auto_20250421_0444"),
-        ("opportunity", "0118_task_archived_on"),
+        ("opportunity", "0123_task_archived_on"),
     ]
 
     operations = [
