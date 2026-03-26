@@ -71,6 +71,7 @@ from commcare_connect.opportunity.forms import (
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     DeliverUnitFlagsForm,
+    EditTaskTypeForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
     OpportunityChangeForm,
@@ -94,6 +95,7 @@ from commcare_connect.opportunity.helpers import (
     get_payment_report_data,
     get_worker_learn_table_data,
     get_worker_table_data,
+    get_worker_tasks_table_data,
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
@@ -144,6 +146,7 @@ from commcare_connect.opportunity.tables import (
     WorkerLearnTable,
     WorkerPaymentsTable,
     WorkerStatusTable,
+    WorkerTasksTable,
     header_with_tooltip,
 )
 from commcare_connect.opportunity.tasks import (
@@ -1182,11 +1185,12 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
     template_name = "opportunity/task_types_config.html"
 
     def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return super().dispatch(request, *args, **kwargs)
+        return response
 
-    def get_context_data(self, form, **kwargs):
+    def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         opportunity = self.get_opportunity()
         org_slug = self.request.org.slug
@@ -1200,21 +1204,20 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
             },
             {"title": _("Configure Task Types"), "url": self.request.path},
         ]
-        table = TaskTable(tasks)
+        table = TaskTable(tasks, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         context.update(
             {
                 "opportunity": opportunity,
                 "table": table,
-                "form": form,
+                "form": kwargs.get("form", AddTaskTypeForm(opportunity=opportunity)),
                 "path": path,
             }
         )
         return context
 
     def get(self, request, org_slug, opp_id):
-        form = AddTaskTypeForm(opportunity=self.get_opportunity())
-        return self.render_to_response(self.get_context_data(form=form))
+        return self.render_to_response(self.get_context_data())
 
     def post(self, request, org_slug, opp_id):
         opportunity = self.get_opportunity()
@@ -1224,6 +1227,38 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
             messages.success(request, _("Task type added successfully."))
             return redirect("opportunity:task_types_config", org_slug=org_slug, opp_id=opp_id)
         return self.render_to_response(self.get_context_data(form=form))
+
+
+class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+    template_name = "opportunity/edit_task_type_form.html"
+    form_class = EditTaskTypeForm
+    model = Task
+
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        if self.get_opportunity().managed and not request.is_opportunity_pm:
+            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
+        return response
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["hx_post_url"] = reverse(
+            "opportunity:edit_task_type",
+            args=(self.kwargs["org_slug"], self.kwargs["opp_id"], self.kwargs["pk"]),
+        )
+        return context
+
+    def form_valid(self, form):
+        form.save()
+        messages.success(self.request, _("Task type updated successfully."))
+        response = HttpResponse()
+        response["HX-Redirect"] = reverse(
+            "opportunity:task_types_config", args=(self.kwargs["org_slug"], self.kwargs["opp_id"])
+        )
+        return response
 
 
 @org_member_required
@@ -2412,6 +2447,7 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
         {"key": "learn", "label": "Learn", "url_name": "opportunity:worker_learn"},
         {"key": "deliver", "label": "Deliver", "url_name": "opportunity:worker_deliver"},
         {"key": "payments", "label": "Payments", "url_name": "opportunity:worker_payments"},
+        {"key": "tasks", "label": "Tasks", "url_name": "opportunity:worker_tasks"},
     ]
 
     def _is_navigating_between_tabs(self, org_slug, opportunity):
@@ -2609,6 +2645,17 @@ class WorkerPaymentsView(BaseWorkerListView):
             confirmed_paid_d=get_payment_subquery(True),
         )
         table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opportunity.opportunity_id)
+        RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
+        return table
+
+
+class WorkerTaskView(BaseWorkerListView):
+    hx_template_name = "opportunity/tasks.html"
+    active_tab = "tasks"
+
+    def get_table(self, opportunity, org_slug):
+        data = get_worker_tasks_table_data(opportunity)
+        table = WorkerTasksTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
 
