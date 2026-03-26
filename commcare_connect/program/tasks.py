@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.translation import gettext as _
+from django.utils.translation import ngettext
 
 from commcare_connect.opportunity.models import (
     CompletedWork,
@@ -237,8 +238,11 @@ def send_opportunity_expiry_reminder_emails(days_before: int):
 
         opp_count = len(opps)
         date_str = target_date.strftime("%d %b %Y")
-        opp_word = "opportunity" if opp_count == 1 else "opportunities"
-        subject = f"Reminder: {opp_count} {opp_word} ending on {date_str}"
+        subject = ngettext(
+            "Reminder: %(count)d opportunity ending on %(date)s",
+            "Reminder: %(count)d opportunities ending on %(date)s",
+            opp_count,
+        ) % {"count": opp_count, "date": date_str}
         context = {
             "target_date": target_date,
             "opportunities": opps,
