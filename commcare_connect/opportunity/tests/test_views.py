@@ -2364,3 +2364,36 @@ class TestTaskTable:
         )
         assert f'hx-get="{expected_url}"' in html
         assert 'hx-target="#edit-task-form"' in html
+
+
+@pytest.mark.django_db
+class TestWorkerTasksView:
+    def _url(self, organization, opportunity):
+        return reverse("opportunity:worker_tasks", args=(organization.slug, opportunity.opportunity_id))
+
+    def test_unauthenticated_redirects(self, client, organization, opportunity):
+        response = client.get(self._url(organization, opportunity))
+        assert response.status_code == 302
+
+    def test_empty_table(self, client, organization, opportunity, org_user_member):
+        client.force_login(org_user_member)
+        response = client.get(self._url(organization, opportunity))
+        assert response.status_code == 200
+
+    def test_with_data(self, client, organization, opportunity, org_user_member):
+        client.force_login(org_user_member)
+
+        access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
+        UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
+        CompletedTaskFactory(opportunity_access=access)
+        CompletedTaskFactory(opportunity_access=access)
+
+        url = self._url(organization, opportunity)
+
+        response = client.get(url)
+        assert response.status_code == 200
+
+        # htmx tab load should return the table fragment
+        response = client.get(url, HTTP_HX_REQUEST="true")
+        assert response.status_code == 200
+        assert b"Task Name" in response.content

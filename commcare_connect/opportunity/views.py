@@ -95,6 +95,7 @@ from commcare_connect.opportunity.helpers import (
     get_payment_report_data,
     get_worker_learn_table_data,
     get_worker_table_data,
+    get_worker_tasks_table_data,
 )
 from commcare_connect.opportunity.models import (
     BlobMeta,
@@ -145,6 +146,7 @@ from commcare_connect.opportunity.tables import (
     WorkerLearnTable,
     WorkerPaymentsTable,
     WorkerStatusTable,
+    WorkerTasksTable,
     header_with_tooltip,
 )
 from commcare_connect.opportunity.tasks import (
@@ -2445,6 +2447,7 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
         {"key": "learn", "label": "Learn", "url_name": "opportunity:worker_learn"},
         {"key": "deliver", "label": "Deliver", "url_name": "opportunity:worker_deliver"},
         {"key": "payments", "label": "Payments", "url_name": "opportunity:worker_payments"},
+        {"key": "tasks", "label": "Tasks", "url_name": "opportunity:worker_tasks"},
     ]
 
     def _is_navigating_between_tabs(self, org_slug, opportunity):
@@ -2642,6 +2645,17 @@ class WorkerPaymentsView(BaseWorkerListView):
             confirmed_paid_d=get_payment_subquery(True),
         )
         table = WorkerPaymentsTable(query_set, org_slug=org_slug, opp_id=opportunity.opportunity_id)
+        RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
+        return table
+
+
+class WorkerTaskView(BaseWorkerListView):
+    hx_template_name = "opportunity/tasks.html"
+    active_tab = "tasks"
+
+    def get_table(self, opportunity, org_slug):
+        data = get_worker_tasks_table_data(opportunity)
+        table = WorkerTasksTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
 
