@@ -20,7 +20,7 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
     )
 
     assignee = django_filters.ModelMultipleChoiceFilter(
-        label=_("FLW Name"),
+        label=_("Assignee"),
         field_name="work_area_group__opportunity_access__user",
         queryset=User.objects.none(),
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1", "class": INPUT_CSS}),
@@ -63,4 +63,4 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
 
         # Display "name (username)" instead of default __str__
         # which shows email or username (not useful for mobile workers)
-        self.filters["assignee"].field.label_from_instance = lambda obj: f"{obj.name} ({obj.username})"
+        self.filters["assignee"].field.label_from_instance = lambda obj: obj.display_name_with_username()

@@ -36,7 +36,7 @@
 
             applyFilters() {
                 if (!this.map) return;
-                const form = document.getElementById('workarea-filter-form');
+                const form = this.$refs.filterForm;
                 const query = new URLSearchParams(new FormData(form)).toString();
                 this.filterQuery = query;
                 const baseUrl = `${window.location.origin}{{ tiles_url|escapejs }}`;
@@ -50,7 +50,7 @@
             },
 
             clearFilters() {
-                const form = document.getElementById('workarea-filter-form');
+                const form = this.$refs.filterForm;
                 form.reset();
                 // Clear TomSelect instances
                 form.querySelectorAll('select[data-tomselect]').forEach(el => {

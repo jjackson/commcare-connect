@@ -261,6 +261,87 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
 
 
 @pytest.mark.django_db
+class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
+    TILE_Z, TILE_X, TILE_Y = 10, 732, 427
+
+    def tile_url(self, org_slug, opp_id):
+        return reverse(
+            "microplanning:workareas_tiles",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id, "z": self.TILE_Z, "x": self.TILE_X, "y": self.TILE_Y},
+        )
+
+    def _get_tile_queryset(self, client, org_user_admin, opportunity, query_params=None):
+        client.force_login(org_user_admin)
+        url = self.tile_url(opportunity.organization.slug, str(opportunity.opportunity_id))
+        original_get_queryset = microplanning_views.WorkAreaVectorLayer.get_queryset
+        captured_qs = []
+
+        def capturing_get_queryset(self_layer):
+            qs = original_get_queryset(self_layer)
+            captured_qs.append(qs)
+            return qs
+
+        # the actual MVT (vector tile) response is binary protobuf and hard to assert
+        with patch.object(microplanning_views.WorkAreaVectorLayer, "get_queryset", capturing_get_queryset):
+            response = client.get(url, data=query_params or {})
+
+        assert response.status_code in (200, 204)
+        assert len(captured_qs) == 1
+        return captured_qs[0]
+
+    def test_unfiltered_returns_all_work_areas(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.VISITED)
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        qs = self._get_tile_queryset(client, org_user_admin, opportunity)
+        assert qs.count() == 2
+
+    def test_status_filter_forwarded(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.VISITED)
+        wa_not_started = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        qs = self._get_tile_queryset(
+            client,
+            org_user_admin,
+            opportunity,
+            query_params={"status": WorkAreaStatus.NOT_STARTED},
+        )
+        assert list(qs.values_list("id", flat=True)) == [wa_not_started.id]
+
+    def test_assignee_filter_forwarded(self, client, org_user_admin, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+        wa_assigned = WorkAreaFactory(
+            opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.NOT_STARTED
+        )
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
+
+        qs = self._get_tile_queryset(
+            client,
+            org_user_admin,
+            opportunity,
+            query_params={"assignee": access.user.pk},
+        )
+        assert set(qs.values_list("id", flat=True)) == {wa_assigned.id}
+
+    def test_excludes_other_opportunity(self, client, org_user_admin, opportunity):
+        other_opp = OpportunityFactory()
+        WorkAreaFactory(opportunity=opportunity)
+        WorkAreaFactory(opportunity=other_opp)
+        qs = self._get_tile_queryset(client, org_user_admin, opportunity)
+        assert qs.count() == 1
+
+    def test_annotations_present(self, client, org_user_admin, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+        WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+
+        qs = self._get_tile_queryset(client, org_user_admin, opportunity)
+        row = qs.first()
+        assert row.group_id == group.id
+        assert row.group_name == group.name
+        assert row.assignee_name == access.user.name
+
+
+@pytest.mark.django_db
 class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
     @pytest.fixture
     def work_areas(self, opportunity):
@@ -281,7 +362,7 @@ class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
         )
 
     def _filter_ids(self, params, opportunity):
-        qs = WorkAreaFactory._meta.model.objects.filter(opportunity=opportunity)
+        qs = WorkArea.objects.filter(opportunity=opportunity)
         return set(WorkAreaMapFilterSet(params, queryset=qs, opportunity=opportunity).qs.values_list("id", flat=True))
 
     @pytest.mark.parametrize(
@@ -310,7 +391,6 @@ class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
         ids=["start_date_gte", "end_date_lte", "date_range"],
     )
     def test_date_filters(self, opportunity, work_areas, params, expected_attrs):
-        # wa_visited has visit on Mar 10, wa_not_started on Mar 20
         for wa_attr, visit_date in [("wa_visited", "2026-03-10"), ("wa_not_started", "2026-03-20")]:
             UserVisitFactory(
                 opportunity=opportunity,
@@ -347,7 +427,7 @@ class TestWorkAreaMapFilterSet(BaseMicroplanningFlagTest):
         assert result == {work_areas.wa_not_started.id}
 
     def test_assignee_queryset_requires_opportunity(self):
-        empty_qs = WorkAreaFactory._meta.model.objects.none()
+        empty_qs = WorkArea.objects.none()
         fs = WorkAreaMapFilterSet({}, queryset=empty_qs)
         assert fs.filters["assignee"].queryset.count() == 0
 
