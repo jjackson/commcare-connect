@@ -517,20 +517,22 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
 
     def test_status_filter(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
-        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
         client.force_login(org_user_admin)
 
         rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_STARTED}"))
+        assert rows[1][0] == wa.slug
         assert len(rows) == 2
 
     def test_assignee_filter(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
         group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+        wa = WorkAreaFactory(opportunity=opportunity, work_area_group=group)
         WorkAreaFactory(opportunity=opportunity)  # unassigned, no group
         client.force_login(org_user_admin)
 
         rows = self._parse_csv(client.get(self.url(opportunity) + f"?assignee={access.user.id}"))
+        assert rows[1][0] == wa.slug
         assert len(rows) == 2
 
     def test_date_filter(self, client, org_user_admin, opportunity):
@@ -549,6 +551,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         client.force_login(org_user_admin)
 
         rows = self._parse_csv(client.get(self.url(opportunity) + "?start_date=2025-06-01&end_date=2025-06-30"))
+        assert rows[1][0] == wa_with_visit.slug
         assert len(rows) == 2
 
     def test_reordered_headers_still_produces_valid_csv(self, client, org_user_admin, opportunity):
