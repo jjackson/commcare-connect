@@ -20,7 +20,7 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
     )
 
     assignee = django_filters.ModelMultipleChoiceFilter(
-        label=_("FLW Name"),
+        label=_("Assignee"),
         field_name="work_area_group__opportunity_access__user",
         queryset=User.objects.none(),
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1", "class": INPUT_CSS}),
