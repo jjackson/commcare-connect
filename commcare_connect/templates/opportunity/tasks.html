@@ -15,7 +15,7 @@
     <div x-show="showFilterModal" class="modal-backdrop">
       <div class="modal">
         <div class="header text-lg font-semibold text-brand-deep-purple">
-          <h1>Filters</h1>
+          <h1>{% trans "Filters" %}</h1>
           <button @click="showFilterModal = false">
             <i class="fa-solid fa-xmark text-xl"></i>
           </button>
@@ -32,10 +32,10 @@
             {% crispy filter_form %}
           </div>
           <div class="footer">
-            <button type="button" @click="showFilterModal = false" class="button button-md outline-style">Close</button>
+            <button type="button" @click="showFilterModal = false" class="button button-md outline-style">{% trans "Close" %}</button>
             <button
               form="taskFilterForm" type="submit" @click="showFilterModal = false" class="button button-md primary-dark">
-              Apply
+              {% trans "Apply" %}
             </button>
           </div>
         </form>

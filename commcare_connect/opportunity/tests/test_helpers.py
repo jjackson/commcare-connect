@@ -14,6 +14,7 @@ from commcare_connect.opportunity.helpers import (
     get_worker_tasks_table_data,
 )
 from commcare_connect.opportunity.models import (
+    CompletedTask,
     CompletedTaskStatus,
     CompletedWorkStatus,
     Opportunity,
@@ -615,11 +616,9 @@ def test_get_worker_tasks_table_data_filter_date_assigned_range(opportunity):
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
     task = TaskFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
     old_task = CompletedTaskFactory(opportunity_access=access, task=task)
-    from commcare_connect.opportunity.models import CompletedTask
-
     CompletedTask.objects.filter(pk=old_task.pk).update(date_created=date.today() - timedelta(days=30))
 
-    recent_task = CompletedTaskFactory(opportunity_access=access, task=task)  # noqa: F841
+    CompletedTaskFactory(opportunity_access=access, task=task)
 
     result = list(
         get_worker_tasks_table_data(

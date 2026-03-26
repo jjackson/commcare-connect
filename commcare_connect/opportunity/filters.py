@@ -263,7 +263,7 @@ NO_TASKS_FILTER_VALUE = "no_tasks"
 
 TASK_STATUS_CHOICES = [
     (CompletedTaskStatus.ASSIGNED, "To Do"),
-    (CompletedTaskStatus.COMPLETED, "Complete"),
+    (CompletedTaskStatus.COMPLETED, "Completed"),
     (NO_TASKS_FILTER_VALUE, "No Tasks"),
 ]
 
@@ -332,5 +332,5 @@ class TasksFilterSet(django_filters.FilterSet):
                 .order_by("name", "username")
             )
             self.filters["worker_name"].extra["choices"] = [
-                (str(user.pk), f"{user.name} ({user.username})") for user in worker_queryset
+                (str(user.pk), user.display_name_with_username()) for user in worker_queryset
             ]
