@@ -233,6 +233,14 @@ class OpportunityObjectMixin:
         return self.get_opportunity()
 
 
+class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        if self.get_opportunity().managed and not request.is_opportunity_pm:
+            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
+        return response
+
+
 class OrgContextSingleTableView(SingleTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
@@ -1181,14 +1189,8 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     )
 
 
-class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
+class TaskTypesConfig(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, TemplateView):
     template_name = "opportunity/task_types_config.html"
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1229,16 +1231,10 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class EditTaskType(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
     form_class = EditTaskTypeForm
     model = Task
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_object(self, queryset=None):
         return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
@@ -3271,16 +3267,10 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         return context
 
 
-class EditAssignedTask(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_assigned_task_form.html"
     form_class = EditAssignedTaskForm
     model = CompletedTask
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_object(self, queryset=None):
         return get_object_or_404(
