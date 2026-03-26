@@ -11,6 +11,7 @@ from commcare_connect.opportunity.helpers import (
     get_opportunity_worker_progress,
     get_worker_learn_table_data,
     get_worker_table_data,
+    get_worker_tasks_table_data,
 )
 from commcare_connect.opportunity.models import (
     CompletedWorkStatus,
@@ -21,6 +22,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tests.factories import (
     AssessmentFactory,
     CompletedModuleFactory,
+    CompletedTaskFactory,
     CompletedWorkFactory,
     LearnModuleFactory,
     OpportunityAccessFactory,
@@ -520,3 +522,30 @@ def test_deliver_status_query_with_filters(opportunity, filters, expected_userna
     usernames = {a.user.username for a in access_objects}
 
     assert usernames == expected_usernames(users)
+
+
+@pytest.mark.django_db
+def test_get_worker_tasks_table_data(opportunity):
+    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
+    UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
+    CompletedTaskFactory(opportunity_access=access)
+    CompletedTaskFactory(opportunity_access=access)
+
+    result = list(get_worker_tasks_table_data(opportunity))
+    assert len(result) == 2
+    assert result[0].user is not None
+    assert result[0].task_name is not None
+    assert result[0].status == UserInviteStatus.accepted
+
+
+@pytest.mark.django_db
+def test_get_worker_tasks_table_data_no_tasks(opportunity):
+    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
+    UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
+
+    result = list(get_worker_tasks_table_data(opportunity))
+    assert len(result) == 1
+    assert result[0].task_name is None
+    assert result[0].date_assigned is None
+    assert result[0].task_due_date is None
+    assert result[0].task_status is None
