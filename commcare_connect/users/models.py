@@ -62,6 +62,9 @@ class User(AbstractUser):
         """
         return reverse("account_email")
 
+    def display_name_with_username(self):
+        return f"{self.name} ({self.username})"
+
     class Meta:
         constraints = [UniqueConstraint(fields=["email"], name="unique_user_email", condition=Q(email__isnull=False))]
         permissions = [
