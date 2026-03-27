@@ -89,7 +89,7 @@
                 <div class="flex items-center justify-between mb-2">
                     <h2 class="text-lg font-semibold">{% translate "Filter Map Work Areas" %}</h2>
                     <div class="flex gap-4">
-                        <a :href="getDownloadUrl()" class="button-icon shadow-sm ml-aut" x-data="{ disabled: false }"
+                        <a :href="getDownloadUrl()" class="button-icon shadow-sm ml-auto" x-data="{ disabled: false }"
                             @click="if (disabled) { $event.preventDefault(); return; } disabled = true; setTimeout(() => disabled = false, 3000)"
                             x-tooltip.raw="{% translate 'Download work area summary with applied filters' %}"
                             aria-label="{% translate 'Download work areas' %}"
