@@ -856,7 +856,6 @@ class UserVisitVerificationTable(tables.Table):
         },
     )
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
-    worker_name = columns.Column(verbose_name="Worker Name", accessor="opportunity_access__user__name")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
     payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
@@ -895,7 +894,6 @@ class UserVisitVerificationTable(tables.Table):
         sequence = (
             "select",
             "date_time",
-            "worker_name",
             "entity_name",
             "deliver_unit",
             "payment_unit",
@@ -928,9 +926,7 @@ class UserVisitVerificationTable(tables.Table):
     def __init__(self, *args, **kwargs):
         self.organization = kwargs.pop("organization", None)
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
-        hide_worker_name = kwargs.pop("hide_worker_name", False)
         super().__init__(*args, **kwargs)
-        self.columns["worker_name"].column.visible = not hide_worker_name
         self.columns["select"].column.visible = not self.is_opportunity_pm
         self.use_view_url = True
 
