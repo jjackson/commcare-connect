@@ -2424,7 +2424,6 @@ class TestEditAssignedTask:
         response = client.get(url)
         content = response.content.decode()
         edit_url = self._edit_url(opp, assigned_task)
-        print(f"\n=== Expected edit URL: {edit_url}")
         # Check button renders with correct hx-get
         assert f'hx-get="{edit_url}"' in content, f'Edit button hx-get not found. Looking for: hx-get="{edit_url}"'
         assert 'hx-target="#edit-assigned-task-form"' in content

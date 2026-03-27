@@ -237,10 +237,9 @@ class OpportunityObjectMixin:
 
 class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
     def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
         if self.get_opportunity().managed and not request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
+        return super().dispatch(request, *args, **kwargs)
 
 
 class OrgContextSingleTableView(SingleTableView):
@@ -3296,22 +3295,19 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["hx_post_url"] = reverse(
-            "opportunity:edit_assigned_task",
-            args=(self.kwargs["org_slug"], self.kwargs["opp_id"], self.kwargs["pk"]),
-        )
+        context["hx_post_url"] = self.request.path
         return context
 
     def form_valid(self, form):
+        response = HttpResponse(status=204)
         if form.has_changed():
             task = form.save(commit=False)
             reason = form.cleaned_data.get("reason", "")
-            with transaction.atomic(), pghistory.context(
+            with pghistory.context(
                 reason=reason,
                 username=self.request.user.username,
                 user_email=self.request.user.email,
             ):
                 task.save(update_fields=["due_date"])
-        response = HttpResponse(status=204)
-        response["HX-Trigger"] = "reloadTable"
+            response["HX-Trigger"] = "reloadTable"
         return response
