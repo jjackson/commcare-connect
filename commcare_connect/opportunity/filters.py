@@ -275,7 +275,7 @@ class TasksFilterSet(django_filters.FilterSet):
         label="Worker Name",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_worker_name",
+        field_name="user__id",
     )
     task_status = django_filters.MultipleChoiceFilter(
         label="Task Status",
@@ -287,27 +287,31 @@ class TasksFilterSet(django_filters.FilterSet):
         label="Task Type",
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_task_type",
+        field_name="task_id",
     )
     date_assigned_after = django_filters.DateFilter(
         label="Date Assigned From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_date_assigned_after",
+        field_name="date_assigned",
+        lookup_expr="gte",
     )
     date_assigned_before = django_filters.DateFilter(
         label="Date Assigned To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_date_assigned_before",
+        field_name="date_assigned",
+        lookup_expr="lte",
     )
     due_date_after = django_filters.DateFilter(
         label="Due Date From",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_due_date_after",
+        field_name="task_due_date",
+        lookup_expr="gte",
     )
     due_date_before = django_filters.DateFilter(
         label="Due Date To",
         widget=forms.DateInput(attrs={"type": "date"}),
-        method="filter_due_date_before",
+        field_name="task_due_date",
+        lookup_expr="lte",
     )
 
     class Meta:
@@ -332,11 +336,6 @@ class TasksFilterSet(django_filters.FilterSet):
                 (str(user.pk), user.display_name_with_username()) for user in worker_queryset
             ]
 
-    def filter_worker_name(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(user__pk__in=[int(pk) for pk in value])
-
     def filter_task_status(self, queryset, name, value):
         if not value:
             return queryset
@@ -347,28 +346,3 @@ class TasksFilterSet(django_filters.FilterSet):
         if NO_TASKS_FILTER_VALUE in value:
             status_q |= Q(task_status__isnull=True)
         return queryset.filter(status_q)
-
-    def filter_task_type(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(task_id__in=[int(t) for t in value])
-
-    def filter_date_assigned_after(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(date_assigned__date__gte=value)
-
-    def filter_date_assigned_before(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(date_assigned__date__lte=value)
-
-    def filter_due_date_after(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(task_due_date__gte=value)
-
-    def filter_due_date_before(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(task_due_date__lte=value)
