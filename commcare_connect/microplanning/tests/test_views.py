@@ -492,7 +492,7 @@ class TestUserVisitVectorLayer:
         )
         layer = UserVisitVectorLayer(opportunity=opportunity)
         visit = layer.get_queryset().first()
-        # location format is "lat lon ..." so point should be (lon, lat) = (77.1, 28.6)
+
         assert round(visit.location_point.x, 1) == 77.1
         assert round(visit.location_point.y, 1) == 28.6
 

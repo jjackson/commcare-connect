@@ -14,8 +14,8 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import F
-from django.db.models.expressions import RawSQL
+from django.db.models import F, FloatField, Func, Value
+from django.db.models.functions import Cast
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -256,15 +256,20 @@ class UserVisitVectorLayer(VectorLayer):
         <lat> <lng> <altitude> <accuracy>
         """
         return (
-            UserVisit.objects.filter(opportunity=self.opportunity, location__isnull=False)
+            UserVisit.objects.filter(
+                opportunity=self.opportunity,
+                location__isnull=False,
+            )
             .exclude(location="")
             .annotate(
-                location_point=RawSQL(
-                    "ST_SetSRID(ST_MakePoint("
-                    "CAST(split_part(location, ' ', 2) AS DOUBLE PRECISION), "
-                    "CAST(split_part(location, ' ', 1) AS DOUBLE PRECISION)"
-                    "), 4326)",
-                    [],
+                lat=Cast(Func(F("location"), Value(" "), Value(1), function="split_part"), output_field=FloatField()),
+                lon=Cast(Func(F("location"), Value(" "), Value(2), function="split_part"), output_field=FloatField()),
+            )
+            .annotate(
+                location_point=Func(
+                    Func(F("lon"), F("lat"), function="ST_MakePoint"),
+                    Value(4326),
+                    function="ST_SetSRID",
                     output_field=PointField(srid=4326),
                 )
             )
