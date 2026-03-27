@@ -273,6 +273,7 @@ class UserVisitVectorLayer(VectorLayer):
                     output_field=PointField(srid=4326),
                 )
             )
+            .values("location_point")
         )
 
 

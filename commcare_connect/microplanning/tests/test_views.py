@@ -493,8 +493,8 @@ class TestUserVisitVectorLayer:
         layer = UserVisitVectorLayer(opportunity=opportunity)
         visit = layer.get_queryset().first()
 
-        assert round(visit.location_point.x, 1) == 77.1
-        assert round(visit.location_point.y, 1) == 28.6
+        assert round(visit["location_point"].x, 1) == 77.1
+        assert round(visit["location_point"].y, 1) == 28.6
 
     def test_queryset_only_includes_visits_for_opportunity(self, opportunity, visit_data):
         other_opp = OpportunityFactory()
