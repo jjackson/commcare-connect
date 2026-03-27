@@ -271,14 +271,14 @@ class SuspendedUsersTable(tables.Table):
         revoke_url = reverse(
             "opportunity:revoke_user_suspension",
             args=(
-                record.opportunity.organization.slug,
+                self.context.request.org.slug,
                 record.opportunity.opportunity_id,
                 record.opportunity_access_id,
             ),
         )
         page_url = reverse(
             "opportunity:suspended_users_list",
-            args=(record.opportunity.organization.slug, record.opportunity.opportunity_id),
+            args=(self.context.request.org.slug, record.opportunity.opportunity_id),
         )
         return render_to_string(
             "opportunity/partials/revoke_suspension.html",
