@@ -263,17 +263,27 @@ def test_delivery_progress_endpoint(
     assert response.data["payments"][0].keys() == PaymentSerializer().get_fields().keys()
 
 
-def test_delivery_progress_assigned_tasks(
+def test_delivery_progress_no_assigned_tasks(
+    mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
+    assert response.status_code == 200
+    assert response.data["assigned_tasks"] == []
+
+
+def test_delivery_progress_assigned_tasks_filtered_by_user(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
     api_client.force_authenticate(mobile_user_with_connect_link)
 
-    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
-    assert response.status_code == 200
-    assert response.data["assigned_tasks"] == []
-
     assigned_tasks = AssignedTaskFactory.create_batch(3, opportunity_access=access, task__opportunity=opportunity)
+    # OpportunityAccessFactory creates a new auto-generated mobile user via MobileUserFactory,
+    # so other_access belongs to a different user than mobile_user_with_connect_link.
+    other_access = OpportunityAccessFactory(opportunity=opportunity)
+    AssignedTaskFactory.create_batch(2, opportunity_access=other_access, task__opportunity=opportunity)
+
     response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
     assert response.status_code == 200
     assert len(response.data["assigned_tasks"]) == 3
@@ -285,14 +295,6 @@ def test_delivery_progress_assigned_tasks(
         assert assigned_task_data["task_description"] == assigned_task.task.description
         assert assigned_task_data["status"] == assigned_task.status
         assert assigned_task_data["due_date"] == str(assigned_task.due_date)
-
-    # Tasks for a different user's access should not appear
-    # OpportunityAccessFactory creates a new auto-generated mobile user via MobileUserFactory,
-    # so other_access belongs to a different user than mobile_user_with_connect_link.
-    other_access = OpportunityAccessFactory(opportunity=opportunity)
-    AssignedTaskFactory.create_batch(2, opportunity_access=other_access, task__opportunity=opportunity)
-    response = api_client.get(f"/api/opportunity/{opportunity.id}/delivery_progress")
-    assert len(response.data["assigned_tasks"]) == 3
 
 
 @pytest.mark.django_db
