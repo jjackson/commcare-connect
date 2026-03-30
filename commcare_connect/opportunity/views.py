@@ -895,8 +895,14 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         PaymentUnit.objects.filter(id__in=removed_payment_units, parent_payment_unit=form.instance.id).update(
             parent_payment_unit=None
         )
+
         messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
-        return redirect("opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
+        if request.is_opportunity_pm:
+            return redirect(
+                "opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id
+            )
+        else:
+            return redirect("opportunity:detail", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
 
     path = [
         {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
