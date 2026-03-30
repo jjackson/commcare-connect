@@ -465,9 +465,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert f"work_area_summary_{opportunity.opportunity_id}.csv" in response["Content-Disposition"]
 
         rows = self._parse_csv(response)
-        headers = list(WorkAreaCSVImporter.HEADERS.values())
-        headers.append("Work Area Group Name")
-        assert rows[0] == headers
+        assert rows[0] == list(WorkAreaCSVImporter.WORK_AREA_SUMMARY_HEADERS.values())
         assert rows[1] == [
             "area-x",
             "ward-x",

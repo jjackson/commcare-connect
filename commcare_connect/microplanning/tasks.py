@@ -33,6 +33,11 @@ class WorkAreaCSVImporter:
         "state": "State",
     }
 
+    WORK_AREA_SUMMARY_HEADERS = {
+        **HEADERS,
+        "group_name": "Work Area Group Name",
+    }
+
     def __init__(self, opp_id, csv_source):
         self.opp_id = opp_id
         self.csv_source = csv_source

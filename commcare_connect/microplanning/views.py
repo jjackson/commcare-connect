@@ -267,12 +267,7 @@ def workareas_group_geojson(request, org_slug, opp_id):
 @require_flag_for_opp(MICROPLANNING)
 def download_work_areas(request, org_slug, opp_id):
     opportunity = request.opportunity
-    headers = {
-        **WorkAreaCSVImporter.HEADERS,
-        **{
-            "group_name": "Work Area Group Name",
-        },
-    }
+    headers = WorkAreaCSVImporter.WORK_AREA_SUMMARY_HEADERS
 
     def get_row(wa):
         # Maps row values to HEADERS key order so column changes don't break the CSV
