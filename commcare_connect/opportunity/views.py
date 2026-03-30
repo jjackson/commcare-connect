@@ -1327,6 +1327,7 @@ def suspended_users_list(request, org_slug=None, opp_id=None):
     )
     access_objects = OpportunityAccess.objects.filter(opportunity=request.opportunity, suspended=True)
     table = SuspendedUsersTable(access_objects, has_suspension_perm=has_suspension_perm)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     path = []
     if request.opportunity.managed:
         path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
