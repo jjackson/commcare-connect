@@ -278,37 +278,37 @@ class TasksFilterSet(django_filters.FilterSet):
         field_name="user__id",
     )
     task_status = django_filters.MultipleChoiceFilter(
-        label="Task Status",
+        label=_("Task Status"),
         choices=TASK_STATUS_CHOICES,
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
         method="filter_task_status",
     )
     task_type = django_filters.MultipleChoiceFilter(
-        label="Task Type",
+        label=_("Task Type"),
         choices=[],
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
         field_name="task_id",
     )
     date_assigned_after = django_filters.DateFilter(
-        label="Date Assigned From",
+        label=_("Date Assigned From"),
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="date_assigned",
         lookup_expr="gte",
     )
     date_assigned_before = django_filters.DateFilter(
-        label="Date Assigned Before",
+        label=_("Date Assigned Before"),
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="date_assigned",
         lookup_expr="lt",
     )
     due_date_after = django_filters.DateFilter(
-        label="Due Date From",
+        label=_("Due Date From"),
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="task_due_date",
         lookup_expr="gte",
     )
     due_date_before = django_filters.DateFilter(
-        label="Due Date Before",
+        label=_("Due Date Before"),
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="task_due_date",
         lookup_expr="lt",
