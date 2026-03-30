@@ -512,3 +512,88 @@ class TestUserVisitVectorLayer:
         )
         layer = UserVisitVectorLayer(opportunity=opportunity)
         assert layer.get_queryset().count() == 1
+
+    def test_filter_by_assignee(self, opportunity, visit_data):
+        other_access = OpportunityAccessFactory(opportunity=opportunity)
+        other_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=other_access)
+        other_wa = WorkAreaFactory(opportunity=opportunity, work_area_group=other_group)
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.6 77.1 0 0",
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=other_access.user,
+            work_area=other_wa,
+            location="28.6 77.1 0 0",
+        )
+        layer = UserVisitVectorLayer(
+            opportunity=opportunity,
+            filter_params={"assignee": [visit_data.access.user.pk]},
+        )
+        assert layer.get_queryset().count() == 1
+
+    def test_filter_by_date_range(self, opportunity, visit_data):
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.6 77.1 0 0",
+            visit_date=datetime(2025, 1, 15),
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.6 77.1 0 0",
+            visit_date=datetime(2025, 3, 15),
+        )
+        layer = UserVisitVectorLayer(
+            opportunity=opportunity,
+            filter_params={"start_date": "2025-01-01", "end_date": "2025-01-31"},
+        )
+        assert layer.get_queryset().count() == 1
+
+    def test_filter_by_work_area_status(self, opportunity, visit_data):
+        visit_data.work_area.status = WorkAreaStatus.VISITED
+        visit_data.work_area.save()
+        other_access = OpportunityAccessFactory(opportunity=opportunity)
+        other_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=other_access)
+        other_wa = WorkAreaFactory(
+            opportunity=opportunity, work_area_group=other_group, status=WorkAreaStatus.NOT_STARTED
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.6 77.1 0 0",
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=other_access.user,
+            work_area=other_wa,
+            location="28.6 77.1 0 0",
+        )
+        layer = UserVisitVectorLayer(
+            opportunity=opportunity,
+            filter_params={"status": [WorkAreaStatus.VISITED]},
+        )
+        assert layer.get_queryset().count() == 1
+
+    def test_no_filters_returns_all(self, opportunity, visit_data):
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.6 77.1 0 0",
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=visit_data.access.user,
+            work_area=visit_data.work_area,
+            location="28.7 77.2 0 0",
+        )
+        layer = UserVisitVectorLayer(opportunity=opportunity, filter_params={})
+        assert layer.get_queryset().count() == 2

@@ -32,7 +32,7 @@ from commcare_connect.commcarehq.api import create_or_update_case_by_work_area
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
-from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
+from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import WorkAreaModelForm
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit
@@ -244,8 +244,9 @@ class UserVisitVectorLayer(VectorLayer):
     geom_field = "location_point"
     min_zoom = WORKAREA_MIN_ZOOM
 
-    def __init__(self, *args, opportunity=None, **kwargs):
+    def __init__(self, *args, opportunity=None, filter_params=None, **kwargs):
         self.opportunity = opportunity
+        self.filter_params = filter_params
         super().__init__(*args, **kwargs)
 
     def get_queryset(self):
@@ -255,13 +256,13 @@ class UserVisitVectorLayer(VectorLayer):
         The user visit location is assumed to be a string in the format:
         <lat> <lng> <altitude> <accuracy>
         """
+        qs = UserVisit.objects.filter(
+            opportunity=self.opportunity,
+            location__isnull=False,
+        ).exclude(location="")
+        qs = UserVisitMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
         return (
-            UserVisit.objects.filter(
-                opportunity=self.opportunity,
-                location__isnull=False,
-            )
-            .exclude(location="")
-            .annotate(
+            qs.annotate(
                 lat=Cast(Func(F("location"), Value(" "), Value(1), function="split_part"), output_field=FloatField()),
                 lon=Cast(Func(F("location"), Value(" "), Value(2), function="split_part"), output_field=FloatField()),
             )
@@ -282,7 +283,12 @@ class UserVisitTileView(MVTView):
     layer_classes = [UserVisitVectorLayer]
 
     def get_layers(self):
-        return [UserVisitVectorLayer(opportunity=self.request.opportunity)]
+        return [
+            UserVisitVectorLayer(
+                opportunity=self.request.opportunity,
+                filter_params=self.request.GET,
+            )
+        ]
 
 
 @org_admin_required

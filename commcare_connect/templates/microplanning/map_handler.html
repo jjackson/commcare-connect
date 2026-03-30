@@ -39,8 +39,14 @@
                 if (source) {
                     source.setTiles([newUrl]);
                     this.selectedFeature = null; // Clear selection on filter change
-                    this.showToast("{% translate 'Filters updated!' %}", false, 500);
                 }
+                const visitSource = this.map.getSource('user-visits');
+                if (visitSource) {
+                    const visitBaseUrl = `${window.location.origin}{{ visit_tiles_url|escapejs }}`;
+                    const visitNewUrl = query ? `${visitBaseUrl}?${query}` : visitBaseUrl;
+                    visitSource.setTiles([visitNewUrl]);
+                }
+                this.showToast("{% translate 'Filters updated!' %}", false, 500);
             },
 
             clearFilters() {
@@ -225,11 +231,14 @@
 
                 // Source and layer are added lazily on first toggle to avoid
                 // fetching tiles while the layer is hidden.
-                const visitTilesUrl = `${window.location.origin}{{ visit_tiles_url|escapejs }}`;
+                const visitBaseUrl = `${window.location.origin}{{ visit_tiles_url|escapejs }}`;
                 let visitsLayerAdded = false;
 
                 this.$watch('showVisits', (visible) => {
                     if (visible && !visitsLayerAdded) {
+                        const form = this.$refs.filterForm;
+                        const query = new URLSearchParams(new FormData(form)).toString();
+                        const visitTilesUrl = query ? `${visitBaseUrl}?${query}` : visitBaseUrl;
                         this.map.addSource('user-visits', {
                             type: 'vector',
                             tiles: [visitTilesUrl],
