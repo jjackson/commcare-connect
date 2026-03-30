@@ -1472,6 +1472,43 @@ class TestAddPaymentUnitView:
 
 
 @pytest.mark.django_db
+class TestEditPaymentUnit:
+    def _url(self, org_slug, opp_id, payment_unit_id):
+        return reverse("opportunity:edit_payment_unit", args=(org_slug, opp_id, payment_unit_id))
+
+    def test_edit_payment_unit_non_managed(self, client, organization, opportunity, org_user_member):
+        payment_unit = PaymentUnitFactory(opportunity=opportunity)
+        DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+    def test_edit_payment_unit_managed_as_non_pm_redirects(
+        self, client, organization, org_user_member, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opportunity.opportunity_id)
+        )
+
+    def test_edit_payment_unit_managed_as_pm(
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(program_manager_org_user_admin)
+        url = self._url(program_manager_org.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
 @override_switch(UPDATES_TO_MARK_AS_PAID_WORKFLOW, active=True)
 def test_update_invoice_invoice_ticket_link_restricted_access(
     client, program_manager_org, program_manager_org_user_member

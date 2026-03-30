@@ -849,6 +849,8 @@ def add_payment_unit(request, org_slug=None, opp_id=None):
 @org_member_required
 @opportunity_required
 def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
+    if request.opportunity.managed and not request.is_opportunity_pm:
+        return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, payment_unit_id=pk, opportunity=request.opportunity)
     deliver_units = DeliverUnit.objects.filter(
         Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit) | Q(payment_unit__opportunity__active=False),
@@ -893,8 +895,14 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         PaymentUnit.objects.filter(id__in=removed_payment_units, parent_payment_unit=form.instance.id).update(
             parent_payment_unit=None
         )
+
         messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
-        return redirect("opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
+        if request.is_opportunity_pm:
+            return redirect(
+                "opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id
+            )
+        else:
+            return redirect("opportunity:detail", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
 
     path = [
         {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
