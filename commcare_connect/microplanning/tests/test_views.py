@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv as csv_mod
+import io
 import json
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
@@ -16,7 +18,7 @@ from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
-from commcare_connect.microplanning.tasks import WorkAreaCSVImporter
+from commcare_connect.microplanning.tasks import WorkAreaCSVExporter
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
@@ -441,9 +443,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         )
 
     def _parse_csv(self, response):
-        import csv as csv_mod
-        import io
-
         content = b"".join(response.streaming_content).decode("utf-8")
         return list(csv_mod.reader(io.StringIO(content)))
 
@@ -464,8 +463,9 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert response["Content-Type"] == "text/csv"
         assert f"work_area_summary_{opportunity.opportunity_id}.csv" in response["Content-Disposition"]
 
+        assert set(WorkAreaCSVExporter.FIELD_MAP.keys()) == set(WorkAreaCSVExporter.HEADERS.keys())
         rows = self._parse_csv(response)
-        assert rows[0] == list(WorkAreaCSVImporter.WORK_AREA_SUMMARY_HEADERS.values())
+        assert rows[0] == list(WorkAreaCSVExporter.HEADERS.values())
         assert rows[1] == [
             "area-x",
             "ward-x",
@@ -553,7 +553,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert len(rows) == 2
 
     def test_reordered_headers_still_produces_valid_csv(self, client, org_user_admin, opportunity):
-        reversed_headers = dict(reversed(list(WorkAreaCSVImporter.HEADERS.items())))
+        reversed_headers = dict(reversed(list(WorkAreaCSVExporter.HEADERS.items())))
 
         WorkAreaFactory(
             opportunity=opportunity,
@@ -566,13 +566,11 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         )
         client.force_login(org_user_admin)
 
-        with patch.object(WorkAreaCSVImporter, "HEADERS", reversed_headers):
-            response = client.get(self.url(opportunity))
-
-        rows = self._parse_csv(response)
+        with patch.object(WorkAreaCSVExporter, "HEADERS", reversed_headers):
+            rows = self._parse_csv(client.get(self.url(opportunity)))
         csv_headers = rows[0]
 
-        expected_headers = list(reversed_headers.values()) + ["Work Area Group Name"]
+        expected_headers = list(reversed_headers.values())
         assert csv_headers == expected_headers
         assert len(rows[1]) == len(csv_headers)
 

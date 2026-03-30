@@ -1,4 +1,5 @@
 import csv
+import io
 import logging
 from collections import defaultdict
 
@@ -31,11 +32,6 @@ class WorkAreaCSVImporter:
         "wag_serial_number": "WAG Serial Number",
         "lga": "LGA",
         "state": "State",
-    }
-
-    WORK_AREA_SUMMARY_HEADERS = {
-        **HEADERS,
-        "group_name": "Work Area Group Name",
     }
 
     def __init__(self, opp_id, csv_source):
@@ -259,3 +255,45 @@ def import_work_areas_task(self, opp_id, file_name):
     finally:
         cache.delete(get_import_area_cache_key(opp_id))
         default_storage.delete(file_name)
+
+
+class WorkAreaCSVExporter:
+    HEADERS = {
+        **WorkAreaCSVImporter.HEADERS,
+        "group_name": "Work Area Group Name",
+    }
+
+    FIELD_MAP = {
+        "slug": lambda wa: wa.slug,
+        "ward": lambda wa: wa.ward,
+        "centroid": lambda wa: f"{wa.centroid.x} {wa.centroid.y}",
+        "boundary": lambda wa: wa.boundary.wkt,
+        "building_count": lambda wa: wa.building_count,
+        "visit_count": lambda wa: wa.expected_visit_count,
+        "max_wag": lambda wa: (wa.case_properties or {}).get("max_wag", ""),
+        "wag_serial_number": lambda wa: (wa.case_properties or {}).get("wag_serial_number", ""),
+        "lga": lambda wa: (wa.case_properties or {}).get("lga", ""),
+        "state": lambda wa: (wa.case_properties or {}).get("state", ""),
+        "group_name": lambda wa: wa.group_name or "",
+    }
+
+    @classmethod
+    def get_row(cls, wa):
+        return [cls.FIELD_MAP[key](wa) for key in cls.HEADERS]
+
+    @classmethod
+    def rows(cls, queryset):
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        headers = cls.HEADERS
+
+        writer.writerow(headers.values())
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        for wa in queryset.iterator(chunk_size=2000):
+            writer.writerow(cls.get_row(wa))
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)

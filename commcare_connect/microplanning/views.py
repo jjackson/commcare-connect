@@ -1,5 +1,4 @@
 import csv
-import io
 import json
 import logging
 import uuid
@@ -38,7 +37,7 @@ from commcare_connect.organization.decorators import opportunity_required, org_a
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 from commcare_connect.utils.file import get_file_extension
 
-from .tasks import WorkAreaCSVImporter, get_import_area_cache_key, import_work_areas_task
+from .tasks import WorkAreaCSVExporter, WorkAreaCSVImporter, get_import_area_cache_key, import_work_areas_task
 
 logger = logging.getLogger(__name__)
 
@@ -267,45 +266,11 @@ def workareas_group_geojson(request, org_slug, opp_id):
 @require_flag_for_opp(MICROPLANNING)
 def download_work_areas(request, org_slug, opp_id):
     opportunity = request.opportunity
-    headers = WorkAreaCSVImporter.WORK_AREA_SUMMARY_HEADERS
-
-    def get_row(wa):
-        # Maps row values to HEADERS key order so column changes don't break the CSV
-        props = wa.case_properties or {}
-        field_map = {
-            "slug": wa.slug,
-            "ward": wa.ward,
-            "centroid": f"{wa.centroid.x} {wa.centroid.y}",
-            "boundary": wa.boundary.wkt,
-            "building_count": wa.building_count,
-            "visit_count": wa.expected_visit_count,
-            "max_wag": props.get("max_wag", ""),
-            "wag_serial_number": props.get("wag_serial_number", ""),
-            "lga": props.get("lga", ""),
-            "state": props.get("state", ""),
-            "group_name": wa.group_name or "",
-        }
-        return [field_map[key] for key in headers]
-
-    def rows():
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-
-        writer.writerow(headers.values())
-        yield buffer.getvalue()
-        buffer.seek(0)
-        buffer.truncate(0)
-
-        filterset = WorkAreaMapFilterSet(
-            request.GET, queryset=WorkArea.objects.filter(opportunity=opportunity), opportunity=opportunity
-        )
-        for wa in filterset.qs.annotate(group_name=F("work_area_group__name")).iterator(chunk_size=2000):
-            writer.writerow(get_row(wa))
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
-
-    response = StreamingHttpResponse(rows(), content_type="text/csv")
+    filterset = WorkAreaMapFilterSet(
+        request.GET, queryset=WorkArea.objects.filter(opportunity=opportunity), opportunity=opportunity
+    )
+    queryset = filterset.qs.annotate(group_name=F("work_area_group__name"))
+    response = StreamingHttpResponse(WorkAreaCSVExporter.rows(queryset), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="work_area_summary_{opportunity.opportunity_id}.csv"'
     return response
 
