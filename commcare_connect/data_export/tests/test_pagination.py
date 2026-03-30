@@ -199,6 +199,19 @@ class TestIdKeysetPaginationEdgeCases:
         assert "last_id" in parsed
         assert "page_size" in parsed
 
+    def test_next_link_preserves_multi_value_query_params(self, paginator, api_rf, opportunity, org_user_member):
+        UserVisitFactory.create_batch(3, opportunity=opportunity, user=org_user_member)
+        wsgi_request = api_rf.get("/export/test/", data={"page_size": 2, "filter": ["a", "b"]})
+        request = Request(wsgi_request)
+        queryset = UserVisit.objects.filter(opportunity=opportunity)
+
+        paginator.paginate_queryset(queryset, request)
+        next_link = paginator.get_next_link()
+
+        assert next_link is not None
+        parsed = parse_qs(urlparse(next_link).query)
+        assert sorted(parsed["filter"]) == ["a", "b"]
+
     @pytest.mark.parametrize(
         "params",
         [

@@ -1,5 +1,3 @@
-from urllib.parse import urlencode
-
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import BasePagination
 from rest_framework.response import Response
@@ -30,9 +28,9 @@ class IdKeysetPagination(BasePagination):
     ``id < last_id`` (reverse).
 
     Query parameters:
-        last_id      – cursor: id of the last item on the previous page
-        page_size    – items per page (default 1000, max 5000)
-        cursor_order – ``forward`` (ascending id) or ``reverse`` (descending id)
+        last_id      - cursor: id of the last item on the previous page
+        page_size    - items per page (default 1000, max 5000)
+        cursor_order - ``forward`` (ascending id) or ``reverse`` (descending id)
 
     All other query parameters are preserved in the ``next`` link.
     """
@@ -78,17 +76,12 @@ class IdKeysetPagination(BasePagination):
             return None
 
         last_item = self.page[-1]
-        params = {
-            self.last_id_query_param: last_item.id,
-            self.page_size_query_param: self.page_size,
-            self.cursor_order_query_param: self.cursor_order,
-        }
+        query = self.request.query_params.copy()
+        query[self.last_id_query_param] = last_item.id
+        query[self.page_size_query_param] = self.page_size
+        query[self.cursor_order_query_param] = self.cursor_order
 
-        for key, value in self.request.query_params.items():
-            if key not in params:
-                params[key] = value
-
-        return self.request.build_absolute_uri(f"{self.request.path}?{urlencode(params)}")
+        return self.request.build_absolute_uri(f"{self.request.path}?{query.urlencode()}")
 
     def get_paginated_response(self, data):
         return Response(
