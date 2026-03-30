@@ -296,10 +296,10 @@ class TasksFilterSet(django_filters.FilterSet):
         lookup_expr="gte",
     )
     date_assigned_before = django_filters.DateFilter(
-        label="Date Assigned To",
+        label="Date Assigned Before",
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="date_assigned",
-        lookup_expr="lte",
+        lookup_expr="lt",
     )
     due_date_after = django_filters.DateFilter(
         label="Due Date From",
@@ -308,10 +308,10 @@ class TasksFilterSet(django_filters.FilterSet):
         lookup_expr="gte",
     )
     due_date_before = django_filters.DateFilter(
-        label="Due Date To",
+        label="Due Date Before",
         widget=forms.DateInput(attrs={"type": "date"}),
         field_name="task_due_date",
-        lookup_expr="lte",
+        lookup_expr="lt",
     )
 
     class Meta:
