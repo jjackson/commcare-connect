@@ -4,6 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.opportunity.filters import CSRFExemptForm
+from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.users.models import User
 
 INPUT_CSS = (
@@ -64,3 +65,42 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
         # Display "name (username)" instead of default __str__
         # which shows email or username (not useful for mobile workers)
         self.filters["assignee"].field.label_from_instance = lambda obj: obj.display_name_with_username()
+
+
+class UserVisitMapFilterSet(django_filters.FilterSet):
+    status = django_filters.MultipleChoiceFilter(
+        field_name="work_area__status",
+        choices=WorkAreaStatus.choices,
+    )
+
+    assignee = django_filters.ModelMultipleChoiceFilter(
+        field_name="user",
+        queryset=User.objects.none(),
+    )
+
+    start_date = django_filters.DateFilter(
+        field_name="visit_date",
+        lookup_expr="date__gte",
+    )
+
+    end_date = django_filters.DateFilter(
+        field_name="visit_date",
+        lookup_expr="date__lte",
+    )
+
+    class Meta:
+        model = UserVisit
+        fields = []
+        form = CSRFExemptForm
+
+    def __init__(self, *args, opportunity=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if opportunity:
+            self.filters["assignee"].queryset = (
+                User.objects.filter(
+                    opportunityaccess__opportunity=opportunity,
+                    opportunityaccess__workareagroup__isnull=False,
+                )
+                .distinct()
+                .order_by("name")
+            )
