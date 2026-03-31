@@ -2,6 +2,7 @@ from crispy_forms import helper, layout
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Prefetch
+from django.utils.html import format_html
 from django.utils.translation import gettext, gettext_lazy
 
 from commcare_connect.opportunity.forms import CHECKBOX_CLASS
@@ -54,10 +55,13 @@ class OrganizationChangeForm(forms.ModelForm):
             )
             self.fields["llo_entity"].initial = instance_llo
             self.fields["llo_entity_short_name"] = forms.CharField(
-                label=gettext("LLO Entity Short Name"),
+                label=format_html(
+                    '{} <span class="asteriskField" x-show="isNewEntity" x-cloak>*</span>',
+                    gettext("LLO Entity Short Name"),
+                ),
                 max_length=40,
                 required=False,
-                widget=forms.TextInput(attrs={"x-ref": "llo_entity_short_name"}),
+                widget=forms.TextInput(attrs={"x-ref": "llo_entity_short_name", ":required": "isNewEntity"}),
             )
             layout_fields.append(
                 layout.Div(
@@ -82,6 +86,13 @@ class OrganizationChangeForm(forms.ModelForm):
         if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
             return self.cleaned_data["llo_entity"]
         return self.instance.llo_entity
+
+    def clean(self):
+        cleaned_data = super().clean()
+        llo_entity = cleaned_data.get("llo_entity")
+        if llo_entity and not llo_entity.pk and not cleaned_data.get("llo_entity_short_name"):
+            self.add_error("llo_entity_short_name", gettext("This field is required when creating a new LLO Entity."))
+        return cleaned_data
 
     def save(self, commit=True):
         org = super().save(commit=False)
@@ -182,9 +193,13 @@ class OrganizationSelectOrCreateForm(forms.Form):
         create_key_name="name",
     )
     llo_entity_short_name = forms.CharField(
-        label=gettext_lazy("LLO Entity Short Name"),
+        label=format_html(
+            '{} <span class="asteriskField" x-show="isNewEntity" x-cloak>*</span>',
+            gettext_lazy("LLO Entity Short Name"),
+        ),
         max_length=40,
         required=False,
+        widget=forms.TextInput(attrs={":required": "isNewEntity"}),
     )
     org = DynamicCreatableChoiceField(
         queryset=Organization.objects.order_by("name"),
@@ -227,6 +242,8 @@ class OrganizationSelectOrCreateForm(forms.Form):
                         )
                     }
                 )
+        if llo_entity and not llo_entity.pk and not cleaned_data.get("llo_entity_short_name"):
+            self.add_error("llo_entity_short_name", gettext("This field is required when creating a new LLO Entity."))
         return cleaned_data
 
     def save(self, commit=True):

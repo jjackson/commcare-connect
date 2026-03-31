@@ -155,6 +155,20 @@ class TestOrganizationChangeForm:
         llo_entity.refresh_from_db()
         assert llo_entity.short_name == "OLD"
 
+    def test_create_llo_entity_without_short_name_is_invalid(self, organization: Organization, user: User):
+        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+        user.user_permissions.add(perm)
+        user = User.objects.get(pk=user.pk)
+
+        form = OrganizationChangeForm(
+            data={"name": organization.name, "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO Entity"},
+            user=user,
+            instance=organization,
+        )
+        assert not form.is_valid()
+        assert "llo_entity_short_name" in form.errors
+
 
 @pytest.mark.django_db
 class TestOrganizationSelectOrCreateForm:
@@ -278,3 +292,13 @@ class TestOrganizationSelectOrCreateForm:
         form.save()
         existing_llo.refresh_from_db()
         assert existing_llo.short_name == "EL"
+
+    def test_create_new_llo_entity_without_short_name_is_invalid(self):
+        form = OrganizationSelectOrCreateForm(
+            data={
+                "org": TOMSELECT_NEW_ENTRY_PREFIX + "New Org",
+                "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO",
+            }
+        )
+        assert not form.is_valid()
+        assert "llo_entity_short_name" in form.errors
