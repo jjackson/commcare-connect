@@ -1,22 +1,15 @@
-from rest_framework.exceptions import ValidationError
+from rest_framework import serializers
 from rest_framework.pagination import BasePagination
 from rest_framework.response import Response
 
 FORWARD = "forward"
 REVERSE = "reverse"
-VALID_CURSOR_ORDERS = (FORWARD, REVERSE)
 
 
-def _parse_int(value, field_name, positive=False):
-    try:
-        value = int(value)
-    except (ValueError, TypeError):
-        raise ValidationError({field_name: "Must be an integer."})
-
-    if positive and value <= 0:
-        raise ValidationError({field_name: "Must be a positive integer."})
-
-    return value
+class _PaginationParamsSerializer(serializers.Serializer):
+    last_id = serializers.IntegerField(min_value=1, required=False)
+    page_size = serializers.IntegerField(min_value=1, required=False)
+    cursor_order = serializers.ChoiceField(choices=[FORWARD, REVERSE], default=FORWARD, required=False)
 
 
 class IdKeysetPagination(BasePagination):
@@ -41,22 +34,33 @@ class IdKeysetPagination(BasePagination):
     last_id_query_param = "last_id"
     cursor_order_query_param = "cursor_order"
 
+    @property
+    def param_field_map(self):
+        return {
+            "last_id": self.last_id_query_param,
+            "page_size": self.page_size_query_param,
+            "cursor_order": self.cursor_order_query_param,
+        }
+
+    def _get_pagination_params(self, request):
+        return {
+            field: request.query_params[param]
+            for field, param in self.param_field_map.items()
+            if param in request.query_params
+        }
+
     def paginate_queryset(self, queryset, request, view=None):
         self.request = request
 
-        self.cursor_order = request.query_params.get(self.cursor_order_query_param, FORWARD)
-        if self.cursor_order not in VALID_CURSOR_ORDERS:
-            raise ValidationError({"cursor_order": f"Must be one of {', '.join(VALID_CURSOR_ORDERS)}."})
+        params = _PaginationParamsSerializer(data=self._get_pagination_params(request))
+        params.is_valid(raise_exception=True)
 
-        raw_last_id = request.query_params.get(self.last_id_query_param)
-        self.last_id = _parse_int(raw_last_id, "last_id", positive=True) if raw_last_id is not None else None
-
-        raw_page_size = request.query_params.get(self.page_size_query_param)
-        if raw_page_size is not None:
-            page_size = _parse_int(raw_page_size, "page_size", positive=True)
-            self.page_size = min(page_size, self.max_page_size)
-        else:
-            self.page_size = self.default_page_size
+        self.cursor_order = params.validated_data["cursor_order"]
+        self.last_id = params.validated_data.get("last_id")
+        raw_page_size = params.validated_data.get("page_size")
+        self.page_size = (
+            min(raw_page_size, self.max_page_size) if raw_page_size is not None else self.default_page_size
+        )
 
         # Apply ordering and cursor filter
         is_forward = self.cursor_order == FORWARD
