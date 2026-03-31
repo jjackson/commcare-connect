@@ -1789,23 +1789,7 @@ class AssignedTaskListTable(OpportunityContextTable):
     action = tables.TemplateColumn(
         verbose_name="",
         orderable=False,
-        template_code="""
-            {% load i18n %}
-            {% if record.status == "assigned" %}
-            <button
-                type="button"
-                class="button button-md outline-style"
-                hx-get="{% url 'opportunity:edit_assigned_task' table.org_slug table.opp_id record.pk %}"
-                hx-target="#edit-assigned-task-form"
-                hx-swap="innerHTML"
-                hx-select="unset"
-                @htmx:after-request="if ($event.detail.successful) {
-                        showEditTaskModal = true; editTaskError = false
-                    } else { editTaskError = true }">
-                <i class="fa-regular fa-pen-to-square mr-1"></i> {% translate "Edit" %}
-            </button>
-            {% endif %}
-        """,
+        template_name="opportunity/assigned_task_edit_button.html",
     )
 
     class Meta:
