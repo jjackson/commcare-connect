@@ -1472,6 +1472,43 @@ class TestAddPaymentUnitView:
 
 
 @pytest.mark.django_db
+class TestEditPaymentUnit:
+    def _url(self, org_slug, opp_id, payment_unit_id):
+        return reverse("opportunity:edit_payment_unit", args=(org_slug, opp_id, payment_unit_id))
+
+    def test_edit_payment_unit_non_managed(self, client, organization, opportunity, org_user_member):
+        payment_unit = PaymentUnitFactory(opportunity=opportunity)
+        DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+    def test_edit_payment_unit_managed_as_non_pm_redirects(
+        self, client, organization, org_user_member, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opportunity.opportunity_id)
+        )
+
+    def test_edit_payment_unit_managed_as_pm(
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(program_manager_org_user_admin)
+        url = self._url(program_manager_org.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
 @override_switch(UPDATES_TO_MARK_AS_PAID_WORKFLOW, active=True)
 def test_update_invoice_invoice_ticket_link_restricted_access(
     client, program_manager_org, program_manager_org_user_member
@@ -2016,6 +2053,36 @@ class TestSuspendUser:
         access.refresh_from_db()
         assert access.suspended is False
 
+    def test_suspend_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=False
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is False
+
+    def test_suspend_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=False)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
 
 @pytest.mark.django_db
 class TestRevokeUserSuspension:
@@ -2051,6 +2118,36 @@ class TestRevokeUserSuspension:
         assert response.status_code == HTTPStatus.NOT_FOUND
         access.refresh_from_db()
         assert access.suspended is True
+
+    def test_revoke_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
+    def test_revoke_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=True)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        access.refresh_from_db()
+        assert access.suspended is False
 
 
 @pytest.mark.django_db
