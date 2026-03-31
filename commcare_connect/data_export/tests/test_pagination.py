@@ -114,13 +114,15 @@ class TestIdKeysetPaginationEdgeCases:
         assert page == []
 
     @pytest.mark.parametrize(
-        "page_size_param,expected_count",
+        "page_size_param,expected_count,expected_page_size",
         [
-            (99999, 3),  # clamped to max_page_size (5000)
-            (None, 3),  # default page_size=1000 > 3 records
+            (99999, 3, 5000),  # clamped to max_page_size (5000)
+            (None, 3, 1000),  # default page_size=1000 > 3 records
         ],
     )
-    def test_page_size(self, paginator, api_rf, opportunity, org_user_member, page_size_param, expected_count):
+    def test_page_size(
+        self, paginator, api_rf, opportunity, org_user_member, page_size_param, expected_count, expected_page_size
+    ):
         UserVisitFactory.create_batch(3, opportunity=opportunity, user=org_user_member)
         params = {"cursor_order": "forward"}
         if page_size_param is not None:
@@ -131,6 +133,7 @@ class TestIdKeysetPaginationEdgeCases:
         page = paginator.paginate_queryset(queryset, request)
 
         assert len(page) == expected_count
+        assert paginator.page_size == expected_page_size
 
     def test_default_cursor_order_is_forward(self, paginator, api_rf, opportunity, org_user_member):
         visits = sorted(
