@@ -61,6 +61,13 @@ class TestAddMembersView:
 
 @pytest.mark.django_db
 class TestOrganizationChangeForm:
+    def _grant_entity_management_perm(self, user: User) -> User:
+        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+        user.user_permissions.add(perm)
+        # Django caches permissions on the user instance; fetch a fresh instance to clear the cache.
+        return User.objects.get(pk=user.pk)
+
     def test_update_name(self, organization: Organization, user: User):
         form = OrganizationChangeForm(data={"name": "New Name"}, user=user, instance=organization)
         assert form.is_valid()
@@ -81,11 +88,8 @@ class TestOrganizationChangeForm:
         self, organization: Organization, user: User, permission, program_manager
     ):
         if permission is not None:
-            app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-            user.user_permissions.add(perm)
+            user = self._grant_entity_management_perm(user)
 
-        user = User.objects.get(pk=user.pk)
         llo_entity = LLOEntity.objects.create(name="Test LLO")
 
         organization.program_manager = program_manager
@@ -106,11 +110,7 @@ class TestOrganizationChangeForm:
     @pytest.mark.parametrize("permission", [None, WORKSPACE_ENTITY_MANAGEMENT_ACCESS])
     def test_create_llo_entity(self, organization: Organization, user: User, permission):
         if permission is not None:
-            app_label, codename = permission.split(".")
-            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-            user.user_permissions.add(perm)
-
-        user.refresh_from_db()
+            user = self._grant_entity_management_perm(user)
 
         organization.save()
 
@@ -136,10 +136,7 @@ class TestOrganizationChangeForm:
             assert LLOEntity.objects.count() == 1
 
     def test_existing_llo_entity_short_name_not_updated(self, organization: Organization, user: User):
-        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-        user.user_permissions.add(perm)
-        user = User.objects.get(pk=user.pk)
+        user = self._grant_entity_management_perm(user)
 
         llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="OLD")
         organization.llo_entity = llo_entity
@@ -156,10 +153,7 @@ class TestOrganizationChangeForm:
         assert llo_entity.short_name == "OLD"
 
     def test_create_llo_entity_without_short_name_is_invalid(self, organization: Organization, user: User):
-        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-        user.user_permissions.add(perm)
-        user = User.objects.get(pk=user.pk)
+        user = self._grant_entity_management_perm(user)
 
         form = OrganizationChangeForm(
             data={"name": organization.name, "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO Entity"},
