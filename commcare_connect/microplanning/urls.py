@@ -14,6 +14,11 @@ urlpatterns = [
         name="workareas_tiles",
     ),
     path(
+        "<slug:opp_id>/visit_tiles/<int:z>/<int:x>/<int:y>/",
+        views.UserVisitTileView.as_view(),
+        name="user_visit_tiles",
+    ),
+    path(
         "<slug:opp_id>/workareas_group_geojson/",
         views.workareas_group_geojson,
         name="workareas_group_geojson",
@@ -23,4 +28,5 @@ urlpatterns = [
         views.ModifyWorkAreaUpdateView.as_view(),
         name="modify_work_area",
     ),
+    path("<slug:opp_id>/download_work_areas/", views.download_work_areas, name="download_work_areas"),
 ]
