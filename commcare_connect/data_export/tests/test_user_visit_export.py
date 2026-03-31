@@ -17,18 +17,19 @@ def _add_export_credentials(api_client, user):
         scope="read write export",
         defaults={"expires": now() + datetime.timedelta(hours=1)},
     )
-    api_client.credentials(Authorization=f"Bearer {token}")
+    api_client.credentials(**{**getattr(api_client, "_credentials", {}), "Authorization": f"Bearer {token}"})
+
+
+@pytest.fixture
+def api_client_v2(api_client):
+    api_client.credentials(HTTP_ACCEPT="application/json; version=2.0")
+    return api_client
 
 
 def _parse_csv_response(response):
     content = b"".join(response.streaming_content).decode()
     reader = csv.DictReader(io.StringIO(content))
     return list(reader), reader.fieldnames
-
-
-def _get_v2(api_client, url):
-    """Make a v2.0 request using AcceptHeaderVersioning."""
-    return api_client.get(url, HTTP_ACCEPT="application/json; version=2.0")
 
 
 def _get_url(opp_id, **params):
@@ -115,11 +116,11 @@ class TestUserVisitDataViewV1:
 
 @pytest.mark.django_db
 class TestUserVisitDataViewV2:
-    def test_returns_paginated_json(self, api_client, opportunity, org_user_member):
+    def test_returns_paginated_json(self, api_client_v2, opportunity, org_user_member):
         UserVisitFactory.create_batch(3, opportunity=opportunity, user=org_user_member)
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
-        response = _get_v2(api_client, _get_url(opportunity.id, page_size=2))
+        response = api_client_v2.get(_get_url(opportunity.id, page_size=2))
 
         assert response.status_code == 200
 
@@ -128,26 +129,23 @@ class TestUserVisitDataViewV2:
         assert "next" in data
         assert len(data["results"]) == 2
 
-    def test_default_excludes_images_column(self, api_client, opportunity, org_user_member):
+    def test_default_excludes_images_column(self, api_client_v2, opportunity, org_user_member):
         UserVisitFactory(opportunity=opportunity, user=org_user_member)
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
-        response = _get_v2(api_client, _get_url(opportunity.id))
+        response = api_client_v2.get(_get_url(opportunity.id))
 
         data = response.json()
 
         assert "images" not in data["results"][0]
 
-    def test_images_true_includes_images_column(self, api_client, opportunity, org_user_member):
+    def test_images_true_includes_images_column(self, api_client_v2, opportunity, org_user_member):
         visit = UserVisitFactory(opportunity=opportunity, user=org_user_member)
         blob = BlobMetaFactory(parent_id=visit.xform_id, content_type="image/jpeg", name="photo.jpg")
 
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
-        response = _get_v2(
-            api_client,
-            _get_url(opportunity.id, images="true"),
-        )
+        response = api_client_v2.get(_get_url(opportunity.id, images="true"))
 
         data = response.json()
 
@@ -158,37 +156,37 @@ class TestUserVisitDataViewV2:
             "name": "photo.jpg",
         }
 
-    def test_images_prefetch_avoids_n_plus_1(self, api_client, opportunity, org_user_member):
+    def test_images_prefetch_avoids_n_plus_1(self, api_client_v2, opportunity, org_user_member):
         visits = UserVisitFactory.create_batch(5, opportunity=opportunity, user=org_user_member)
         for visit in visits:
             BlobMetaFactory(parent_id=visit.xform_id, content_type="image/png", name="img.png")
 
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
         with CaptureQueriesContext(connection) as ctx:
-            _get_v2(api_client, _get_url(opportunity.id, images="true"))
+            api_client_v2.get(_get_url(opportunity.id, images="true"))
 
         blob_queries = [q["sql"] for q in ctx.captured_queries if "opportunity_blobmeta" in q["sql"]]
         assert len(blob_queries) == 1, f"Expected 1 BlobMeta query, got {len(blob_queries)}: {blob_queries}"
 
-    def test_images_with_no_blobs(self, api_client, opportunity, org_user_member):
+    def test_images_with_no_blobs(self, api_client_v2, opportunity, org_user_member):
         UserVisitFactory(opportunity=opportunity, user=org_user_member)
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
-        response = _get_v2(api_client, _get_url(opportunity.id, images="true"))
+        response = api_client_v2.get(_get_url(opportunity.id, images="true"))
         assert response.status_code == 200
 
         data = response.json()
         assert "images" in data["results"][0]
         assert not data["results"][0]["images"]
 
-    def test_non_image_blobs_excluded(self, api_client, opportunity, org_user_member):
+    def test_non_image_blobs_excluded(self, api_client_v2, opportunity, org_user_member):
         visit = UserVisitFactory(opportunity=opportunity, user=org_user_member)
         BlobMetaFactory(parent_id=visit.xform_id, content_type="application/pdf", name="doc.pdf")
         image_blob = BlobMetaFactory(parent_id=visit.xform_id, content_type="image/jpeg", name="photo.jpg")
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
-        response = _get_v2(api_client, _get_url(opportunity.id, images="true"))
+        response = api_client_v2.get(_get_url(opportunity.id, images="true"))
         data = response.json()
 
         assert data["results"][0]["images"] == [
@@ -199,14 +197,14 @@ class TestUserVisitDataViewV2:
             }
         ]
 
-    def test_pagination_traversal(self, api_client, opportunity, org_user_member):
+    def test_pagination_traversal(self, api_client_v2, opportunity, org_user_member):
         UserVisitFactory.create_batch(5, opportunity=opportunity, user=org_user_member)
-        _add_export_credentials(api_client, org_user_member)
+        _add_export_credentials(api_client_v2, org_user_member)
 
         all_results = []
         url = _get_url(opportunity.id, page_size=2)
         while url:
-            response = _get_v2(api_client, url)
+            response = api_client_v2.get(url)
             assert response.status_code == 200
             data = response.json()
             all_results.extend(data["results"])
