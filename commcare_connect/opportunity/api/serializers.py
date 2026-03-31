@@ -332,5 +332,7 @@ class DeliveryProgressSerializer(serializers.Serializer):
         return CompletedWorkSerializer(completed_works, many=True).data
 
     def get_assigned_tasks(self, obj):
-        assigned_tasks = AssignedTask.objects.filter(opportunity_access=obj).select_related("task")
+        assigned_tasks = (
+            AssignedTask.objects.filter(opportunity_access=obj).select_related("task").order_by("due_date")
+        )
         return AssignedTaskSerializer(assigned_tasks, many=True).data
