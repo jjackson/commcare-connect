@@ -177,7 +177,7 @@ def test_tasks_filterset_task_type_excludes_inactive():
 
     choices = dict(filterset.form.fields["task_type"].choices)
     assert str(active_task.pk) in choices
-    assert str(inactive_task.pk) in choices
+    assert str(inactive_task.pk) not in choices
 
 
 @pytest.mark.django_db
