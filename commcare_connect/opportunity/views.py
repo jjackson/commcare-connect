@@ -238,7 +238,7 @@ class OpportunityObjectMixin:
 class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
     def dispatch(self, request, *args, **kwargs):
         if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
+            raise Http404(_("This page is not available."))
         return super().dispatch(request, *args, **kwargs)
 
 
