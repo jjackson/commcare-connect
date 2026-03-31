@@ -11,7 +11,7 @@ from commcare_connect.opportunity.models import (
     DeliverUnitFlagRules,
     OpportunityAccess,
     OpportunityVerificationFlags,
-    Task,
+    TaskType,
     UserVisit,
     VisitValidationStatus,
 )
@@ -321,7 +321,7 @@ class TasksFilterSet(django_filters.FilterSet):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
         if self.opportunity:
-            active_tasks = Task.objects.filter(opportunity=self.opportunity)
+            active_tasks = TaskType.objects.filter(opportunity=self.opportunity)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
 
             worker_queryset = (

@@ -40,7 +40,7 @@ from commcare_connect.opportunity.models import (
     OpportunityVerificationFlags,
     PaymentInvoice,
     PaymentUnit,
-    Task,
+    TaskType,
     UserVisit,
     VisitReviewStatus,
     VisitValidationStatus,
@@ -1873,7 +1873,7 @@ class AutomatedPaymentInvoiceForm(forms.ModelForm):
 class CreateTaskForm(forms.Form):
     task = forms.ModelChoiceField(
         label=_("Task"),
-        queryset=Task.objects.none(),
+        queryset=TaskType.objects.none(),
         empty_label=_("Select a task"),
         widget=forms.Select(attrs={"data-tomselect": "1"}),
     )
@@ -1891,7 +1891,7 @@ class CreateTaskForm(forms.Form):
     def __init__(self, *args, opportunity=None, **kwargs):
         super().__init__(*args, **kwargs)
         if opportunity is not None:
-            self.fields["task"].queryset = Task.objects.filter(app=opportunity.deliver_app)
+            self.fields["task"].queryset = TaskType.objects.filter(app=opportunity.deliver_app)
             self.fields["connect_worker"].queryset = User.objects.filter(
                 opportunityaccess__opportunity=opportunity,
                 opportunityaccess__accepted=True,
@@ -1922,7 +1922,7 @@ class AddTaskTypeForm(forms.ModelForm):
     )
 
     class Meta:
-        model = Task
+        model = TaskType
         fields = ["name", "description", "case_property"]
         widgets = {"description": forms.Textarea(attrs={"rows": 2})}
 
@@ -1952,7 +1952,9 @@ class AddTaskTypeForm(forms.ModelForm):
             self.fields["task_unit_id"].widget.attrs["disabled"] = True
             self.task_units_data = json.dumps({})
             return
-        already_used_slugs = set(Task.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True))
+        already_used_slugs = set(
+            TaskType.objects.filter(app=self.opportunity.deliver_app).values_list("slug", flat=True)
+        )
         available_units = [tu for tu in task_units if tu.id not in already_used_slugs]
         if available_units:
             self.fields["task_unit_id"].choices = [("", _("Select a task unit"))] + [
@@ -1966,14 +1968,14 @@ class AddTaskTypeForm(forms.ModelForm):
         )
 
     def save(self, commit=True):
-        task = super().save(commit=False)
-        task.app = self.opportunity.deliver_app
-        task.slug = self.cleaned_data["task_unit_id"]
-        unit_name = dict(self.fields["task_unit_id"].choices).get(task.slug, "")
-        task.unit_name = unit_name[:255]
+        task_type = super().save(commit=False)
+        task_type.app = self.opportunity.deliver_app
+        task_type.slug = self.cleaned_data["task_unit_id"]
+        unit_name = dict(self.fields["task_unit_id"].choices).get(task_type.slug, "")
+        task_type.unit_name = unit_name[:255]
         if commit:
-            task.save()
-        return task
+            task_type.save()
+        return task_type
 
     def clean(self):
         cleaned_data = super().clean()
@@ -1981,7 +1983,7 @@ class AddTaskTypeForm(forms.ModelForm):
         if not task_unit_id:
             return cleaned_data
 
-        if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
+        if TaskType.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
             self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
         return cleaned_data
 
@@ -1990,7 +1992,7 @@ class EditTaskTypeForm(forms.ModelForm):
     is_archived = forms.BooleanField(required=False, label=_("Archive this task type"))
 
     class Meta:
-        model = Task
+        model = TaskType
         fields = ["name", "description"]
         widgets = {"description": forms.Textarea(attrs={"rows": 2})}
 

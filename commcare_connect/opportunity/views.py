@@ -120,7 +120,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentInvoice,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -1204,7 +1204,7 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
         opportunity = self.get_opportunity()
         org_slug = self.request.org.slug
 
-        tasks = Task.objects.filter(app=opportunity.deliver_app)
+        tasks = TaskType.objects.filter(app=opportunity.deliver_app)
         path = [
             {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
             {
@@ -1241,7 +1241,7 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
 class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
     form_class = EditTaskTypeForm
-    model = Task
+    model = TaskType
 
     def dispatch(self, request, *args, **kwargs):
         response = super().dispatch(request, *args, **kwargs)
@@ -3288,7 +3288,7 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         opportunity = self.get_opportunity()
         return (
             AssignedTask.objects.filter(opportunity_access__opportunity=opportunity)
-            .select_related("task", "opportunity_access__user", "assigned_by")
+            .select_related("task_type", "opportunity_access__user", "assigned_by")
             .order_by("-date_created")
         )
 
