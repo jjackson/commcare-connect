@@ -28,4 +28,5 @@ urlpatterns = [
         views.ModifyWorkAreaUpdateView.as_view(),
         name="modify_work_area",
     ),
+    path("<slug:opp_id>/download_work_areas/", views.download_work_areas, name="download_work_areas"),
 ]

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import csv as csv_mod
+import io
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
@@ -17,14 +18,27 @@ from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
+from commcare_connect.microplanning.tasks import WorkAreaCSVExporter
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.microplanning.views import UserVisitVectorLayer
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 
+class BaseMicroplanningFlagTest:
+    @pytest.fixture(autouse=True)
+    def setup_microplanning_flag(self, opportunity, request):
+        enabled = getattr(request, "param", True)
+        if not enabled:
+            return
+
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(opportunity)
+        flag.flush()
+
+
 @pytest.mark.django_db
-class TestWorkAreaUpload:
+class TestWorkAreaUpload(BaseMicroplanningFlagTest):
     # --- Common CSV for all tests ---
     CSV_CONTENT = (
         b"Area Slug,Ward,Centroid,Boundary,Building Count,Expected Visit Count\n"
@@ -46,12 +60,6 @@ class TestWorkAreaUpload:
         url = self.get_url(opportunity.organization.slug, opportunity.opportunity_id)
         client.force_login(org_user_admin)
 
-        # Flag opportunity as allowed
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.save()
-        cache.clear()
-
         # Mock celery task
         mock_task = MagicMock()
         mock_task.id = "task-123"
@@ -72,6 +80,7 @@ class TestWorkAreaUpload:
         assert "An import for this opportunity is already in progress." in str(messages[1])
         assert mock_delay.call_count == 1  # No new task
 
+    @pytest.mark.parametrize("setup_microplanning_flag", [False], indirect=True)
     @patch("commcare_connect.microplanning.views.import_work_areas_task.delay")
     def test_flagged_permission_required(self, mock_delay, client, org_user_admin, opportunity, csv_file):
         """
@@ -79,9 +88,6 @@ class TestWorkAreaUpload:
         """
         url = self.get_url(opportunity.organization.slug, opportunity.opportunity_id)
         client.force_login(org_user_admin)
-        # Ensure opportunity is NOT flagged
-        Flag.objects.filter(name=MICROPLANNING).delete()
-        cache.clear()
 
         response = client.post(url, {"csv_file": csv_file})
         assert response.status_code == 404
@@ -109,45 +115,33 @@ class TestGetMetricsForMicroplanning:
 
 
 @pytest.mark.django_db
-class TestMicroplanningHomeView:
+class TestMicroplanningHomeView(BaseMicroplanningFlagTest):
     def url(self, org_slug: str, opp_id: str):
         return reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
 
     def test_success(self, client: Client, settings, organization, org_user_admin, opportunity):
         settings.MAPBOX_TOKEN = "test-mapbox-token"
-        cache.clear()
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-
         client.force_login(org_user_admin)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
 
         assert response.status_code == 200
         assert any(t.name == "microplanning/home.html" for t in response.templates)
 
+    @pytest.mark.parametrize("setup_microplanning_flag", [False], indirect=True)
     def test_flag_disabled(self, client: Client, organization, org_user_admin, opportunity):
         client.force_login(org_user_admin)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
 
     def test_unauthenticated(self, client: Client, organization, org_user_member, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-
         client.force_login(org_user_member)
         response = client.get(self.url(organization.slug, str(opportunity.opportunity_id)))
         assert response.status_code == 404
 
 
 @pytest.mark.django_db
-class TestModifyWorkAreaUpdateView:
+class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
     template_name = "microplanning/work_area_form.html"
-
-    @pytest.fixture(autouse=True)
-    def setup_flag(self, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.flush()
 
     def url(self, org_slug, opp_id, work_area_id):
         return reverse("microplanning:modify_work_area", args=(org_slug, opp_id, work_area_id))
@@ -270,13 +264,7 @@ class TestModifyWorkAreaUpdateView:
 
 
 @pytest.mark.django_db
-class TestWorkAreaTileViewFiltering:
-    @pytest.fixture(autouse=True)
-    def setup_flag(self, opportunity):
-        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
-        flag.opportunities.add(opportunity)
-        flag.flush()
-
+class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
     TILE_Z, TILE_X, TILE_Y = 10, 732, 427
 
     def tile_url(self, org_slug, opp_id):
@@ -597,3 +585,155 @@ class TestUserVisitVectorLayer:
         )
         layer = UserVisitVectorLayer(opportunity=opportunity, filter_params={})
         assert layer.get_queryset().count() == 2
+
+
+@pytest.mark.django_db
+class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
+    def url(self, opportunity):
+        return reverse(
+            "microplanning:download_work_areas",
+            kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.opportunity_id},
+        )
+
+    def _parse_csv(self, response):
+        content = b"".join(response.streaming_content).decode("utf-8")
+        return list(csv_mod.reader(io.StringIO(content)))
+
+    def test_streams_csv_with_correct_headers_and_data(self, client, org_user_admin, opportunity):
+        wa = WorkAreaFactory(
+            opportunity=opportunity,
+            slug="area-x",
+            ward="ward-x",
+            building_count=10,
+            expected_visit_count=5,
+            case_properties={"max_wag": "3", "wag_serial_number": "42", "lga": "LGA1", "state": "State1"},
+            work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Group A"),
+        )
+        client.force_login(org_user_admin)
+        response = client.get(self.url(opportunity))
+
+        assert response.status_code == 200
+        assert response["Content-Type"] == "text/csv"
+        assert f"work_area_summary_{opportunity.opportunity_id}.csv" in response["Content-Disposition"]
+
+        assert set(WorkAreaCSVExporter.FIELD_MAP.keys()) == set(WorkAreaCSVExporter.HEADERS.keys())
+        rows = self._parse_csv(response)
+        assert rows[0] == list(WorkAreaCSVExporter.HEADERS.values())
+        assert rows[1] == [
+            "area-x",
+            "ward-x",
+            f"{wa.centroid.x} {wa.centroid.y}",
+            wa.boundary.wkt,
+            "10",
+            "5",
+            "3",
+            "42",
+            "LGA1",
+            "State1",
+            wa.work_area_group.name,
+        ]
+
+    @pytest.mark.parametrize(
+        "count, expected_rows",
+        [
+            (0, 1),  # no work areas, only header row
+            (3, 4),  # 3 work areas + header
+        ],
+    )
+    def test_row_counts(self, client, org_user_admin, opportunity, count, expected_rows):
+        WorkAreaFactory.create_batch(count, opportunity=opportunity)
+        client.force_login(org_user_admin)
+        rows = self._parse_csv(client.get(self.url(opportunity)))
+
+        assert len(rows) == expected_rows
+
+    def test_null_case_properties_yields_empty_strings(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, case_properties=None, work_area_group=None)
+        client.force_login(org_user_admin)
+        row = self._parse_csv(client.get(self.url(opportunity)))[1]
+        assert row[6:] == ["", "", "", "", ""]
+
+    @pytest.mark.parametrize(
+        "login_as, method, expected_status",
+        [
+            ("org_user_member", "get", 404),
+            ("org_user_admin", "post", 405),
+        ],
+    )
+    def test_access_denied(self, client, login_as, method, expected_status, request, opportunity):
+        user = request.getfixturevalue(login_as)
+        client.force_login(user)
+        response = getattr(client, method)(self.url(opportunity))
+        assert response.status_code == expected_status
+
+    def test_status_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
+        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_STARTED}"))
+        assert rows[1][0] == wa.slug
+        assert len(rows) == 2
+
+    def test_assignee_filter(self, client, org_user_admin, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+        wa = WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+        WorkAreaFactory(opportunity=opportunity)  # unassigned, no group
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + f"?assignee={access.user.id}"))
+        assert rows[1][0] == wa.slug
+        assert len(rows) == 2
+
+    def test_date_filter(self, client, org_user_admin, opportunity):
+        wa_with_visit = WorkAreaFactory(opportunity=opportunity)
+        wa_without_visit = WorkAreaFactory(opportunity=opportunity)
+        UserVisitFactory(
+            opportunity=opportunity,
+            work_area=wa_with_visit,
+            visit_date=datetime(2025, 6, 15, tzinfo=timezone.utc),
+        )
+        UserVisitFactory(
+            opportunity=opportunity,
+            work_area=wa_without_visit,
+            visit_date=datetime(2025, 3, 1, tzinfo=timezone.utc),
+        )
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity) + "?start_date=2025-06-01&end_date=2025-06-30"))
+        assert rows[1][0] == wa_with_visit.slug
+        assert len(rows) == 2
+
+    def test_reordered_headers_still_produces_valid_csv(self, client, org_user_admin, opportunity):
+        reversed_headers = dict(reversed(list(WorkAreaCSVExporter.HEADERS.items())))
+
+        WorkAreaFactory(
+            opportunity=opportunity,
+            slug="slug-rev",
+            ward="ward-rev",
+            building_count=4,
+            expected_visit_count=2,
+            work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Rev Group"),
+            case_properties={"max_wag": "1", "wag_serial_number": "77", "lga": "RevLGA", "state": "RevState"},
+        )
+        client.force_login(org_user_admin)
+
+        with patch.object(WorkAreaCSVExporter, "HEADERS", reversed_headers):
+            rows = self._parse_csv(client.get(self.url(opportunity)))
+        csv_headers = rows[0]
+
+        expected_headers = list(reversed_headers.values())
+        assert csv_headers == expected_headers
+        assert len(rows[1]) == len(csv_headers)
+
+        row_dict = dict(zip(csv_headers, rows[1]))
+        assert row_dict["Area Slug"] == "slug-rev"
+        assert row_dict["Ward"] == "ward-rev"
+        assert row_dict["Building Count"] == "4"
+        assert row_dict["Expected Visit Count"] == "2"
+        assert row_dict["Max WAG"] == "1"
+        assert row_dict["WAG Serial Number"] == "77"
+        assert row_dict["LGA"] == "RevLGA"
+        assert row_dict["State"] == "RevState"
+        assert row_dict["Work Area Group Name"] == "Rev Group"

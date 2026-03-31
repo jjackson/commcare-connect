@@ -7,6 +7,7 @@
             selectedFeature: null,
             showWorkAreaEditModal: false,
             showVisits: false,
+            filterQuery: '',
 
 
             openWorkAreaEditModal(workAreaId) {
@@ -14,6 +15,11 @@
                 const url = editWorkAreaUrl + workAreaId + '/';
                 htmx.ajax('GET', url, { target: '#work-area-form', swap: 'innerHTML' })
                 .then(() => this.showWorkAreaEditModal = true)
+            },
+
+            getDownloadUrl() {
+                const baseUrl = '{{ download_url|escapejs }}';
+                return this.filterQuery ? `${baseUrl}?${this.filterQuery}` : baseUrl;
             },
 
             showToast(message, isError = false, duration = 3000) {
@@ -33,6 +39,7 @@
                 if (!this.map) return;
                 const form = this.$refs.filterForm;
                 const query = new URLSearchParams(new FormData(form)).toString();
+                this.filterQuery = query;
                 const baseUrl = `${window.location.origin}{{ tiles_url|escapejs }}`;
                 const newUrl = query ? `${baseUrl}?${query}` : baseUrl;
                 const source = this.map.getSource('workareas');
