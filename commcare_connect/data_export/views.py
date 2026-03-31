@@ -108,7 +108,11 @@ class BaseDataExportListView(BaseDataExportView):
         return self._paginator.get_paginated_response(data)
 
     def post_paginate(self, page):
-        """Hook called after pagination, before serialization. Override to modify the page list in-place."""
+        """Hook called after pagination, before serialization. Override to modify the page list in-place.
+
+        Note: this hook is only called for v2.0 requests (paginated JSON). It is not invoked
+        for v1.0 requests, which use streaming CSV via ``get_data_generator``.
+        """
         pass
 
     @extend_schema(
