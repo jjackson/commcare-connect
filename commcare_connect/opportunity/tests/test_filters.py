@@ -4,9 +4,9 @@ from waffle.testutils import override_switch
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.filters import TasksFilterSet, UserVisitFilterSet
 from commcare_connect.opportunity.helpers import get_worker_tasks_base_queryset
-from commcare_connect.opportunity.models import CompletedTaskStatus, UserVisit
+from commcare_connect.opportunity.models import AssignedTaskStatus, UserVisit
 from commcare_connect.opportunity.tests.factories import (
-    CompletedTaskFactory,
+    AssignedTaskFactory,
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
@@ -113,8 +113,8 @@ def test_tasks_filterset_worker_name():
     access_alice = OpportunityAccessFactory(opportunity=opp, accepted=True, user__name="Alice Smith")
     access_bob = OpportunityAccessFactory(opportunity=opp, accepted=True, user__name="Bob Jones")
     task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
-    CompletedTaskFactory(opportunity_access=access_alice, task=task)
-    CompletedTaskFactory(opportunity_access=access_bob, task=task)
+    AssignedTaskFactory(opportunity_access=access_alice, task=task)
+    AssignedTaskFactory(opportunity_access=access_bob, task=task)
 
     qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"worker_name": [str(access_alice.user.pk)]}, queryset=qs, opportunity=opp)
@@ -133,16 +133,16 @@ def test_tasks_filterset_task_status_single():
     opp = OpportunityFactory()
     access = OpportunityAccessFactory(opportunity=opp, accepted=True)
     task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
-    CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.ASSIGNED)
-    CompletedTaskFactory(opportunity_access=access, task=task, status=CompletedTaskStatus.COMPLETED)
+    AssignedTaskFactory(opportunity_access=access, task=task, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access, task=task, status=AssignedTaskStatus.COMPLETED)
 
     qs = get_worker_tasks_base_queryset(opp)
-    filterset = TasksFilterSet(data={"task_status": [CompletedTaskStatus.COMPLETED]}, queryset=qs, opportunity=opp)
+    filterset = TasksFilterSet(data={"task_status": [AssignedTaskStatus.COMPLETED]}, queryset=qs, opportunity=opp)
 
     assert filterset.form.is_valid()
     result = list(filterset.qs)
     assert len(result) == 1
-    assert result[0].task_status == CompletedTaskStatus.COMPLETED
+    assert result[0].task_status == AssignedTaskStatus.COMPLETED
 
 
 @pytest.mark.django_db
@@ -151,8 +151,8 @@ def test_tasks_filterset_task_type():
     access = OpportunityAccessFactory(opportunity=opp, accepted=True)
     task_a = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Survey")
     task_b = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True, name="Follow-up")
-    CompletedTaskFactory(opportunity_access=access, task=task_a)
-    CompletedTaskFactory(opportunity_access=access, task=task_b)
+    AssignedTaskFactory(opportunity_access=access, task=task_a)
+    AssignedTaskFactory(opportunity_access=access, task=task_b)
 
     qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"task_type": [str(task_a.pk)]}, queryset=qs, opportunity=opp)
@@ -187,7 +187,7 @@ def test_tasks_filterset_no_tasks_status():
     access_with_task = OpportunityAccessFactory(opportunity=opp, accepted=True)
     access_no_task = OpportunityAccessFactory(opportunity=opp, accepted=True)
     task = TaskFactory(opportunity=opp, app=opp.deliver_app, is_active=True)
-    CompletedTaskFactory(opportunity_access=access_with_task, task=task)
+    AssignedTaskFactory(opportunity_access=access_with_task, task=task)
 
     qs = get_worker_tasks_base_queryset(opp)
     filterset = TasksFilterSet(data={"task_status": ["no_tasks"]}, queryset=qs, opportunity=opp)

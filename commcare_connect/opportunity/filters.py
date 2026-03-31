@@ -7,7 +7,7 @@ from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.models import (
-    CompletedTaskStatus,
+    AssignedTaskStatus,
     DeliverUnitFlagRules,
     OpportunityAccess,
     OpportunityVerificationFlags,
@@ -264,8 +264,8 @@ class UserVisitFilterSet(django_filters.FilterSet):
 NO_TASKS_FILTER_VALUE = "no_tasks"
 
 TASK_STATUS_CHOICES = [
-    (CompletedTaskStatus.ASSIGNED, _("To Do")),
-    (CompletedTaskStatus.COMPLETED, _("Completed")),
+    (AssignedTaskStatus.ASSIGNED, _("To Do")),
+    (AssignedTaskStatus.COMPLETED, _("Completed")),
     (NO_TASKS_FILTER_VALUE, _("No Tasks")),
 ]
 

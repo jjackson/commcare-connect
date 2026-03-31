@@ -19,7 +19,7 @@ from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
-    CompletedTaskStatus,
+    AssignedTaskStatus,
     CompletedWorkStatus,
     FormJsonValidationRules,
     InvoiceStatus,
@@ -38,8 +38,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tables import TaskTable
 from commcare_connect.opportunity.tasks import invite_user
 from commcare_connect.opportunity.tests.factories import (
+    AssignedTaskFactory,
     BlobMetaFactory,
-    CompletedTaskFactory,
     CompletedWorkFactory,
     DeliverUnitFactory,
     FormJsonValidationRulesFactory,
@@ -2281,9 +2281,9 @@ class TestAssignedTaskListView:
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
         task = TaskFactory(app=opportunity.deliver_app)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.COMPLETED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2482,8 +2482,8 @@ class TestWorkerTasksView:
 
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
         UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-        CompletedTaskFactory(opportunity_access=access)
-        CompletedTaskFactory(opportunity_access=access)
+        AssignedTaskFactory(opportunity_access=access)
+        AssignedTaskFactory(opportunity_access=access)
 
         url = self._url(organization, opportunity)
 
