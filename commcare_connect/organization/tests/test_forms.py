@@ -116,7 +116,11 @@ class TestOrganizationChangeForm:
 
         assert LLOEntity.objects.count() == 0
         form = OrganizationChangeForm(
-            data={"name": organization.name, "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO Entity"},
+            data={
+                "name": organization.name,
+                "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "New LLO Entity",
+                "llo_entity_short_name": "NL",
+            },
             user=user,
             instance=organization,
         )
@@ -128,57 +132,28 @@ class TestOrganizationChangeForm:
         else:
             assert organization.llo_entity is not None
             assert organization.llo_entity.name == "New LLO Entity"
+            assert organization.llo_entity.short_name == "NL"
             assert LLOEntity.objects.count() == 1
 
-    @pytest.mark.parametrize(
-        "has_permission, expected_short_name",
-        [
-            (True, "TL"),
-            (False, "OLD"),
-        ],
-    )
-    def test_update_llo_entity_short_name(
-        self, organization: Organization, user: User, has_permission, expected_short_name
-    ):
-        if has_permission:
-            app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-            perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-            user.user_permissions.add(perm)
-            user = User.objects.get(pk=user.pk)
+    def test_existing_llo_entity_short_name_not_updated(self, organization: Organization, user: User):
+        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
+        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
+        user.user_permissions.add(perm)
+        user = User.objects.get(pk=user.pk)
 
         llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="OLD")
         organization.llo_entity = llo_entity
         organization.save()
 
         form = OrganizationChangeForm(
-            data={"name": organization.name, "llo_entity": llo_entity.pk, "llo_entity_short_name": "TL"},
+            data={"name": organization.name, "llo_entity": llo_entity.pk, "llo_entity_short_name": "CHANGED"},
             user=user,
             instance=organization,
         )
         assert form.is_valid(), form.errors
         form.save()
         llo_entity.refresh_from_db()
-        assert llo_entity.short_name == expected_short_name
-
-    def test_clear_llo_entity_short_name(self, organization: Organization, user: User):
-        app_label, codename = WORKSPACE_ENTITY_MANAGEMENT_ACCESS.split(".")
-        perm = Permission.objects.get(codename=codename, content_type__app_label=app_label)
-        user.user_permissions.add(perm)
-        user = User.objects.get(pk=user.pk)
-
-        llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="TL")
-        organization.llo_entity = llo_entity
-        organization.save()
-
-        form = OrganizationChangeForm(
-            data={"name": organization.name, "llo_entity": llo_entity.pk, "llo_entity_short_name": ""},
-            user=user,
-            instance=organization,
-        )
-        assert form.is_valid(), form.errors
-        form.save()
-        llo_entity.refresh_from_db()
-        assert llo_entity.short_name is None
+        assert llo_entity.short_name == "OLD"
 
 
 @pytest.mark.django_db
@@ -240,6 +215,7 @@ class TestOrganizationSelectOrCreateForm:
             data={
                 "org": TOMSELECT_NEW_ENTRY_PREFIX + "Brand New Organization",
                 "llo_entity": TOMSELECT_NEW_ENTRY_PREFIX + "Brand New LLO",
+                "llo_entity_short_name": "BNL",
             }
         )
 
@@ -254,6 +230,7 @@ class TestOrganizationSelectOrCreateForm:
         assert org.llo_entity is not None
         assert org.llo_entity.pk is not None
         assert org.llo_entity.name == "Brand New LLO"
+        assert org.llo_entity.short_name == "BNL"
         assert is_new_org
 
     def test_validation_error_mismatched_llo_entity(self):
