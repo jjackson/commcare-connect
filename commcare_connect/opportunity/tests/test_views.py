@@ -2232,16 +2232,13 @@ class TestTaskTypesConfig:
             response = client.get(url)
         assert response.status_code == HTTPStatus.OK
 
-    def test_managed_opp_non_pm_redirects(self, client, organization, org_user_admin, program_manager_org):
+    def test_managed_opp_non_pm_not_found(self, client, organization, org_user_admin, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         url = reverse("opportunity:task_types_config", args=(organization.slug, managed_opp.opportunity_id))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
-        assert response["Location"] == reverse(
-            "opportunity:detail", args=(organization.slug, managed_opp.opportunity_id)
-        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_managed_opp_pm_success(
         self, client, organization, program_manager_org, program_manager_org_user_admin, task_units
@@ -2337,7 +2334,7 @@ class TestTaskTypesConfig:
         url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task.pk))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_scoped_to_opportunity_app(self, client, program_manager_org_user_admin, opp):
         other_task = TaskFactory()  # different app
@@ -2487,4 +2484,4 @@ class TestEditAssignedTask:
         )
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
+        assert response.status_code == HTTPStatus.NOT_FOUND
