@@ -6,6 +6,7 @@
             map: null,
             selectedFeature: null,
             showWorkAreaEditModal: false,
+            showVisits: false,
             filterQuery: '',
 
 
@@ -45,8 +46,14 @@
                 if (source) {
                     source.setTiles([newUrl]);
                     this.selectedFeature = null; // Clear selection on filter change
-                    this.showToast("{% translate 'Filters updated!' %}", false, 500);
                 }
+                const visitSource = this.map.getSource('user-visits');
+                if (visitSource) {
+                    const visitBaseUrl = `${window.location.origin}{{ visit_tiles_url|escapejs }}`;
+                    const visitNewUrl = query ? `${visitBaseUrl}?${query}` : visitBaseUrl;
+                    visitSource.setTiles([visitNewUrl]);
+                }
+                this.showToast("{% translate 'Filters updated!' %}", false, 500);
             },
 
             clearFilters() {
@@ -226,6 +233,49 @@
                             1,
                             0
                         ]
+                    }
+                });
+
+                // Source and layer are added lazily on first toggle to avoid
+                // fetching tiles while the layer is hidden.
+                const visitBaseUrl = `${window.location.origin}{{ visit_tiles_url|escapejs }}`;
+                let visitsLayerAdded = false;
+
+                this.$watch('showVisits', (visible) => {
+                    if (visible && !visitsLayerAdded) {
+                        const form = this.$refs.filterForm;
+                        const query = new URLSearchParams(new FormData(form)).toString();
+                        const visitTilesUrl = query ? `${visitBaseUrl}?${query}` : visitBaseUrl;
+                        this.map.addSource('user-visits', {
+                            type: 'vector',
+                            tiles: [visitTilesUrl],
+                            minzoom: minZoom,
+                        });
+                        this.map.addLayer({
+                            id: 'user-visits-circle',
+                            type: 'circle',
+                            source: 'user-visits',
+                            'source-layer': 'user-visits',
+                            paint: {
+                                'circle-radius': [
+                                    'interpolate', ['linear'], ['zoom'],
+                                    8, 2,
+                                    14, 5
+                                ],
+                                'circle-color': '#e74c3c',
+                                'circle-opacity': 0.7,
+                                'circle-stroke-width': 1,
+                                'circle-stroke-color': '#ffffff',
+                                'circle-stroke-opacity': 0.5,
+                            }
+                        });
+                        visitsLayerAdded = true;
+                    } else if (visitsLayerAdded) {
+                        this.map.setLayoutProperty(
+                            'user-visits-circle',
+                            'visibility',
+                            visible ? 'visible' : 'none'
+                        );
                     }
                 });
 

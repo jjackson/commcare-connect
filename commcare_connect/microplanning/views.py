@@ -8,12 +8,14 @@ from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.gis.db.models import Extent, Union
+from django.contrib.gis.db.models.fields import PointField
 from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, FloatField, Func, Value
+from django.db.models.functions import Cast
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -30,9 +32,10 @@ from commcare_connect.commcarehq.api import create_or_update_case_by_work_area
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
-from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
+from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import WorkAreaModelForm
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
+from commcare_connect.opportunity.models import UserVisit
 from commcare_connect.organization.decorators import opportunity_required, org_admin_required
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 from commcare_connect.utils.file import get_file_extension
@@ -57,6 +60,11 @@ def microplanning_home(request, *args, **kwargs):
     )
     tiles_url = reverse(
         "microplanning:workareas_tiles",
+        kwargs={"org_slug": request.org.slug, "opp_id": opportunity.opportunity_id, "z": 0, "x": 0, "y": 0},
+    ).replace("/0/0/0", "/{z}/{x}/{y}")
+
+    visit_tiles_url = reverse(
+        "microplanning:user_visit_tiles",
         kwargs={"org_slug": request.org.slug, "opp_id": opportunity.opportunity_id, "z": 0, "x": 0, "y": 0},
     ).replace("/0/0/0", "/{z}/{x}/{y}")
 
@@ -101,6 +109,7 @@ def microplanning_home(request, *args, **kwargs):
             "opportunity": opportunity,
             "metrics": get_metrics_for_microplanning(opportunity),
             "tiles_url": tiles_url,
+            "visit_tiles_url": visit_tiles_url,
             "groups_url": groups_url,
             "status_meta": status_meta,
             "workarea_min_zoom": WORKAREA_MIN_ZOOM,
@@ -229,6 +238,59 @@ class WorkAreaTileView(MVTView):
     def get_layers(self):
         return [
             WorkAreaVectorLayer(
+                opportunity=self.request.opportunity,
+                filter_params=self.request.GET,
+            )
+        ]
+
+
+class UserVisitVectorLayer(VectorLayer):
+    id = "user-visits"
+    tile_fields = ()
+    geom_field = "location_point"
+    min_zoom = WORKAREA_MIN_ZOOM
+
+    def __init__(self, *args, opportunity=None, filter_params=None, **kwargs):
+        self.opportunity = opportunity
+        self.filter_params = filter_params
+        super().__init__(*args, **kwargs)
+
+    def get_queryset(self):
+        """
+        Returns the user visits with location_point annotated.
+
+        The user visit location is assumed to be a string in the format:
+        <lat> <lng> <altitude> <accuracy>
+        """
+        qs = UserVisit.objects.filter(
+            opportunity=self.opportunity,
+            location__isnull=False,
+        ).exclude(location="")
+        qs = UserVisitMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
+        return (
+            qs.annotate(
+                lat=Cast(Func(F("location"), Value(" "), Value(1), function="split_part"), output_field=FloatField()),
+                lon=Cast(Func(F("location"), Value(" "), Value(2), function="split_part"), output_field=FloatField()),
+            )
+            .annotate(
+                location_point=Func(
+                    Func(F("lon"), F("lat"), function="ST_MakePoint"),
+                    Value(4326),
+                    function="ST_SetSRID",
+                    output_field=PointField(srid=4326),
+                )
+            )
+            .values("location_point")
+        )
+
+
+@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+class UserVisitTileView(MVTView):
+    layer_classes = [UserVisitVectorLayer]
+
+    def get_layers(self):
+        return [
+            UserVisitVectorLayer(
                 opportunity=self.request.opportunity,
                 filter_params=self.request.GET,
             )
