@@ -138,6 +138,22 @@ class TestSendMonthlyDeliveryReminderEmail:
         send_monthly_delivery_reminder_email()
         send_mock.delay.assert_called_once()
 
+    def test_send_reminder_email_skipped_for_test_opportunity(self, send_mock):
+        opportunity = OpportunityFactory(organization=OrgWithUsersFactory(), is_test=True)
+
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
+
+        UserVisitFactory(
+            opportunity=opportunity,
+            user=access.user,
+            opportunity_access=access,
+            status=VisitValidationStatus.pending,
+            completed_work=completed_work,
+        )
+        send_monthly_delivery_reminder_email()
+        send_mock.delay.assert_not_called()
+
     def test_send_reminder_email_for_nm_org_with_no_recipients(self, send_mock):
         opportunity = OpportunityFactory(is_test=False)
         assert opportunity.organization.members.count() == 0
