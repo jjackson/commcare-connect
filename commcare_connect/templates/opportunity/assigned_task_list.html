@@ -5,7 +5,8 @@
 {% block title %}{{ request.org }} - {{ opportunity.name }} - {% trans "Task List" %}{% endblock %}
 
 {% block content %}
-    <div class="container md:max-w-screen-2xl mx-auto flex flex-col gap-4">
+    <div class="container md:max-w-screen-2xl mx-auto flex flex-col gap-4"
+         x-data="assignedTasks()">
         {% include 'components/breadcrumbs.html' with path=path %}
 
         <div class="flex flex-col gap-8 metric-container">
@@ -41,8 +42,65 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-xs p-4">
-            {% render_table table %}
+        <div class="flex flex-col w-full gap-2">
+            <div class="flex items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
+                <div></div>
+                <div class="flex gap-x-4 items-center">
+                    <button type="button" class="button-icon shadow-sm" @click="showCreateTaskModal = true"
+                        x-tooltip.raw="{% trans 'Create Task' %}">
+                        <i class="fa-solid fa-plus text-brand-deep-purple"></i>
+                    </button>
+                    <form x-ref="deleteTasksForm"
+                        hx-post="{% url 'opportunity:delete_tasks' org_slug=request.org.slug opp_id=opportunity.opportunity_id %}"
+                        hx-trigger="submit" class="hidden">
+                        {% csrf_token %}
+                        <template x-for="id in selected">
+                            <input type="hidden" name="task_ids" :value="id">
+                        </template>
+                    </form>
+                    <button type="button" class="button-icon hover:bg-red-600 hover:text-white shadow-sm" @click="$store.confirmModal.show({
+                                        title: '{% trans "Delete Tasks" %}',
+                                        message: `Are you sure you want to delete ${selected.length} task(s)? This action cannot be undone.`,
+                                        confirmBtnText: '{% trans "Delete" %}',
+                                        confirmBtnColor: 'red',
+                                        formRef: $refs.deleteTasksForm,
+                                    })" :disabled="selected.length === 0" x-tooltip.raw="{% trans 'Delete Task(s)' %}">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="w-full shadow-sm rounded-lg">
+                {% render_table table %}
+            </div>
         </div>
+
+        {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+        {% include 'components/confirm_modal.html' %}
     </div>
+{% endblock %}
+
+{% block inline_javascript %}
+<script>
+  document.addEventListener('alpine:init', () => {
+    Alpine.data('assignedTasks', () => ({
+      showCreateTaskModal: false,
+      selected: [],
+      selectAll: false,
+
+      toggleSelectAll() {
+        this.selectAll = !this.selectAll;
+        if (this.selectAll) {
+          this.selected = Array.from(document.querySelectorAll('input[name="row_select"]'))
+            .map(c => c.value);
+        } else {
+          this.selected = [];
+        }
+      },
+      updateSelectAll() {
+        const total = document.querySelectorAll('input[name="row_select"]').length;
+        this.selectAll = total > 0 && this.selected.length === total;
+      }
+    }));
+  });
+</script>
 {% endblock %}
