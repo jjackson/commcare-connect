@@ -11,6 +11,8 @@
 <div class="container md:max-w-screen-lg mx-auto flex flex-col gap-6"
      x-data="{
        showCreateTaskTypeModal: {% if form.errors %}true{% else %}false{% endif %},
+       showEditTaskTypeModal: false,
+       editTaskError: false,
        task_units: {{ form.task_units_data }},
        onTaskUnitSelectChange(taskUnitId) {
          const unit = this.task_units[taskUnitId];
@@ -21,6 +23,16 @@
        }
      }">
   <h2 class="title">{% translate "Configure Task Types" %}</h2>
+
+  <div x-show="editTaskError" x-cloak
+    class="flex items-center justify-between p-4 rounded-lg border-[0.5px] bg-message-error text-message-error-text border-message-error-border">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <span>{% translate "Failed to load task type. Please try again." %}</span>
+    </div>
+    <button type="button" class="ml-4 text-xl font-light hover:font-normal focus:outline-none" aria-label="Close"
+      @click="editTaskError = false">&times;</button>
+  </div>
 
   <div class="card_bg">
     <div class="flex items-center gap-2 text-sm">
@@ -41,7 +53,7 @@
   </div>
 
   {% include "opportunity/new_task_type_modal.html" %}
+  {% include "opportunity/edit_task_type_modal.html" %}
 </div>
-
 
 {% endblock content %}

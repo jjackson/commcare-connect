@@ -3,6 +3,7 @@ from django.urls import path
 from commcare_connect.opportunity import views
 from commcare_connect.opportunity.views import (
     AssignedTaskListView,
+    EditTaskType,
     OpportunityCompletedWorkTable,
     OpportunityDashboard,
     OpportunityEdit,
@@ -15,6 +16,7 @@ from commcare_connect.opportunity.views import (
     WorkerDeliverView,
     WorkerLearnView,
     WorkerPaymentsView,
+    WorkerTaskView,
     WorkerView,
     add_budget_existing_users,
     add_budget_new_users,
@@ -102,6 +104,7 @@ urlpatterns = [
     ),
     path("<slug:opp_id>/verification_flags_config/", view=verification_flags_config, name="verification_flags_config"),
     path("<slug:opp_id>/task_types/", view=TaskTypesConfig.as_view(), name="task_types_config"),
+    path("<slug:opp_id>/task_types/<int:pk>/edit/", view=EditTaskType.as_view(), name="edit_task_type"),
     path("<slug:opp_id>/suspended_users/", view=suspended_users_list, name="suspended_users_list"),
     path("<slug:opp_id>/suspend_user/<slug:pk>/", view=suspend_user, name="suspend_user"),
     path(
@@ -132,6 +135,7 @@ urlpatterns = [
     path("<slug:opp_id>/workers/learn/", WorkerLearnView.as_view(), name="worker_learn"),
     path("<slug:opp_id>/workers/deliver/", WorkerDeliverView.as_view(), name="worker_deliver"),
     path("<slug:opp_id>/workers/payments/", WorkerPaymentsView.as_view(), name="worker_payments"),
+    path("<slug:opp_id>/workers/tasks/", WorkerTaskView.as_view(), name="worker_tasks"),
     path(
         "<slug:opp_id>/worker_learn_progress/<slug:access_id>",
         views.worker_learn_status_view,
