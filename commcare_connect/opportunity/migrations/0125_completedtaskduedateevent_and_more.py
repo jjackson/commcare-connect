@@ -9,12 +9,12 @@ import pgtrigger.migrations
 class Migration(migrations.Migration):
     dependencies = [
         ("pghistory", "0007_auto_20250421_0444"),
-        ("opportunity", "0123_task_archived_on"),
+        ("opportunity", "0124_rename_completedtask_assignedtask"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name="CompletedTaskDueDateEvent",
+            name="AssignedTaskDueDateEvent",
             fields=[
                 ("pgh_id", models.AutoField(primary_key=True, serialize=False)),
                 ("pgh_created_at", models.DateTimeField(auto_now_add=True)),
@@ -26,22 +26,22 @@ class Migration(migrations.Migration):
             },
         ),
         pgtrigger.migrations.AddTrigger(
-            model_name="completedtask",
+            model_name="assignedtask",
             trigger=pgtrigger.compiler.Trigger(
                 name="update_update",
                 sql=pgtrigger.compiler.UpsertTriggerSql(
                     condition='WHEN (OLD."due_date" IS DISTINCT FROM (NEW."due_date"))',
-                    func='INSERT INTO "opportunity_completedtaskduedateevent" ("due_date", "pgh_context_id", "pgh_created_at", "pgh_label", "pgh_obj_id") VALUES (NEW."due_date", _pgh_attach_context(), NOW(), \'update\', NEW."id"); RETURN NULL;',
+                    func='INSERT INTO "opportunity_assignedtaskduedateevent" ("due_date", "pgh_context_id", "pgh_created_at", "pgh_label", "pgh_obj_id") VALUES (NEW."due_date", _pgh_attach_context(), NOW(), \'update\', NEW."id"); RETURN NULL;',
                     hash="d47dd3cdf6d5d0156882cb30d753e22a19904a99",
                     operation="UPDATE",
                     pgid="pgtrigger_update_update_e3142",
-                    table="opportunity_completedtask",
+                    table="opportunity_assignedtask",
                     when="AFTER",
                 ),
             ),
         ),
         migrations.AddField(
-            model_name="completedtaskduedateevent",
+            model_name="assignedtaskduedateevent",
             name="pgh_context",
             field=models.ForeignKey(
                 db_constraint=False,
@@ -52,13 +52,13 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name="completedtaskduedateevent",
+            model_name="assignedtaskduedateevent",
             name="pgh_obj",
             field=models.ForeignKey(
                 db_constraint=False,
                 on_delete=django.db.models.deletion.DO_NOTHING,
                 related_name="due_date_events",
-                to="opportunity.completedtask",
+                to="opportunity.assignedtask",
             ),
         ),
     ]

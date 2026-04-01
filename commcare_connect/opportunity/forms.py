@@ -21,8 +21,8 @@ from waffle import switch_is_active
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.app_xml import get_task_units_for_app
 from commcare_connect.opportunity.models import (
+    AssignedTask,
     CommCareApp,
-    CompletedTask,
     CompletedWork,
     CompletedWorkStatus,
     Country,
@@ -2022,7 +2022,7 @@ class EditAssignedTaskForm(forms.ModelForm):
     )
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ["due_date"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
