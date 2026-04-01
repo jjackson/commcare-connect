@@ -1852,8 +1852,28 @@ class WorkerCompletedTaskTable(tables.Table):
         sequence = ("task_type", "assigned_by", "assigned_date", "due_date", "status")
         order_by = ("-assigned_date",)
         empty_text = gettext_lazy("No tasks have been assigned to this worker yet.")
-        attrs = {"class": "w-full"}
-        row_attrs = {"class": "cursor-pointer hover:bg-gray-50"}
+        attrs = {"class": "w-full", "x-data": "{selectedRow: null}"}
+        row_attrs = {
+            "hx-get": lambda record, table: reverse(
+                "opportunity:user_task_details",
+                args=[
+                    table.organization.slug,
+                    record.opportunity_access.opportunity.opportunity_id,
+                    record.assigned_task_id,
+                ],
+            ),
+            "hx-trigger": "click",
+            "hx-indicator": "#task-loading-indicator",
+            "hx-target": "#task-details",
+            "hx-params": "none",
+            "hx-swap": "innerHTML",
+            "@click": lambda record: f"selectedRow = {record.id}",
+            ":class": lambda record: f"selectedRow == {record.id} && 'active'",
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization", None)
+        super().__init__(*args, **kwargs)
 
     def render_task_type(self, value):
         return format_html("{} ({})", value.name, value.slug)

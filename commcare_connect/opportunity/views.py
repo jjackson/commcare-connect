@@ -2114,9 +2114,14 @@ class WorkerCompletedTaskTableView(WorkerTableView):
     template_name = "opportunity/worker_visit_table.html"
     redirect_url_name = "opportunity:user_tasks_list"
 
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["organization"] = self.request.org
+        return kwargs
+
     def get_queryset(self):
         queryset = CompletedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
-            "task", "assigned_by"
+            "task", "assigned_by", "opportunity_access__opportunity"
         )
         user_id = self.request.GET.get("user")
         if user_id:
@@ -2422,6 +2427,38 @@ def user_visit_details(request, org_slug, opp_id, pk):
             flags=flags,
             flag_count=flag_count,
             attachment_flagged=attachment_flagged,
+        ),
+    )
+
+
+@org_viewer_required
+@opportunity_required
+def user_task_details(request, org_slug, opp_id, pk):
+    completed_task = get_object_or_404(
+        CompletedTask.objects.select_related(
+            "task__app__hq_server",
+            "opportunity_access__opportunity__deliver_app",
+            "assigned_by",
+        ),
+        assigned_task_id=pk,
+        opportunity_access__opportunity=request.opportunity,
+    )
+
+    images = []
+    hq_link = None
+    if completed_task.xform_id:
+        images = BlobMeta.objects.filter(parent_id=completed_task.xform_id, content_type__startswith="image/")
+        hq_url = completed_task.task.app.hq_server.url
+        domain = completed_task.opportunity_access.opportunity.deliver_app.cc_domain
+        hq_link = f"{hq_url}/a/{domain}/reports/form_data/{completed_task.xform_id}/"
+
+    return render(
+        request,
+        "opportunity/user_task_details.html",
+        context=dict(
+            completed_task=completed_task,
+            images=images,
+            hq_link=hq_link,
         ),
     )
 
