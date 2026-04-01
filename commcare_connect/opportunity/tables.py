@@ -14,9 +14,9 @@ from django_tables2 import columns
 
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     CatchmentArea,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -260,6 +260,10 @@ class SuspendedUsersTable(tables.Table):
         orderable = False
         empty_text = "No suspended users."
 
+    def __init__(self, *args, **kwargs):
+        self.has_suspension_perm = kwargs.pop("has_suspension_perm", False)
+        super().__init__(*args, **kwargs)
+
     def render_suspension_date(self, record, value):
         return date_with_time_popup(self, value)
 
@@ -267,18 +271,18 @@ class SuspendedUsersTable(tables.Table):
         revoke_url = reverse(
             "opportunity:revoke_user_suspension",
             args=(
-                record.opportunity.organization.slug,
+                self.context.request.org.slug,
                 record.opportunity.opportunity_id,
                 record.opportunity_access_id,
             ),
         )
         page_url = reverse(
             "opportunity:suspended_users_list",
-            args=(record.opportunity.organization.slug, record.opportunity.opportunity_id),
+            args=(self.context.request.org.slug, record.opportunity.opportunity_id),
         )
         return render_to_string(
             "opportunity/partials/revoke_suspension.html",
-            {"revoke_url": revoke_url, "page_url": page_url},
+            {"revoke_url": revoke_url, "page_url": page_url, "has_suspension_perm": self.has_suspension_perm},
             request=self.context.request,
         )
 
@@ -1091,10 +1095,10 @@ class TaskStatusColumn(tables.Column):
     def render(self, value):
         if value is None:
             return "—"
-        if value == CompletedTaskStatus.ASSIGNED:
+        if value == AssignedTaskStatus.ASSIGNED:
             status = _("To Do")
             badge_classes = "bg-amber-100 text-amber-800"
-        elif value == CompletedTaskStatus.COMPLETED:
+        elif value == AssignedTaskStatus.COMPLETED:
             status = _("Complete")
             badge_classes = "bg-green-100 text-green-800"
         else:
@@ -1793,7 +1797,7 @@ class AssignedTaskListTable(OpportunityContextTable):
     )
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ()
         sequence = (
             "assigned_task_id",

@@ -4,18 +4,18 @@ import pytest
 from django.test import RequestFactory
 from django_tables2 import RequestConfig
 
-from commcare_connect.opportunity.helpers import get_worker_tasks_table_data
-from commcare_connect.opportunity.models import CompletedTaskStatus
+from commcare_connect.opportunity.helpers import get_worker_tasks_base_queryset
+from commcare_connect.opportunity.models import AssignedTaskStatus
 from commcare_connect.opportunity.tables import GroupedByWorkerMixin, WorkerDeliveryTable, WorkerTasksTable
 from commcare_connect.opportunity.tests.factories import (
-    CompletedTaskFactory,
+    AssignedTaskFactory,
     OpportunityAccessFactory,
     UserInviteFactory,
 )
 
 
 def _make_table(opportunity, per_page=25):
-    data = get_worker_tasks_table_data(opportunity)
+    data = get_worker_tasks_base_queryset(opportunity)
     table = WorkerTasksTable(data, org_slug="test-org", opp_id=opportunity.opportunity_id)
     rf = RequestFactory()
     request = rf.get("/")
@@ -30,11 +30,11 @@ def test_worker_tasks_table_groups_by_user(opportunity):
     access2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, user__name="Bob")
     UserInviteFactory(opportunity=opportunity, opportunity_access=access2, status="invited")
 
-    CompletedTaskFactory(opportunity_access=access1, status=CompletedTaskStatus.ASSIGNED)
-    CompletedTaskFactory(opportunity_access=access1, status=CompletedTaskStatus.COMPLETED)
-    CompletedTaskFactory(opportunity_access=access2, status=CompletedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access1, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access1, status=AssignedTaskStatus.COMPLETED)
+    AssignedTaskFactory(opportunity_access=access2, status=AssignedTaskStatus.ASSIGNED)
 
-    data = get_worker_tasks_table_data(opportunity)
+    data = get_worker_tasks_base_queryset(opportunity)
     rows = list(data)
     assert len(rows) == 3
 

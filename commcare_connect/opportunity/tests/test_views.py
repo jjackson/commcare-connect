@@ -19,7 +19,7 @@ from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
-    CompletedTaskStatus,
+    AssignedTaskStatus,
     CompletedWorkStatus,
     FormJsonValidationRules,
     InvoiceStatus,
@@ -38,8 +38,8 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tables import TaskTable
 from commcare_connect.opportunity.tasks import invite_user
 from commcare_connect.opportunity.tests.factories import (
+    AssignedTaskFactory,
     BlobMetaFactory,
-    CompletedTaskFactory,
     CompletedWorkFactory,
     DeliverUnitFactory,
     FormJsonValidationRulesFactory,
@@ -1472,6 +1472,43 @@ class TestAddPaymentUnitView:
 
 
 @pytest.mark.django_db
+class TestEditPaymentUnit:
+    def _url(self, org_slug, opp_id, payment_unit_id):
+        return reverse("opportunity:edit_payment_unit", args=(org_slug, opp_id, payment_unit_id))
+
+    def test_edit_payment_unit_non_managed(self, client, organization, opportunity, org_user_member):
+        payment_unit = PaymentUnitFactory(opportunity=opportunity)
+        DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+    def test_edit_payment_unit_managed_as_non_pm_redirects(
+        self, client, organization, org_user_member, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(org_user_member)
+        url = self._url(organization.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.FOUND
+        assert response.url == reverse(
+            "opportunity:detail", args=(organization.slug, managed_opportunity.opportunity_id)
+        )
+
+    def test_edit_payment_unit_managed_as_pm(
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        payment_unit = PaymentUnitFactory(opportunity=managed_opportunity)
+        DeliverUnitFactory(app=managed_opportunity.deliver_app, payment_unit=payment_unit)
+        client.force_login(program_manager_org_user_admin)
+        url = self._url(program_manager_org.slug, managed_opportunity.opportunity_id, payment_unit.payment_unit_id)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.OK
+
+
+@pytest.mark.django_db
 @override_switch(UPDATES_TO_MARK_AS_PAID_WORKFLOW, active=True)
 def test_update_invoice_invoice_ticket_link_restricted_access(
     client, program_manager_org, program_manager_org_user_member
@@ -2016,6 +2053,36 @@ class TestSuspendUser:
         access.refresh_from_db()
         assert access.suspended is False
 
+    def test_suspend_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=False
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is False
+
+    def test_suspend_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=False)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"reason": "test"},
+        )
+        assert response.status_code == HTTPStatus.FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
 
 @pytest.mark.django_db
 class TestRevokeUserSuspension:
@@ -2051,6 +2118,36 @@ class TestRevokeUserSuspension:
         assert response.status_code == HTTPStatus.NOT_FOUND
         access.refresh_from_db()
         assert access.suspended is True
+
+    def test_revoke_as_nm_org_promoted_to_pm_returns_404(
+        self, client, organization, org_user_admin, mobile_user, managed_opportunity
+    ):
+        # NM org later promoted to a global PM org — must still be blocked on another org's managed opp
+        organization.program_manager = True
+        organization.save()
+        access = OpportunityAccessFactory(
+            opportunity=managed_opportunity, user=mobile_user, accepted=True, suspended=True
+        )
+        client.force_login(org_user_admin)
+        response = client.post(
+            self.url(organization.slug, managed_opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
+        access.refresh_from_db()
+        assert access.suspended is True
+
+    def test_revoke_as_pm_non_managed(self, client, mobile_user, program_manager_org, program_manager_org_user_admin):
+        opportunity = OpportunityFactory(organization=program_manager_org)
+        access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user, accepted=True, suspended=True)
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, opportunity.opportunity_id, access.opportunity_access_id),
+            data={"next": "/"},
+        )
+        assert response.status_code == HTTPStatus.OK
+        access.refresh_from_db()
+        assert access.suspended is False
 
 
 @pytest.mark.django_db
@@ -2184,9 +2281,9 @@ class TestAssignedTaskListView:
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
         task = TaskFactory(app=opportunity.deliver_app)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.ASSIGNED)
-        CompletedTaskFactory(task=task, opportunity_access=access, status=CompletedTaskStatus.COMPLETED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2382,8 +2479,8 @@ class TestWorkerTasksView:
 
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
         UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-        CompletedTaskFactory(opportunity_access=access)
-        CompletedTaskFactory(opportunity_access=access)
+        AssignedTaskFactory(opportunity_access=access)
+        AssignedTaskFactory(opportunity_access=access)
 
         url = self._url(organization, opportunity)
 
@@ -2405,10 +2502,10 @@ class TestEditAssignedTask:
     @pytest.fixture
     def assigned_task(self, opp, user):
         access = OpportunityAccessFactory(opportunity=opp, user=user)
-        return CompletedTaskFactory(
+        return AssignedTaskFactory(
             opportunity_access=access,
             task=TaskFactory(app=opp.deliver_app),
-            status=CompletedTaskStatus.ASSIGNED,
+            status=AssignedTaskStatus.ASSIGNED,
             due_date=date.today() + timedelta(days=7),
         )
 
@@ -2455,10 +2552,10 @@ class TestEditAssignedTask:
 
     def test_cannot_edit_completed_task(self, client, org_user_member, opp, user):
         access = OpportunityAccessFactory(opportunity=opp, user=user)
-        completed_task = CompletedTaskFactory(
+        completed_task = AssignedTaskFactory(
             opportunity_access=access,
             task=TaskFactory(app=opp.deliver_app),
-            status=CompletedTaskStatus.COMPLETED,
+            status=AssignedTaskStatus.COMPLETED,
         )
         client.force_login(org_user_member)
         response = client.get(self._edit_url(opp, completed_task))
@@ -2473,10 +2570,10 @@ class TestEditAssignedTask:
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         access = OpportunityAccessFactory(opportunity=managed_opp)
-        task = CompletedTaskFactory(
+        task = AssignedTaskFactory(
             opportunity_access=access,
             task=TaskFactory(app=managed_opp.deliver_app),
-            status=CompletedTaskStatus.ASSIGNED,
+            status=AssignedTaskStatus.ASSIGNED,
         )
         url = reverse(
             "opportunity:edit_assigned_task",

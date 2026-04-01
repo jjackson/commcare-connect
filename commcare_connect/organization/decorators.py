@@ -23,7 +23,7 @@ def _request_user_is_admin(request):
     ) or request.user.has_perm(ALL_ORG_ACCESS)
 
 
-def _request_user_is_program_manager(request):
+def request_user_is_program_manager(request):
     return (
         request.org and request.org_membership and request.org_membership.is_admin and request.org.program_manager
     ) or request.user.has_perm(ALL_ORG_ACCESS)
@@ -46,7 +46,7 @@ def org_viewer_required(view_func):
 
 
 def org_program_manager_required(view_func):
-    return _get_decorated_function(view_func, _request_user_is_program_manager)
+    return _get_decorated_function(view_func, request_user_is_program_manager)
 
 
 def opportunity_program_manager_required(view_func):

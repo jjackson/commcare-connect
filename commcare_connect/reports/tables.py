@@ -57,6 +57,10 @@ class InvoiceReportTable(tables.Table):
         accessor="opportunity__name",
         verbose_name=_("Opportunity Name"),
     )
+    program_name = columns.Column(
+        accessor="program_name",
+        verbose_name=_("Program Name"),
+    )
     invoice_number = columns.Column(orderable=False, verbose_name=_("Invoice Number"))
     amount = columns.Column(verbose_name=_("Amount"))
     amount_usd = columns.Column(verbose_name=_("Amount (USD)"))
@@ -74,6 +78,7 @@ class InvoiceReportTable(tables.Table):
         fields = (
             "opportunity_id",
             "opportunity_name",
+            "program_name",
             "invoice_number",
             "amount",
             "amount_usd",
