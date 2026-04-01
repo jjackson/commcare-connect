@@ -660,68 +660,6 @@ def get_opportunity_delivery_progress(opp_id):
         output_field=DateTimeField(),
     )
 
-    flagged_deliveries_waiting_review_sq = Coalesce(
-        Subquery(
-            CompletedWork.objects.filter(
-                opportunity_access__opportunity_id=OuterRef("pk"),
-                uservisit__status=VisitValidationStatus.pending,
-            )
-            .values("opportunity_access__opportunity_id")
-            .annotate(count=Count("id", distinct=True))
-            .values("count"),
-            output_field=IntegerField(),
-        ),
-        0,
-    )
-
-    flagged_deliveries_since_yesterday_sq = Coalesce(
-        Subquery(
-            CompletedWork.objects.filter(
-                opportunity_access__opportunity_id=OuterRef("pk"),
-                uservisit__status=VisitValidationStatus.pending,
-                uservisit__visit_date__gte=yesterday,
-            )
-            .values("opportunity_access__opportunity_id")
-            .annotate(count=Count("id", distinct=True))
-            .values("count"),
-            output_field=IntegerField(),
-        ),
-        0,
-    )
-
-    deliveries_pending_pm_sq = Coalesce(
-        Subquery(
-            CompletedWork.objects.filter(
-                opportunity_access__opportunity_id=OuterRef("pk"),
-                uservisit__review_status=VisitReviewStatus.pending,
-                uservisit__status=VisitValidationStatus.approved,
-                uservisit__review_created_on__isnull=False,
-            )
-            .values("opportunity_access__opportunity_id")
-            .annotate(count=Count("id", distinct=True))
-            .values("count"),
-            output_field=IntegerField(),
-        ),
-        0,
-    )
-
-    deliveries_pending_pm_yesterday_sq = Coalesce(
-        Subquery(
-            CompletedWork.objects.filter(
-                opportunity_access__opportunity_id=OuterRef("pk"),
-                uservisit__review_status=VisitReviewStatus.pending,
-                uservisit__review_created_on__isnull=False,
-                uservisit__status=VisitValidationStatus.approved,
-                uservisit__review_created_on__gte=yesterday,
-            )
-            .values("opportunity_access__opportunity_id")
-            .annotate(count=Count("id", distinct=True))
-            .values("count"),
-            output_field=IntegerField(),
-        ),
-        0,
-    )
-
     recent_payment_sq = Subquery(
         Payment.objects.filter(opportunity_access__opportunity_id=OuterRef("pk"))
         .values("opportunity_access__opportunity_id")
@@ -736,10 +674,6 @@ def get_opportunity_delivery_progress(opp_id):
         accrued_since_yesterday=accrued_since_yesterday_sq,
         most_recent_delivery=most_recent_delivery_sq,
         total_deliveries=get_deliveries_count_subquery(),
-        flagged_deliveries_waiting_for_review=flagged_deliveries_waiting_review_sq,
-        flagged_deliveries_waiting_for_review_since_yesterday=flagged_deliveries_since_yesterday_sq,
-        deliveries_pending_for_pm_review=deliveries_pending_pm_sq,
-        deliveries_pending_for_pm_review_since_yesterday=deliveries_pending_pm_yesterday_sq,
         recent_payment=recent_payment_sq,
         workers_invited=workers_invited_subquery(),
         pending_invites=pending_invites_subquery(),

@@ -2976,6 +2976,8 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     delivery_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     payment_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
 
+    microplanning_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
+
     deliveries_panels = [
         {
             "icon": "fa-clipboard-list",
@@ -2986,30 +2988,16 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "incr": stats.deliveries_from_yesterday,
         },
         {
-            "icon": "fa-clipboard-list",
-            "name": "Services Delivered",
-            "status": "Pending NM Review",
-            "value": header_with_tooltip(
-                stats.flagged_deliveries_waiting_for_review, "Flagged and pending review with NM"
-            ),
-            "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
-            "incr": stats.flagged_deliveries_waiting_for_review_since_yesterday,
+            "icon": "fa-map-location-dot",
+            "name": "View Progress Map",
+            "status": "",
+            "value": "",
+            "url": microplanning_url,
         },
     ]
 
-    if request.opportunity.managed:
-        deliveries_panels.append(
-            {
-                "icon": "fa-clipboard-list",
-                "name": "Services Delivered",
-                "status": "Pending PM Review",
-                "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
-                "value": header_with_tooltip(
-                    stats.deliveries_pending_for_pm_review, "Flagged and pending review with PM"
-                ),
-                "incr": stats.deliveries_pending_for_pm_review_since_yesterday,
-            }
-        )
+    tasks_url = reverse("opportunity:worker_tasks", args=(org_slug, opp_id))
+    active_tasks_count = Task.objects.filter(opportunity=request.opportunity, is_active=True).count()
 
     opp_stats = [
         {
@@ -3020,15 +3008,9 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                 {
                     "icon": "fa-user-group",
                     "name": "Connect Workers",
-                    "status": "Invited",
-                    "value": stats.workers_invited,
+                    "status": "",
+                    "value": "",
                     "url": status_url,
-                },
-                {
-                    "icon": "fa-user-check",
-                    "name": "Connect Workers",
-                    "status": "Yet to Accept Invitation",
-                    "value": stats.pending_invites,
                 },
                 {
                     "icon": "fa-clipboard-list",
@@ -3039,6 +3021,13 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                         stats.inactive_workers, "Did not submit a Learn or Deliver form in the last 3 days"
                     ),
                     **panel_type_2,
+                },
+                {
+                    "icon": "fa-list-check",
+                    "name": "Tasks Assigned to Connect Workers",
+                    "status": "",
+                    "value": active_tasks_count,
+                    "url": tasks_url,
                 },
             ],
         },
