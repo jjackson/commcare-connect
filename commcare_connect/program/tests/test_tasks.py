@@ -107,7 +107,7 @@ class TestGetOrgManagedOppsIdsForReview:
 @patch("commcare_connect.program.tasks.send_mail_async")
 class TestSendMonthlyDeliveryReminderEmail:
     def test_send_reminder_email_for_nm_org_with_no_pending_deliveries(self, send_mock):
-        opportunity = OpportunityFactory()
+        opportunity = OpportunityFactory(is_test=False)
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -123,7 +123,7 @@ class TestSendMonthlyDeliveryReminderEmail:
         send_mock.delay.assert_not_called()
 
     def test_send_reminder_email_for_nm_org_with_pending_deliveries(self, send_mock):
-        opportunity = OpportunityFactory(organization=OrgWithUsersFactory())
+        opportunity = OpportunityFactory(organization=OrgWithUsersFactory(), is_test=False)
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -139,7 +139,7 @@ class TestSendMonthlyDeliveryReminderEmail:
         send_mock.delay.assert_called_once()
 
     def test_send_reminder_email_for_nm_org_with_no_recipients(self, send_mock):
-        opportunity = OpportunityFactory()
+        opportunity = OpportunityFactory(is_test=False)
         assert opportunity.organization.members.count() == 0
 
         access = OpportunityAccessFactory(opportunity=opportunity)
@@ -160,7 +160,7 @@ class TestSendMonthlyDeliveryReminderEmail:
         nm_org = OrganizationFactory()
 
         program = ProgramFactory(organization=pm_org)
-        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=managed_opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -248,14 +248,14 @@ class TestSendMonthlyDeliveryReminderEmail:
 
         assert pm_call_args["organization"] == pm_org_2
         assert pm_call_args["recipient_emails"] == pm_org_2_member_emails
-        assert pm_call_args["opportunities"].count() == 2
+        assert len(pm_call_args["opportunities"]) == 2
         expected_opp_ids = {pm_opportunity.id, managed_opportunity_2.id}
         actual_opp_ids = {pm_call_args["opportunities"][0].id, pm_call_args["opportunities"][1].id}
         assert expected_opp_ids == actual_opp_ids
 
         assert nm_call_args["organization"] == nm_org
         assert nm_call_args["recipient_emails"] == nm_org_member_emails
-        assert nm_call_args["opportunities"].count() == 2
+        assert len(nm_call_args["opportunities"]) == 2
         expected_opp_ids = {nm_opportunity.id, managed_opportunity_1.id}
         actual_opp_ids = {nm_call_args["opportunities"][0].id, nm_call_args["opportunities"][1].id}
         assert expected_opp_ids == actual_opp_ids
