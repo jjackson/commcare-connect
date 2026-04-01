@@ -11,6 +11,7 @@ from commcare_connect.opportunity.api.serializers import (
 )
 from commcare_connect.opportunity.models import (
     Assessment,
+    AssignedTask,
     CompletedModule,
     CompletedWork,
     LabsRecord,
@@ -18,6 +19,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentInvoice,
+    Task,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -300,3 +302,41 @@ class OpportunitySerializer(serializers.ModelSerializer):
                         cleaned_value.append(dict(item))
                 data[key] = cleaned_value
         return data
+
+
+class TaskDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = [
+            "id",
+            "task_type_id",
+            "name",
+            "slug",
+            "description",
+            "unit_name",
+            "case_property",
+            "is_active",
+            "archived",
+            "duration",
+        ]
+
+
+class AssignedTaskDataSerializer(serializers.ModelSerializer):
+    task_id = serializers.IntegerField(source="task.id", read_only=True)
+    task_name = serializers.CharField(source="task.name", read_only=True)
+    username = serializers.CharField(source="opportunity_access.user.username", read_only=True)
+
+    class Meta:
+        model = AssignedTask
+        fields = [
+            "id",
+            "assigned_task_id",
+            "task_id",
+            "task_name",
+            "username",
+            "completed_at",
+            "duration",
+            "status",
+            "due_date",
+            "date_created",
+        ]

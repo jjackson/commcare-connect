@@ -24,6 +24,7 @@ from commcare_connect.data_export.const import (
 from commcare_connect.data_export.pagination import IdKeysetPagination
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
+    AssignedTaskDataSerializer,
     CompletedModuleDataSerializer,
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
@@ -34,11 +35,13 @@ from commcare_connect.data_export.serializer import (
     OrganizationDataExportSerializer,
     PaymentDataSerializer,
     ProgramDataExportSerializer,
+    TaskDataSerializer,
     UserVisitDataSerializer,
     UserVisitDataWithImagesSerializer,
 )
 from commcare_connect.opportunity.models import (
     Assessment,
+    AssignedTask,
     BlobMeta,
     CompletedModule,
     CompletedWork,
@@ -47,6 +50,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     Payment,
     PaymentInvoice,
+    Task,
     UserVisit,
 )
 from commcare_connect.organization.models import Organization
@@ -129,6 +133,15 @@ class BaseDataExportListView(BaseDataExportView):
             serializer = serializer_class(page, many=True)
             return self.get_paginated_response(serializer.data)
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
+
+
+class BaseDataExportListViewV2(BaseDataExportListView):
+    """V2-only export view. Returns 404 for v1.0 requests."""
+
+    def get(self, *args, **kwargs):
+        if self.request.version != "2.0":
+            raise NotFound()
+        return super().get(*args, **kwargs)
 
 
 def _get_opportunity_or_404(user, opp_id):
@@ -486,4 +499,20 @@ class ProgramOpportunityDataView(BaseDataExportListView):
             )
             .select_related("learn_app", "deliver_app")
             .prefetch_related("paymentunit_set", "opportunityverificationflags")
+        )
+
+
+class TaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = TaskDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return Task.objects.filter(opportunity=self.opportunity)
+
+
+class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = AssignedTaskDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
+            "task", "opportunity_access__user"
         )
