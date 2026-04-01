@@ -17,10 +17,10 @@ from commcare_connect.form_receiver.serializers import XForm
 from commcare_connect.microplanning.models import WorkArea
 from commcare_connect.opportunity.models import (
     Assessment,
+    AssignedTask,
+    AssignedTaskStatus,
     CommCareApp,
     CompletedModule,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -155,28 +155,28 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
                 continue
 
             try:
-                completed_task = (
-                    CompletedTask.objects.select_for_update()
+                assigned_task = (
+                    AssignedTask.objects.select_for_update()
                     .filter(
                         task__app=app,
                         task__slug=task_slug,
                         opportunity_access=access,
                         xform_id=None,
-                        status=CompletedTaskStatus.ASSIGNED,
+                        status=AssignedTaskStatus.ASSIGNED,
                     )
                     .get()
                 )
-            except CompletedTask.DoesNotExist:
+            except AssignedTask.DoesNotExist:
                 continue
 
-            completed_task.xform_id = xform.id
-            completed_task.completed_at = xform.metadata.timeEnd
-            completed_task.duration = xform.metadata.duration
-            completed_task.app_build_id = xform.build_id
-            completed_task.app_build_version = xform.metadata.app_build_version
-            completed_task.status = CompletedTaskStatus.COMPLETED
+            assigned_task.xform_id = xform.id
+            assigned_task.completed_at = xform.metadata.timeEnd
+            assigned_task.duration = xform.metadata.duration
+            assigned_task.app_build_id = xform.build_id
+            assigned_task.app_build_version = xform.metadata.app_build_version
+            assigned_task.status = AssignedTaskStatus.COMPLETED
 
-            completed_task.save(
+            assigned_task.save(
                 update_fields=[
                     "xform_id",
                     "completed_at",
@@ -187,8 +187,8 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
                 ]
             )
             updated_tasks = True
-            if not access.last_active or access.last_active < completed_task.completed_at:
-                access.last_active = completed_task.completed_at
+            if not access.last_active or access.last_active < assigned_task.completed_at:
+                access.last_active = assigned_task.completed_at
                 save_access = True
 
         if updated_tasks and save_access:
@@ -462,7 +462,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             access.last_active = user_visit.visit_date
 
         if completed_work is not None:
-            if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
+            if completed_work.status == CompletedWorkStatus.incomplete:
                 completed_work.status = CompletedWorkStatus.pending
                 completed_work_needs_save = True
             if completed_work_needs_save:

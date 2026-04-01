@@ -1,13 +1,16 @@
 import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
+from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
 from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
 from commcare_connect.opportunity.models import (
+    AssignedTaskStatus,
     DeliverUnitFlagRules,
     OpportunityAccess,
     OpportunityVerificationFlags,
+    Task,
     UserVisit,
     VisitValidationStatus,
 )
@@ -41,10 +44,13 @@ class FilterMixin:
         }
 
     def _get_filter(self):
-        filter_class = self._get_filter_class()
-        if filter_class:
-            return filter_class(self.request.GET, **self.get_filter_kwargs())
-        return None
+        if not hasattr(self, "_filter_instance"):
+            filter_class = self._get_filter_class()
+            if filter_class:
+                self._filter_instance = filter_class(self.request.GET, **self.get_filter_kwargs())
+            else:
+                self._filter_instance = None
+        return self._filter_instance
 
     def get_filter_form(self):
         f = self._get_filter()
@@ -252,3 +258,76 @@ class UserVisitFilterSet(django_filters.FilterSet):
             if rule.check_attachments:
                 enabled_flags.append(Flags.ATTACHMENT_MISSING.value)
         return [(flag, FlagLabels.get_label(flag)) for flag in set(enabled_flags)]
+
+
+TASK_STATUS_CHOICES = [
+    (AssignedTaskStatus.ASSIGNED, _("To Do")),
+    (AssignedTaskStatus.COMPLETED, _("Completed")),
+]
+
+
+class TasksFilterSet(django_filters.FilterSet):
+    worker_name = django_filters.MultipleChoiceFilter(
+        label="Worker Name",
+        choices=[],
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        field_name="user__id",
+    )
+    task_status = django_filters.MultipleChoiceFilter(
+        label=_("Task Status"),
+        choices=TASK_STATUS_CHOICES,
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        field_name="task_status",
+    )
+    task_type = django_filters.MultipleChoiceFilter(
+        label=_("Task Type"),
+        choices=[],
+        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
+        field_name="task_id",
+    )
+    date_assigned_after = django_filters.DateFilter(
+        label=_("Date Assigned From"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="date_assigned",
+        lookup_expr="gte",
+    )
+    date_assigned_before = django_filters.DateFilter(
+        label=_("Date Assigned Before"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="date_assigned",
+        lookup_expr="lt",
+    )
+    due_date_after = django_filters.DateFilter(
+        label=_("Due Date From"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="task_due_date",
+        lookup_expr="gte",
+    )
+    due_date_before = django_filters.DateFilter(
+        label=_("Due Date Before"),
+        widget=forms.DateInput(attrs={"type": "date"}),
+        field_name="task_due_date",
+        lookup_expr="lt",
+    )
+
+    class Meta:
+        form = CSRFExemptForm
+
+    def __init__(self, *args, **kwargs):
+        self.opportunity = kwargs.pop("opportunity", None)
+        super().__init__(*args, **kwargs)
+        if self.opportunity:
+            active_tasks = Task.objects.filter(opportunity=self.opportunity, is_active=True)
+            self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
+
+            worker_queryset = (
+                User.objects.filter(
+                    opportunityaccess__opportunity=self.opportunity,
+                    opportunityaccess__accepted=True,
+                )
+                .distinct()
+                .order_by("name", "username")
+            )
+            self.filters["worker_name"].extra["choices"] = [
+                (str(user.pk), user.display_name_with_username()) for user in worker_queryset
+            ]

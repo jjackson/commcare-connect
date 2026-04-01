@@ -20,7 +20,7 @@ from commcare_connect.form_receiver.tests.xforms import (
     TaskJsonFactory,
     get_form_model,
 )
-from commcare_connect.opportunity.models import CompletedTask, CompletedTaskStatus, OpportunityAccess, Task
+from commcare_connect.opportunity.models import AssignedTask, AssignedTaskStatus, OpportunityAccess, Task
 from commcare_connect.opportunity.tests.factories import CommCareAppFactory, OpportunityAccessFactory
 
 LEARN_PROCESSOR_PATCHES = [
@@ -122,13 +122,13 @@ class TestProcessTaskModules:
             name="Task 1",
             description="desc",
         )
-        completed_task = CompletedTask.objects.create(
+        assigned_task = AssignedTask.objects.create(
             task=task,
             opportunity_access=context["access"],
             completed_at=now() - datetime.timedelta(days=1),
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
-            status=CompletedTaskStatus.ASSIGNED,
+            status=AssignedTaskStatus.ASSIGNED,
             due_date=now() + datetime.timedelta(days=7),
         )
 
@@ -137,18 +137,18 @@ class TestProcessTaskModules:
 
         self._process(context, [task_block["task"]])
 
-        completed_task.refresh_from_db()
+        assigned_task.refresh_from_db()
         context["access"].refresh_from_db()
 
-        assert completed_task.status == CompletedTaskStatus.COMPLETED
-        assert completed_task.xform_id == context["xform"].id
-        assert completed_task.completed_at == context["xform"].metadata.timeEnd
-        assert completed_task.duration == context["xform"].metadata.duration
+        assert assigned_task.status == AssignedTaskStatus.COMPLETED
+        assert assigned_task.xform_id == context["xform"].id
+        assert assigned_task.completed_at == context["xform"].metadata.timeEnd
+        assert assigned_task.duration == context["xform"].metadata.duration
 
     def test_missing_task(self, task_module_context):
         task_block = TaskJsonFactory(id="unknown-task").json["task"]
         self._process(task_module_context, [task_block])
-        assert CompletedTask.objects.filter(opportunity_access=task_module_context["access"]).count() == 0
+        assert AssignedTask.objects.filter(opportunity_access=task_module_context["access"]).count() == 0
         self._assert_last_active_unchanged(task_module_context)
 
     def test_unassigned_task(self, task_module_context):
@@ -160,21 +160,21 @@ class TestProcessTaskModules:
             description="desc",
         )
         other_access = OpportunityAccessFactory(opportunity=opportunity)
-        CompletedTask.objects.create(
+        AssignedTask.objects.create(
             task=task,
             opportunity_access=other_access,
             completed_at=now(),
             duration=datetime.timedelta(minutes=5),
             xform_id=None,
-            status=CompletedTaskStatus.ASSIGNED,
+            status=AssignedTaskStatus.ASSIGNED,
             due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block])
-        assert CompletedTask.objects.filter(opportunity_access=task_module_context["access"]).count() == 0
+        assert AssignedTask.objects.filter(opportunity_access=task_module_context["access"]).count() == 0
         self._assert_last_active_unchanged(task_module_context)
 
-    def test_already_completed_task(self, task_module_context):
+    def test_already_assigned_task(self, task_module_context):
         context_access = task_module_context["access"]
         opportunity = task_module_context["opportunity"]
         task = Task.objects.create(
@@ -183,21 +183,21 @@ class TestProcessTaskModules:
             name="Completed Task",
             description="desc",
         )
-        existing_completed_task = CompletedTask.objects.create(
+        existing_assigned_task = AssignedTask.objects.create(
             task=task,
             opportunity_access=context_access,
             completed_at=now(),
             duration=datetime.timedelta(minutes=5),
             xform_id="existing-form-id",
-            status=CompletedTaskStatus.COMPLETED,
+            status=AssignedTaskStatus.COMPLETED,
             due_date=now() + datetime.timedelta(days=7),
         )
         task_block = TaskJsonFactory(id=task.slug).json["task"]
         self._process(task_module_context, [task_block, {"name": "missing @id"}])
-        existing_completed_task.refresh_from_db()
-        assert existing_completed_task.status == CompletedTaskStatus.COMPLETED
-        assert existing_completed_task.xform_id == "existing-form-id"
-        assert CompletedTask.objects.filter(opportunity_access=context_access).count() == 1
+        existing_assigned_task.refresh_from_db()
+        assert existing_assigned_task.status == AssignedTaskStatus.COMPLETED
+        assert existing_assigned_task.xform_id == "existing-form-id"
+        assert AssignedTask.objects.filter(opportunity_access=context_access).count() == 1
         self._assert_last_active_unchanged(task_module_context)
 
 
