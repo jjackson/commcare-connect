@@ -185,10 +185,10 @@ class TestSendMonthlyDeliveryReminderEmail:
         program_1 = ProgramFactory(organization=pm_org_1)
         program_2 = ProgramFactory(organization=pm_org_2)
 
-        managed_opportunity_1 = ManagedOpportunityFactory(organization=nm_org, program=program_1)
-        managed_opportunity_2 = ManagedOpportunityFactory(organization=nm_org, program=program_2)
-        nm_opportunity = OpportunityFactory(organization=nm_org)
-        pm_opportunity = OpportunityFactory(organization=pm_org_2)
+        managed_opportunity_1 = ManagedOpportunityFactory(organization=nm_org, program=program_1, is_test=False)
+        managed_opportunity_2 = ManagedOpportunityFactory(organization=nm_org, program=program_2, is_test=False)
+        nm_opportunity = OpportunityFactory(organization=nm_org, is_test=False)
+        pm_opportunity = OpportunityFactory(organization=pm_org_2, is_test=False)
 
         access_1 = OpportunityAccessFactory(opportunity=managed_opportunity_1)
         access_2 = OpportunityAccessFactory(opportunity=managed_opportunity_2)
