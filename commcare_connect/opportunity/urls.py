@@ -23,7 +23,9 @@ from commcare_connect.opportunity.views import (
     add_payment_unit,
     add_payment_units,
     approve_visits,
+    create_task,
     delete_form_json_rule,
+    delete_tasks,
     download_export,
     edit_payment_unit,
     export_catchment_area,
@@ -169,4 +171,6 @@ urlpatterns = [
     ),
     path("<slug:opp_id>/visit_export_count/", views.visit_export_count, name="visit_export_count"),
     path("<slug:opp_id>/assigned_tasks/", AssignedTaskListView.as_view(), name="assigned_task_list"),
+    path("<slug:opp_id>/assigned_tasks/create/", create_task, name="create_task"),
+    path("<slug:opp_id>/assigned_tasks/delete/", delete_tasks, name="delete_tasks"),
 ]
