@@ -538,27 +538,15 @@ def _filter_worker_tasks(opportunity, filters):
 def test_get_worker_tasks_base_queryset(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    AssignedTaskFactory(opportunity_access=access)
-    AssignedTaskFactory(opportunity_access=access)
+    task = TaskFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
+    AssignedTaskFactory(opportunity_access=access, task=task)
+    AssignedTaskFactory(opportunity_access=access, task=task)
 
     result = list(get_worker_tasks_base_queryset(opportunity))
     assert len(result) == 2
     assert result[0].user is not None
     assert result[0].task_name is not None
     assert result[0].status == UserInviteStatus.accepted
-
-
-@pytest.mark.django_db
-def test_get_worker_tasks_base_queryset_no_tasks(opportunity):
-    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-    UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-
-    result = list(get_worker_tasks_base_queryset(opportunity))
-    assert len(result) == 1
-    assert result[0].task_name is None
-    assert result[0].date_assigned is None
-    assert result[0].task_due_date is None
-    assert result[0].task_status is None
 
 
 @pytest.mark.django_db
@@ -587,20 +575,6 @@ def test_filter_worker_tasks_by_task_status(opportunity):
     result = _filter_worker_tasks(opportunity, {"task_status": [AssignedTaskStatus.COMPLETED]})
     assert len(result) == 1
     assert result[0].task_status == AssignedTaskStatus.COMPLETED
-
-
-@pytest.mark.django_db
-def test_filter_worker_tasks_by_no_tasks(opportunity):
-    access_with = OpportunityAccessFactory(opportunity=opportunity, accepted=True, user__name="Alice")
-    UserInviteFactory(opportunity=opportunity, opportunity_access=access_with, status="accepted")
-    access_without = OpportunityAccessFactory(opportunity=opportunity, accepted=True, user__name="Bob")
-    UserInviteFactory(opportunity=opportunity, opportunity_access=access_without, status="accepted")
-    task = TaskFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
-    AssignedTaskFactory(opportunity_access=access_with, task=task)
-
-    result = _filter_worker_tasks(opportunity, {"task_status": ["no_tasks"]})
-    assert len(result) == 1
-    assert result[0].task_name is None
 
 
 @pytest.mark.django_db
@@ -660,13 +634,3 @@ def test_filter_worker_tasks_combined_filters(opportunity):
     assert len(result) == 1
     assert result[0].user.name == "Alice"
     assert result[0].task_status == AssignedTaskStatus.COMPLETED
-
-
-@pytest.mark.django_db
-def test_filter_worker_tasks_no_tasks_with_date_filter_returns_empty(opportunity):
-    """no_tasks + date filter = empty (AND semantics, documented behavior)."""
-    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-    UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-
-    result = _filter_worker_tasks(opportunity, {"task_status": ["no_tasks"], "date_assigned_after": date.today()})
-    assert len(result) == 0

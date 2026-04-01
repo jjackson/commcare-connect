@@ -1341,8 +1341,6 @@ class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
         return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
 
     def render_task_name(self, value):
-        if value is None:
-            return format_html('<span class="italic text-slate-400">{}</span>', _("No assigned tasks"))
         return value
 
     def render_task_status(self, value, record):

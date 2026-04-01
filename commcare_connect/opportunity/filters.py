@@ -1,7 +1,6 @@
 import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
-from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
@@ -261,12 +260,9 @@ class UserVisitFilterSet(django_filters.FilterSet):
         return [(flag, FlagLabels.get_label(flag)) for flag in set(enabled_flags)]
 
 
-NO_TASKS_FILTER_VALUE = "no_tasks"
-
 TASK_STATUS_CHOICES = [
     (AssignedTaskStatus.ASSIGNED, _("To Do")),
     (AssignedTaskStatus.COMPLETED, _("Completed")),
-    (NO_TASKS_FILTER_VALUE, _("No Tasks")),
 ]
 
 
@@ -281,7 +277,7 @@ class TasksFilterSet(django_filters.FilterSet):
         label=_("Task Status"),
         choices=TASK_STATUS_CHOICES,
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_task_status",
+        field_name="task_status",
     )
     task_type = django_filters.MultipleChoiceFilter(
         label=_("Task Type"),
@@ -321,7 +317,7 @@ class TasksFilterSet(django_filters.FilterSet):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
         if self.opportunity:
-            active_tasks = Task.objects.filter(opportunity=self.opportunity)
+            active_tasks = Task.objects.filter(opportunity=self.opportunity, is_active=True)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
 
             worker_queryset = (
@@ -335,14 +331,3 @@ class TasksFilterSet(django_filters.FilterSet):
             self.filters["worker_name"].extra["choices"] = [
                 (str(user.pk), user.display_name_with_username()) for user in worker_queryset
             ]
-
-    def filter_task_status(self, queryset, name, value):
-        if not value:
-            return queryset
-        status_q = Q()
-        real_statuses = [s for s in value if s != NO_TASKS_FILTER_VALUE]
-        if real_statuses:
-            status_q |= Q(task_status__in=real_statuses)
-        if NO_TASKS_FILTER_VALUE in value:
-            status_q |= Q(task_status__isnull=True)
-        return queryset.filter(status_q)
