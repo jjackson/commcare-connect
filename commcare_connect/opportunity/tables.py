@@ -1778,6 +1778,28 @@ class InvoiceDeliveriesTable(tables.Table):
 
 
 class AssignedTaskListTable(OrgContextTable):
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",
+                "@change": "updateSelectAll()",
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
+            },
+        },
+    )
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1796,6 +1818,7 @@ class AssignedTaskListTable(OrgContextTable):
         model = AssignedTask
         fields = ()
         sequence = (
+            "select",
             "assigned_task_id",
             "connect_worker",
             "status",
