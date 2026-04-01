@@ -5,10 +5,10 @@ from django.test import RequestFactory
 from django_tables2 import RequestConfig
 
 from commcare_connect.opportunity.helpers import get_worker_tasks_base_queryset
-from commcare_connect.opportunity.models import CompletedTaskStatus
+from commcare_connect.opportunity.models import AssignedTaskStatus
 from commcare_connect.opportunity.tables import GroupedByWorkerMixin, WorkerDeliveryTable, WorkerTasksTable
 from commcare_connect.opportunity.tests.factories import (
-    CompletedTaskFactory,
+    AssignedTaskFactory,
     OpportunityAccessFactory,
     TaskFactory,
     UserInviteFactory,
@@ -32,9 +32,9 @@ def test_worker_tasks_table_groups_by_user(opportunity):
     UserInviteFactory(opportunity=opportunity, opportunity_access=access2, status="invited")
 
     task = TaskFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
-    CompletedTaskFactory(opportunity_access=access1, task=task, status=CompletedTaskStatus.ASSIGNED)
-    CompletedTaskFactory(opportunity_access=access1, task=task, status=CompletedTaskStatus.COMPLETED)
-    CompletedTaskFactory(opportunity_access=access2, task=task, status=CompletedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access1, task=task, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access1, task=task, status=AssignedTaskStatus.COMPLETED)
+    AssignedTaskFactory(opportunity_access=access2, task=task, status=AssignedTaskStatus.ASSIGNED)
 
     data = get_worker_tasks_base_queryset(opportunity)
     rows = list(data)

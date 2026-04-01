@@ -4,7 +4,7 @@ from factory import DictFactory, Faker, LazyAttribute, LazyFunction, SelfAttribu
 from factory.django import DjangoModelFactory
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
-from commcare_connect.opportunity.models import CompletedTaskStatus, Country, Currency, VisitValidationStatus
+from commcare_connect.opportunity.models import AssignedTaskStatus, Country, Currency, VisitValidationStatus
 from commcare_connect.users.tests.factories import OrganizationFactory, UserFactory
 
 
@@ -277,17 +277,17 @@ class TaskFactory(DjangoModelFactory):
         model = "opportunity.Task"
 
 
-class CompletedTaskFactory(DjangoModelFactory):
+class AssignedTaskFactory(DjangoModelFactory):
     task = SubFactory(TaskFactory)
     opportunity_access = SubFactory(OpportunityAccessFactory)
     completed_at = Faker("date_time", tzinfo=timezone.utc)
     duration = LazyFunction(lambda: timedelta(hours=1))
-    status = CompletedTaskStatus.ASSIGNED
+    status = AssignedTaskStatus.ASSIGNED
     due_date = LazyFunction(lambda: (date.today() + timedelta(days=7)))
     assigned_by = SubFactory(UserFactory)
 
     class Meta:
-        model = "opportunity.CompletedTask"
+        model = "opportunity.AssignedTask"
 
 
 class ExchangeRateFactory(DjangoModelFactory):

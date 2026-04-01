@@ -620,15 +620,15 @@ def get_worker_tasks_base_queryset(opportunity):
         .select_related("user")
         .annotate(
             status=Subquery(UserInvite.objects.filter(opportunity_access=OuterRef("pk")).values("status")[:1]),
-            task_name=F("completedtask__task__name"),
-            task_id=F("completedtask__task__id"),
-            date_assigned=F("completedtask__date_created"),
-            task_due_date=F("completedtask__due_date"),
-            task_status=F("completedtask__status"),
-            task_is_active=F("completedtask__task__is_active"),
+            task_name=F("assignedtask__task__name"),
+            task_id=F("assignedtask__task__id"),
+            date_assigned=F("assignedtask__date_created"),
+            task_due_date=F("assignedtask__due_date"),
+            task_status=F("assignedtask__status"),
+            task_is_active=F("assignedtask__task__is_active"),
         )
         .filter(task_is_active=True)
-        .order_by("user__name", "completedtask__date_created")
+        .order_by("user__name", "assignedtask__date_created")
     )
 
 
