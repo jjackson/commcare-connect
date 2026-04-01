@@ -1775,7 +1775,7 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class AssignedTaskListTable(OrgContextTable):
+class AssignedTaskListTable(OpportunityContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1788,7 +1788,11 @@ class AssignedTaskListTable(OrgContextTable):
         empty_values=(None,),
         default=gettext_lazy("Deleted user"),
     )
-    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+    action = tables.TemplateColumn(
+        verbose_name="",
+        orderable=False,
+        template_name="opportunity/assigned_task_edit_button.html",
+    )
 
     class Meta:
         model = AssignedTask
@@ -1824,10 +1828,6 @@ class AssignedTaskListTable(OrgContextTable):
             value.name,
             value.username,
         )
-
-    def render_action(self, record):
-        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
-        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
 
 
 class TaskTable(OpportunityContextTable):

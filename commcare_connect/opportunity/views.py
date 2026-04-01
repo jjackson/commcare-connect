@@ -7,6 +7,7 @@ from functools import cached_property, partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
+import pghistory
 import waffle
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -72,6 +73,7 @@ from commcare_connect.opportunity.forms import (
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     DeliverUnitFlagsForm,
+    EditAssignedTaskForm,
     EditTaskTypeForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
@@ -232,6 +234,13 @@ class OpportunityObjectMixin:
 
     def get_object(self, queryset=None):
         return self.get_opportunity()
+
+
+class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if self.get_opportunity().managed and not request.is_opportunity_pm:
+            raise Http404(_("This page is not available."))
+        return super().dispatch(request, *args, **kwargs)
 
 
 class OrgContextSingleTableView(SingleTableView):
@@ -1190,14 +1199,8 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     )
 
 
-class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
+class TaskTypesConfig(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, TemplateView):
     template_name = "opportunity/task_types_config.html"
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1238,16 +1241,10 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class EditTaskType(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
     form_class = EditTaskTypeForm
     model = Task
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_object(self, queryset=None):
         return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
@@ -3284,6 +3281,11 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
     table_class = AssignedTaskListTable
     paginate_by = DEFAULT_PAGE_SIZE
 
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["opp_id"] = self.get_opportunity().opportunity_id
+        return kwargs
+
     def get_queryset(self):
         opportunity = self.get_opportunity()
         return (
@@ -3315,3 +3317,36 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         ]
 
         return context
+
+
+class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
+    template_name = "opportunity/edit_assigned_task_form.html"
+    form_class = EditAssignedTaskForm
+    model = AssignedTask
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(
+            self.model,
+            pk=self.kwargs["pk"],
+            opportunity_access__opportunity=self.get_opportunity(),
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["hx_post_url"] = self.request.path
+        return context
+
+    def form_valid(self, form):
+        response = HttpResponse(status=204)
+        if form.has_changed():
+            task = form.save(commit=False)
+            reason = form.cleaned_data.get("reason", "")
+            with pghistory.context(
+                reason=reason,
+                username=self.request.user.username,
+                user_email=self.request.user.email,
+            ):
+                task.save(update_fields=["due_date"])
+            response["HX-Trigger"] = "reloadTable"
+        return response

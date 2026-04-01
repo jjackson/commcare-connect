@@ -2329,16 +2329,13 @@ class TestTaskTypesConfig:
             response = client.get(url)
         assert response.status_code == HTTPStatus.OK
 
-    def test_managed_opp_non_pm_redirects(self, client, organization, org_user_admin, program_manager_org):
+    def test_managed_opp_non_pm_not_found(self, client, organization, org_user_admin, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         url = reverse("opportunity:task_types_config", args=(organization.slug, managed_opp.opportunity_id))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
-        assert response["Location"] == reverse(
-            "opportunity:detail", args=(organization.slug, managed_opp.opportunity_id)
-        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_managed_opp_pm_success(
         self, client, organization, program_manager_org, program_manager_org_user_admin, task_units
@@ -2434,7 +2431,7 @@ class TestTaskTypesConfig:
         url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task.pk))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_scoped_to_opportunity_app(self, client, program_manager_org_user_admin, opp):
         other_task = TaskFactory()  # different app
@@ -2494,3 +2491,94 @@ class TestWorkerTasksView:
         response = client.get(url, HTTP_HX_REQUEST="true")
         assert response.status_code == 200
         assert b"Task Name" in response.content
+
+
+@pytest.mark.django_db
+class TestEditAssignedTask:
+    @pytest.fixture
+    def opp(self, organization):
+        return OpportunityFactory(organization=organization)
+
+    @pytest.fixture
+    def assigned_task(self, opp, user):
+        access = OpportunityAccessFactory(opportunity=opp, user=user)
+        return AssignedTaskFactory(
+            opportunity_access=access,
+            task=TaskFactory(app=opp.deliver_app),
+            status=AssignedTaskStatus.ASSIGNED,
+            due_date=date.today() + timedelta(days=7),
+        )
+
+    def _edit_url(self, opp, task):
+        return reverse("opportunity:edit_assigned_task", args=(opp.organization.slug, opp.opportunity_id, task.pk))
+
+    def test_list_page_renders_edit_button(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        url = reverse("opportunity:assigned_task_list", args=(opp.organization.slug, opp.opportunity_id))
+        response = client.get(url)
+        content = response.content.decode()
+        edit_url = self._edit_url(opp, assigned_task)
+        # Check button renders with correct hx-get
+        assert f'hx-get="{edit_url}"' in content, f'Edit button hx-get not found. Looking for: hx-get="{edit_url}"'
+        assert 'hx-target="#edit-assigned-task-form"' in content
+
+    def test_get_returns_form(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        response = client.get(self._edit_url(opp, assigned_task))
+        assert response.status_code == HTTPStatus.OK
+        assert "form" in response.context
+
+    def test_post_valid_future_date(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        future_date = date.today() + timedelta(days=14)
+        response = client.post(
+            self._edit_url(opp, assigned_task),
+            data={"due_date": future_date.isoformat(), "reason": "Extended deadline"},
+        )
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        assert response["HX-Trigger"] == "reloadTable"
+        assigned_task.refresh_from_db()
+        assert assigned_task.due_date == future_date
+
+    def test_post_past_date_rejected(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        past_date = date.today() - timedelta(days=1)
+        response = client.post(
+            self._edit_url(opp, assigned_task),
+            data={"due_date": past_date.isoformat()},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.context["form"].errors
+
+    def test_cannot_edit_completed_task(self, client, org_user_member, opp, user):
+        access = OpportunityAccessFactory(opportunity=opp, user=user)
+        completed_task = AssignedTaskFactory(
+            opportunity_access=access,
+            task=TaskFactory(app=opp.deliver_app),
+            status=AssignedTaskStatus.COMPLETED,
+        )
+        client.force_login(org_user_member)
+        response = client.get(self._edit_url(opp, completed_task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_requires_org_membership(self, client, user, opp, assigned_task):
+        client.force_login(user)
+        response = client.get(self._edit_url(opp, assigned_task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_managed_opp_requires_pm_role(self, client, organization, org_user_admin, program_manager_org):
+        program = ProgramFactory(organization=program_manager_org)
+        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        access = OpportunityAccessFactory(opportunity=managed_opp)
+        task = AssignedTaskFactory(
+            opportunity_access=access,
+            task=TaskFactory(app=managed_opp.deliver_app),
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+        url = reverse(
+            "opportunity:edit_assigned_task",
+            args=(organization.slug, managed_opp.opportunity_id, task.pk),
+        )
+        client.force_login(org_user_admin)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.NOT_FOUND
