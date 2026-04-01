@@ -71,6 +71,7 @@ from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
+    CreateTaskForm,
     DeliverUnitFlagsForm,
     EditTaskTypeForm,
     FormJsonValidationRulesForm,
@@ -3314,4 +3315,57 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
+        context["create_task_form"] = CreateTaskForm(opportunity=opportunity)
+        context["create_task_url"] = reverse(
+            "opportunity:create_task", args=(self.request.org.slug, opportunity.opportunity_id)
+        )
+
         return context
+
+
+@require_POST
+@org_member_required
+@opportunity_required
+def create_task(request, org_slug, opp_id):
+    opportunity = request.opportunity
+    form = CreateTaskForm(request.POST, opportunity=opportunity)
+    if not form.is_valid():
+        html = render_crispy_form(form, context={"request": request})
+        return HttpResponse(html)
+
+    task = form.cleaned_data["task"]
+    worker = form.cleaned_data["connect_worker"]
+    due_date = form.cleaned_data["due_date"]
+
+    access = get_object_or_404(OpportunityAccess, opportunity=opportunity, user=worker, accepted=True)
+
+    AssignedTask.objects.create(
+        task=task,
+        opportunity_access=access,
+        due_date=due_date,
+        status=AssignedTask.ASSIGNED,
+        assigned_by=request.user,
+    )
+    messages.success(request, _("Task created successfully."))
+    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
+
+
+@require_POST
+@org_member_required
+@opportunity_required
+def delete_tasks(request, org_slug, opp_id):
+    task_ids = request.POST.getlist("task_ids")
+    if not task_ids:
+        return HttpResponseBadRequest()
+
+    deleted_count, _ = AssignedTask.objects.filter(
+        pk__in=task_ids,
+        opportunity_access__opportunity=request.opportunity,
+    ).delete()
+
+    if deleted_count > 0:
+        messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
+
+    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
