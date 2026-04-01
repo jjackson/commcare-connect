@@ -1833,6 +1833,8 @@ class AssignedTaskListTable(OrgContextTable):
 
 
 class WorkerCompletedTaskTable(tables.Table):
+    use_view_url = True
+
     task_type = tables.Column(verbose_name=_("Task Type"), accessor="task", orderable=False)
     assigned_by = tables.Column(
         verbose_name=_("Assigned By"),
