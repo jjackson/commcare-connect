@@ -3336,7 +3336,6 @@ def create_task(request, org_slug, opp_id):
     task = form.cleaned_data["task"]
     worker = form.cleaned_data["connect_worker"]
     due_date = form.cleaned_data["due_date"]
-
     access = get_object_or_404(OpportunityAccess, opportunity=opportunity, user=worker, accepted=True)
 
     AssignedTask.objects.create(
