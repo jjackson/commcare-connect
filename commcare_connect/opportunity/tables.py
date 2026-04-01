@@ -1342,8 +1342,6 @@ class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
         return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
 
     def render_task_name(self, value):
-        if value is None:
-            return format_html('<span class="italic text-slate-400">{}</span>', _("No assigned tasks"))
         return value
 
     def render_task_status(self, value, record):
@@ -1778,7 +1776,7 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class AssignedTaskListTable(OrgContextTable):
+class AssignedTaskListTable(OpportunityContextTable):
     select = select_column(
         td_extra={"@change": "updateSelectAll()"},
     )
@@ -1794,7 +1792,11 @@ class AssignedTaskListTable(OrgContextTable):
         empty_values=(None,),
         default=gettext_lazy("Deleted user"),
     )
-    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+    action = tables.TemplateColumn(
+        verbose_name="",
+        orderable=False,
+        template_name="opportunity/assigned_task_edit_button.html",
+    )
 
     class Meta:
         model = AssignedTask
@@ -1831,10 +1833,6 @@ class AssignedTaskListTable(OrgContextTable):
             value.name,
             value.username,
         )
-
-    def render_action(self, record):
-        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
-        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
 
 
 class TaskTable(OpportunityContextTable):

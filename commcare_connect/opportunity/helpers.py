@@ -611,10 +611,9 @@ def get_worker_learn_table_data(opportunity):
 def get_worker_tasks_base_queryset(opportunity):
     """Return the annotated queryset for the worker tasks table.
 
-    One row per (worker, task) pair via LEFT JOIN on AssignedTask.
-    Workers with no tasks appear as a single row with NULL task fields.
-    Ordered by user name then task creation date, as required by
-    `GroupedByWorkerMixin` for correct row grouping.
+    One row per (worker, active task) pair. Only workers with active tasks
+    are included. Ordered by user name then task creation date, as required
+    by `GroupedByWorkerMixin` for correct row grouping.
     """
     return (
         OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
@@ -626,7 +625,9 @@ def get_worker_tasks_base_queryset(opportunity):
             date_assigned=F("assignedtask__date_created"),
             task_due_date=F("assignedtask__due_date"),
             task_status=F("assignedtask__status"),
+            task_is_active=F("assignedtask__task__is_active"),
         )
+        .filter(task_is_active=True)
         .order_by("user__name", "assignedtask__date_created")
     )
 
