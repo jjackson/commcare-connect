@@ -15,7 +15,7 @@ from django_tables2 import RequestConfig
 from waffle.testutils import override_switch
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
-from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
+from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
@@ -2397,3 +2397,23 @@ class TestWorkerTasksView:
         response = client.get(url, HTTP_HX_REQUEST="true")
         assert response.status_code == 200
         assert b"Task Name" in response.content
+
+
+@pytest.mark.django_db
+class TestWorkerCompletedTaskTableView:
+    def _url(self, organization, opportunity):
+        return reverse("opportunity:user_tasks_table", args=(organization.slug, opportunity.opportunity_id))
+
+    @override_switch(WORKER_VISITS_TASKS, active=True)
+    def test_filters_tasks_by_user(self, client, organization, opportunity, org_user_member):
+        client.force_login(org_user_member)
+        access1 = OpportunityAccessFactory(opportunity=opportunity)
+        access2 = OpportunityAccessFactory(opportunity=opportunity)
+        task1 = CompletedTaskFactory(opportunity_access=access1)
+        CompletedTaskFactory(opportunity_access=access2)
+
+        response = client.get(self._url(organization, opportunity), {"user": access1.user.user_id})
+
+        assert response.status_code == HTTPStatus.OK
+        table = response.context["table"]
+        assert list(table.data.data.values_list("pk", flat=True)) == [task1.pk]
