@@ -127,9 +127,7 @@ def send_monthly_delivery_reminder_email():
         if not opps_ids:
             continue
 
-        opportunities = Opportunity.objects.filter(
-            id__in=opps_ids,
-        ).only("name", "id")
+        opportunities = Opportunity.objects.filter(id__in=opps_ids, is_test=False).only("name", "id")
 
         _send_org_email_for_opportunities(
             organization=organization,
