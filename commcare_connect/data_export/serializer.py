@@ -24,7 +24,7 @@ from commcare_connect.opportunity.models import (
     Task,
     UserVisit,
 )
-from commcare_connect.organization.models import Organization
+from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 
 
@@ -391,3 +391,9 @@ class WorkAreaDataSerializer(serializers.ModelSerializer):
     def get_boundary(self, obj) -> dict:
         # .geojson returns a JSON string; parse to dict for DRF to nest in response
         return json.loads(obj.boundary.geojson)
+
+
+class LLOEntityDataSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LLOEntity
+        fields = ["id", "name", "short_name"]

@@ -29,6 +29,7 @@ from commcare_connect.data_export.serializer import (
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
     LabsRecordDataSerializer,
+    LLOEntityDataSerializer,
     OpportunityDataExportSerializer,
     OpportunitySerializer,
     OpportunityUserDataSerializer,
@@ -56,7 +57,7 @@ from commcare_connect.opportunity.models import (
     Task,
     UserVisit,
 )
-from commcare_connect.organization.models import Organization
+from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
@@ -533,3 +534,10 @@ class WorkAreaDataView(OpportunityDataExportView, BaseDataExportListViewV2):
 
     def get_queryset(self, *args, **kwargs):
         return WorkArea.objects.filter(opportunity=self.opportunity).select_related("work_area_group")
+
+
+class LLOEntityDataView(BaseDataExportListViewV2):
+    serializer_class = LLOEntityDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return LLOEntity.objects.all()

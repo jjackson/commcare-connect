@@ -6,6 +6,7 @@ from django.utils.timezone import now
 
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import AssignedTaskFactory, OpportunityAccessFactory, TaskFactory
+from commcare_connect.users.tests.factories import LLOEntityFactory
 
 
 def _add_export_credentials(api_client, user):
@@ -125,3 +126,26 @@ class TestWorkAreaDataView:
         url = reverse("data_export:work_area_data", kwargs={"opp_id": opportunity.id})
         response = api_client.get(url)
         assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestLLOEntityDataView:
+    def test_returns_llo_entity_list(self, api_client, user):
+        entity = LLOEntityFactory(short_name="TST")
+        _add_export_credentials(api_client, user)
+        _add_v2_header(api_client)
+        url = reverse("data_export:llo_entity_data")
+        response = api_client.get(url)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["id"] == entity.id
+        assert result["name"] == entity.name
+        assert result["short_name"] == "TST"
+
+    def test_requires_export_scope(self, api_client, user):
+        _add_v2_header(api_client)
+        url = reverse("data_export:llo_entity_data")
+        response = api_client.get(url)
+        assert response.status_code == 401
