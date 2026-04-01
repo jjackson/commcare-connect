@@ -175,6 +175,7 @@ class WorkAreaGrouper:
 
     def _build_adjacency(self, ward_data: dict) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
+        distances = {}
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
@@ -194,12 +195,19 @@ class WorkAreaGrouper:
 
                 candidate_geom = transformed_geoms[neighbour_id]
                 shared_edge = geom.intersection(candidate_geom)
+                dist = geom.distance(candidate_geom)
 
-                if get_dimensions(shared_edge) >= 1 or geom.distance(candidate_geom) <= self.buffer_distance:
+                if get_dimensions(shared_edge) >= 1 or dist <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
                     adjacency[neighbour_id].add(work_area_id)
+                    pair = (min(work_area_id, neighbour_id), max(work_area_id, neighbour_id))
+                    distances[pair] = dist
 
-        return {wa_id: sorted(neighbours) for wa_id, neighbours in adjacency.items()}
+        def _dist(wa_id, neighbour_id):
+            pair = (min(wa_id, neighbour_id), max(wa_id, neighbour_id))
+            return distances[pair]
+
+        return {wa_id: sorted(neighbours, key=lambda n: _dist(wa_id, n)) for wa_id, neighbours in adjacency.items()}
 
     def _bfs_cluster(
         self,
