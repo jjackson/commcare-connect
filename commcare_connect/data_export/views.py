@@ -38,7 +38,10 @@ from commcare_connect.data_export.serializer import (
     TaskDataSerializer,
     UserVisitDataSerializer,
     UserVisitDataWithImagesSerializer,
+    WorkAreaDataSerializer,
+    WorkAreaGroupDataSerializer,
 )
+from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.opportunity.models import (
     Assessment,
     AssignedTask,
@@ -516,3 +519,17 @@ class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
         return AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
             "task", "opportunity_access__user"
         )
+
+
+class WorkAreaGroupDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = WorkAreaGroupDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return WorkAreaGroup.objects.filter(opportunity=self.opportunity).select_related("opportunity_access__user")
+
+
+class WorkAreaDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = WorkAreaDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return WorkArea.objects.filter(opportunity=self.opportunity).select_related("work_area_group")

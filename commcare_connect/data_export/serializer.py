@@ -1,8 +1,10 @@
+import json
 from collections import OrderedDict
 
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.opportunity.api.serializers import (
     CommCareAppSerializer,
     OpportunityClaimLimitSerializer,
@@ -340,3 +342,52 @@ class AssignedTaskDataSerializer(serializers.ModelSerializer):
             "due_date",
             "date_created",
         ]
+
+
+class WorkAreaGroupDataSerializer(serializers.ModelSerializer):
+    assigned_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkAreaGroup
+        fields = ["id", "name", "ward", "opportunity", "opportunity_access", "assigned_username"]
+
+    def get_assigned_username(self, obj) -> str | None:
+        if obj.opportunity_access_id is None:
+            return None
+        return obj.opportunity_access.user.username
+
+
+class WorkAreaDataSerializer(serializers.ModelSerializer):
+    work_area_group_name = serializers.SerializerMethodField()
+    centroid = serializers.SerializerMethodField()
+    boundary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorkArea
+        fields = [
+            "id",
+            "slug",
+            "ward",
+            "status",
+            "building_count",
+            "expected_visit_count",
+            "case_id",
+            "case_properties",
+            "work_area_group",
+            "work_area_group_name",
+            "centroid",
+            "boundary",
+        ]
+
+    def get_work_area_group_name(self, obj) -> str | None:
+        if obj.work_area_group_id is None:
+            return None
+        return obj.work_area_group.name
+
+    def get_centroid(self, obj) -> dict:
+        # .geojson returns a JSON string; parse to dict for DRF to nest in response
+        return json.loads(obj.centroid.geojson)
+
+    def get_boundary(self, obj) -> dict:
+        # .geojson returns a JSON string; parse to dict for DRF to nest in response
+        return json.loads(obj.boundary.geojson)

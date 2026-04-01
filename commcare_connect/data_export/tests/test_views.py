@@ -4,6 +4,7 @@ import pytest
 from django.urls import reverse
 from django.utils.timezone import now
 
+from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import AssignedTaskFactory, OpportunityAccessFactory, TaskFactory
 
 
@@ -71,5 +72,56 @@ class TestAssignedTaskDataView:
         _add_export_credentials(api_client, user)
         _add_v2_header(api_client)
         url = reverse("data_export:assigned_task_data", kwargs={"opp_id": opportunity.id})
+        response = api_client.get(url)
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestWorkAreaGroupDataView:
+    def test_returns_work_area_group_list(self, v2_export_client, opportunity):
+        opp_access = OpportunityAccessFactory(opportunity=opportunity)
+        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=opp_access)
+        url = reverse("data_export:work_area_group_data", kwargs={"opp_id": opportunity.id})
+        response = v2_export_client.get(url)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["id"] == group.id
+        assert result["name"] == group.name
+        assert result["assigned_username"] == opp_access.user.username
+
+    def test_returns_404_for_unauthorized_opportunity(self, api_client, opportunity, user):
+        _add_export_credentials(api_client, user)
+        _add_v2_header(api_client)
+        url = reverse("data_export:work_area_group_data", kwargs={"opp_id": opportunity.id})
+        response = api_client.get(url)
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
+class TestWorkAreaDataView:
+    def test_returns_work_area_list(self, v2_export_client, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        area = WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+        url = reverse("data_export:work_area_data", kwargs={"opp_id": opportunity.id})
+        response = v2_export_client.get(url)
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["id"] == area.id
+        assert result["slug"] == area.slug
+        assert result["work_area_group"] == group.id
+        assert result["work_area_group_name"] == group.name
+        assert result["centroid"]["type"] == "Point"
+        assert result["centroid"]["coordinates"] == [area.centroid.x, area.centroid.y]
+        assert result["boundary"]["type"] == "Polygon"
+        assert result["boundary"]["coordinates"] == [[list(coord) for coord in ring] for ring in area.boundary.coords]
+
+    def test_returns_404_for_unauthorized_opportunity(self, api_client, opportunity, user):
+        _add_export_credentials(api_client, user)
+        _add_v2_header(api_client)
+        url = reverse("data_export:work_area_data", kwargs={"opp_id": opportunity.id})
         response = api_client.get(url)
         assert response.status_code == 404
