@@ -60,7 +60,7 @@
                     </form>
                     <button type="button" class="button-icon hover:bg-red-600 hover:text-white shadow-sm" @click="$store.confirmModal.show({
                                         title: '{% trans "Delete Tasks" %}',
-                                        message: `Are you sure you want to delete ${selected.length} task(s)? This action cannot be undone.`,
+                                        message: `{% blocktrans %}Are you sure you want to delete __count__ task(s)? This action cannot be undone.{% endblocktrans %}`.replace('__count__', selected.length),
                                         confirmBtnText: '{% trans "Delete" %}',
                                         confirmBtnColor: 'red',
                                         formRef: $refs.deleteTasksForm,

@@ -3343,7 +3343,7 @@ def create_task(request, org_slug, opp_id):
         task=task,
         opportunity_access=access,
         due_date=due_date,
-        status=AssignedTask.ASSIGNED,
+        status=AssignedTaskStatus.ASSIGNED,
         assigned_by=request.user,
     )
     messages.success(request, _("Task created successfully."))
