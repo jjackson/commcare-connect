@@ -118,10 +118,10 @@ def send_monthly_delivery_reminder_email():
     ).distinct()
 
     for organization in organizations_with_pending_deliveries.iterator(chunk_size=50):
-        opportunities = get_org_opps_ids_for_review(organization)
+        opportunities = get_org_opps_for_review(organization)
 
         if organization.program_manager:
-            opportunities.extend(get_org_managed_opps_ids_for_review(organization))
+            opportunities.extend(get_org_managed_opps_for_review(organization))
 
         if not opportunities:
             continue
@@ -133,7 +133,7 @@ def send_monthly_delivery_reminder_email():
         )
 
 
-def get_org_opps_ids_for_review(organization):
+def get_org_opps_for_review(organization):
     return list(
         Opportunity.objects.filter(
             organization=organization,
@@ -143,7 +143,7 @@ def get_org_opps_ids_for_review(organization):
     )
 
 
-def get_org_managed_opps_ids_for_review(organization):
+def get_org_managed_opps_for_review(organization):
     return list(
         Opportunity.objects.filter(
             managed=True,
