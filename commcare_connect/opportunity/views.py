@@ -7,6 +7,7 @@ from functools import cached_property, partial
 from http import HTTPStatus
 from urllib.parse import urlencode, urlparse
 
+import pghistory
 import waffle
 from celery.result import AsyncResult
 from crispy_forms.utils import render_crispy_form
@@ -59,13 +60,19 @@ from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
-from commcare_connect.opportunity.filters import DeliverFilterSet, FilterMixin, OpportunityListFilterSet
+from commcare_connect.opportunity.filters import (
+    DeliverFilterSet,
+    FilterMixin,
+    OpportunityListFilterSet,
+    TasksFilterSet,
+)
 from commcare_connect.opportunity.forms import (
     AddBudgetExistingUsersForm,
     AddBudgetNewUsersForm,
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
     DeliverUnitFlagsForm,
+    EditAssignedTaskForm,
     EditTaskTypeForm,
     FormJsonValidationRulesForm,
     HQApiKeyCreateForm,
@@ -90,13 +97,13 @@ from commcare_connect.opportunity.helpers import (
     get_payment_report_data,
     get_worker_learn_table_data,
     get_worker_table_data,
-    get_worker_tasks_table_data,
+    get_worker_tasks_base_queryset,
 )
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     BlobMeta,
     CompletedModule,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -181,12 +188,12 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
-    opportunity_program_manager_required,
     opportunity_required,
     org_admin_required,
     org_member_required,
     org_program_manager_required,
     org_viewer_required,
+    request_user_is_program_manager,
 )
 from commcare_connect.program.forms import ManagedOpportunityInitUpdateForm
 from commcare_connect.program.utils import is_program_manager
@@ -228,6 +235,13 @@ class OpportunityObjectMixin:
 
     def get_object(self, queryset=None):
         return self.get_opportunity()
+
+
+class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
+    def dispatch(self, request, *args, **kwargs):
+        if self.get_opportunity().managed and not request.is_opportunity_pm:
+            raise Http404(_("This page is not available."))
+        return super().dispatch(request, *args, **kwargs)
 
 
 class OrgContextSingleTableView(SingleTableView):
@@ -846,6 +860,8 @@ def add_payment_unit(request, org_slug=None, opp_id=None):
 @org_member_required
 @opportunity_required
 def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
+    if request.opportunity.managed and not request.is_opportunity_pm:
+        return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, payment_unit_id=pk, opportunity=request.opportunity)
     deliver_units = DeliverUnit.objects.filter(
         Q(payment_unit__isnull=True) | Q(payment_unit=payment_unit) | Q(payment_unit__opportunity__active=False),
@@ -890,8 +906,14 @@ def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
         PaymentUnit.objects.filter(id__in=removed_payment_units, parent_payment_unit=form.instance.id).update(
             parent_payment_unit=None
         )
+
         messages.success(request, f"Payment unit {form.instance.name} updated. Please reset the budget")
-        return redirect("opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
+        if request.is_opportunity_pm:
+            return redirect(
+                "opportunity:finalize", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id
+            )
+        else:
+            return redirect("opportunity:detail", org_slug=request.org.slug, opp_id=request.opportunity.opportunity_id)
 
     path = [
         {"title": "Opportunities", "url": reverse("opportunity:list", args=(request.org.slug,))},
@@ -1178,14 +1200,8 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     )
 
 
-class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, TemplateView):
+class TaskTypesConfig(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, TemplateView):
     template_name = "opportunity/task_types_config.html"
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1226,16 +1242,10 @@ class TaskTypesConfig(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, T
         return self.render_to_response(self.get_context_data(form=form))
 
 
-class EditTaskType(OpportunityObjectMixin, OrganizationUserMemberRoleMixin, UpdateView):
+class EditTaskType(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
     form_class = EditTaskTypeForm
     model = Task
-
-    def dispatch(self, request, *args, **kwargs):
-        response = super().dispatch(request, *args, **kwargs)
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
-            return redirect("opportunity:detail", org_slug=kwargs["org_slug"], opp_id=kwargs["opp_id"])
-        return response
 
     def get_object(self, queryset=None):
         return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
@@ -1319,10 +1329,12 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
     return redirect("opportunity:detail", org_slug, opp_id)
 
 
-@opportunity_program_manager_required
+@login_required
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
+    if not (request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)):
+        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = True
     access.suspension_date = now()
@@ -1337,9 +1349,11 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 
 
 @require_POST
-@opportunity_program_manager_required
+@login_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
+    if not (request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)):
+        raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = False
     access.save()
@@ -1350,8 +1364,12 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
 @org_member_required
 @opportunity_required
 def suspended_users_list(request, org_slug=None, opp_id=None):
+    has_suspension_perm = (
+        request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)
+    )
     access_objects = OpportunityAccess.objects.filter(opportunity=request.opportunity, suspended=True)
-    table = SuspendedUsersTable(access_objects)
+    table = SuspendedUsersTable(access_objects, has_suspension_perm=has_suspension_perm)
+    RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     path = []
     if request.opportunity.managed:
         path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
@@ -2067,6 +2085,11 @@ class WorkerPageView(OrganizationUserMixin, OpportunityObjectMixin, TemplateView
                 "flagged_info": flagged_info,
                 "last_payment_details": last_payment_details,
                 "path": self.get_path(),
+                "has_suspension_perm": (
+                    self.request.is_opportunity_pm
+                    if self.opportunity.managed
+                    else request_user_is_program_manager(self.request)
+                ),
             }
         )
         return context
@@ -2109,7 +2132,7 @@ class WorkerTableView(OrganizationUserMixin, OpportunityObjectMixin, SingleTable
 
 
 class WorkerCompletedTaskTableView(WorkerTableView):
-    model = CompletedTask
+    model = AssignedTask
     table_class = WorkerCompletedTaskTable
     template_name = "opportunity/worker_visit_table.html"
     redirect_url_name = "opportunity:user_tasks_list"
@@ -2120,7 +2143,7 @@ class WorkerCompletedTaskTableView(WorkerTableView):
         return kwargs
 
     def get_queryset(self):
-        queryset = CompletedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
+        queryset = AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
             "task", "assigned_by", "opportunity_access__opportunity"
         )
         user_id = self.request.GET.get("user")
@@ -2435,7 +2458,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
 @opportunity_required
 def user_task_details(request, org_slug, opp_id, pk):
     completed_task = get_object_or_404(
-        CompletedTask.objects.select_related(
+        AssignedTask.objects.select_related(
             "task__app__hq_server",
             "opportunity_access__opportunity__deliver_app",
             "assigned_by",
@@ -2674,12 +2697,23 @@ class WorkerPaymentsView(BaseWorkerListView):
         return table
 
 
-class WorkerTaskView(BaseWorkerListView):
+class WorkerTaskView(BaseWorkerListView, FilterMixin):
     hx_template_name = "opportunity/tasks.html"
     active_tab = "tasks"
+    filter_class = TasksFilterSet
+
+    def get_filter_kwargs(self):
+        return {
+            "queryset": get_worker_tasks_base_queryset(self.get_opportunity()),
+            "request": self.request,
+            "opportunity": self.get_opportunity(),
+        }
+
+    def get_extra_context(self, opportunity, org_slug):
+        return self.get_filter_context()
 
     def get_table(self, opportunity, org_slug):
-        data = get_worker_tasks_table_data(opportunity)
+        data = self._get_filter().qs
         table = WorkerTasksTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
@@ -2710,7 +2744,15 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
     return render(
         request,
         "opportunity/opportunity_worker_learn.html",
-        {"total_learn_duration": total_duration, "table": table, "access": access, "path": path},
+        {
+            "total_learn_duration": total_duration,
+            "table": table,
+            "access": access,
+            "path": path,
+            "has_suspension_perm": (
+                request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)
+            ),
+        },
     )
 
 
@@ -3270,10 +3312,15 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
     table_class = AssignedTaskListTable
     paginate_by = DEFAULT_PAGE_SIZE
 
+    def get_table_kwargs(self):
+        kwargs = super().get_table_kwargs()
+        kwargs["opp_id"] = self.get_opportunity().opportunity_id
+        return kwargs
+
     def get_queryset(self):
         opportunity = self.get_opportunity()
         return (
-            CompletedTask.objects.filter(opportunity_access__opportunity=opportunity)
+            AssignedTask.objects.filter(opportunity_access__opportunity=opportunity)
             .select_related("task", "opportunity_access__user", "assigned_by")
             .order_by("-date_created")
         )
@@ -3282,10 +3329,10 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         context = super().get_context_data(**kwargs)
         opportunity = self.get_opportunity()
 
-        counts = CompletedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
+        counts = AssignedTask.objects.filter(opportunity_access__opportunity=opportunity).aggregate(
             total_tasks=Count("id"),
-            open_tasks=Count("id", filter=Q(status=CompletedTaskStatus.ASSIGNED)),
-            complete_tasks=Count("id", filter=Q(status=CompletedTaskStatus.COMPLETED)),
+            open_tasks=Count("id", filter=Q(status=AssignedTaskStatus.ASSIGNED)),
+            complete_tasks=Count("id", filter=Q(status=AssignedTaskStatus.COMPLETED)),
         )
 
         context["opportunity"] = opportunity
@@ -3301,3 +3348,36 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         ]
 
         return context
+
+
+class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
+    template_name = "opportunity/edit_assigned_task_form.html"
+    form_class = EditAssignedTaskForm
+    model = AssignedTask
+
+    def get_object(self, queryset=None):
+        return get_object_or_404(
+            self.model,
+            pk=self.kwargs["pk"],
+            opportunity_access__opportunity=self.get_opportunity(),
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["hx_post_url"] = self.request.path
+        return context
+
+    def form_valid(self, form):
+        response = HttpResponse(status=204)
+        if form.has_changed():
+            task = form.save(commit=False)
+            reason = form.cleaned_data.get("reason", "")
+            with pghistory.context(
+                reason=reason,
+                username=self.request.user.username,
+                user_email=self.request.user.email,
+            ):
+                task.save(update_fields=["due_date"])
+            response["HX-Trigger"] = "reloadTable"
+        return response

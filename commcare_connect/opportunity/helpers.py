@@ -608,24 +608,27 @@ def get_worker_learn_table_data(opportunity):
     return queryset
 
 
-def get_worker_tasks_table_data(opportunity):
-    """Return one row per (worker, task) pair via LEFT JOIN on CompletedTask.
+def get_worker_tasks_base_queryset(opportunity):
+    """Return the annotated queryset for the worker tasks table.
 
-    Workers with no tasks appear as a single row with NULL task fields.
-    Rows are ordered by user name then task creation date, as required by
-    `GroupedByWorkerMixin` for correct row grouping.
+    One row per (worker, active task) pair. Only workers with active tasks
+    are included. Ordered by user name then task creation date, as required
+    by `GroupedByWorkerMixin` for correct row grouping.
     """
     return (
         OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
         .select_related("user")
         .annotate(
             status=Subquery(UserInvite.objects.filter(opportunity_access=OuterRef("pk")).values("status")[:1]),
-            task_name=F("completedtask__task__name"),
-            date_assigned=F("completedtask__date_created"),
-            task_due_date=F("completedtask__due_date"),
-            task_status=F("completedtask__status"),
+            task_name=F("assignedtask__task__name"),
+            task_id=F("assignedtask__task__id"),
+            date_assigned=F("assignedtask__date_created"),
+            task_due_date=F("assignedtask__due_date"),
+            task_status=F("assignedtask__status"),
+            task_is_active=F("assignedtask__task__is_active"),
         )
-        .order_by("user__name", "completedtask__date_created")
+        .filter(task_is_active=True)
+        .order_by("user__name", "assignedtask__date_created")
     )
 
 

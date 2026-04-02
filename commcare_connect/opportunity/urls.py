@@ -3,6 +3,7 @@ from django.urls import path
 from commcare_connect.opportunity import views
 from commcare_connect.opportunity.views import (
     AssignedTaskListView,
+    EditAssignedTask,
     EditTaskType,
     OpportunityCompletedWorkTable,
     OpportunityDashboard,
@@ -176,4 +177,5 @@ urlpatterns = [
     ),
     path("<slug:opp_id>/visit_export_count/", views.visit_export_count, name="visit_export_count"),
     path("<slug:opp_id>/assigned_tasks/", AssignedTaskListView.as_view(), name="assigned_task_list"),
+    path("<slug:opp_id>/assigned_tasks/<int:pk>/edit/", EditAssignedTask.as_view(), name="edit_assigned_task"),
 ]

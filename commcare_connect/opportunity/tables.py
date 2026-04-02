@@ -14,9 +14,9 @@ from django_tables2 import columns
 
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     CatchmentArea,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -260,6 +260,10 @@ class SuspendedUsersTable(tables.Table):
         orderable = False
         empty_text = "No suspended users."
 
+    def __init__(self, *args, **kwargs):
+        self.has_suspension_perm = kwargs.pop("has_suspension_perm", False)
+        super().__init__(*args, **kwargs)
+
     def render_suspension_date(self, record, value):
         return date_with_time_popup(self, value)
 
@@ -267,18 +271,18 @@ class SuspendedUsersTable(tables.Table):
         revoke_url = reverse(
             "opportunity:revoke_user_suspension",
             args=(
-                record.opportunity.organization.slug,
+                self.context.request.org.slug,
                 record.opportunity.opportunity_id,
                 record.opportunity_access_id,
             ),
         )
         page_url = reverse(
             "opportunity:suspended_users_list",
-            args=(record.opportunity.organization.slug, record.opportunity.opportunity_id),
+            args=(self.context.request.org.slug, record.opportunity.opportunity_id),
         )
         return render_to_string(
             "opportunity/partials/revoke_suspension.html",
-            {"revoke_url": revoke_url, "page_url": page_url},
+            {"revoke_url": revoke_url, "page_url": page_url, "has_suspension_perm": self.has_suspension_perm},
             request=self.context.request,
         )
 
@@ -1095,10 +1099,10 @@ class TaskStatusColumn(tables.Column):
     def render(self, value):
         if value is None:
             return "—"
-        if value == CompletedTaskStatus.ASSIGNED:
+        if value == AssignedTaskStatus.ASSIGNED:
             status = _("To Do")
             badge_classes = "bg-amber-100 text-amber-800"
-        elif value == CompletedTaskStatus.COMPLETED:
+        elif value == AssignedTaskStatus.COMPLETED:
             status = _("Complete")
             badge_classes = "bg-green-100 text-green-800"
         else:
@@ -1341,8 +1345,6 @@ class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
         return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
 
     def render_task_name(self, value):
-        if value is None:
-            return format_html('<span class="italic text-slate-400">{}</span>', _("No assigned tasks"))
         return value
 
     def render_task_status(self, value, record):
@@ -1777,7 +1779,7 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class AssignedTaskListTable(OrgContextTable):
+class AssignedTaskListTable(OpportunityContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1790,10 +1792,14 @@ class AssignedTaskListTable(OrgContextTable):
         empty_values=(None,),
         default=gettext_lazy("Deleted user"),
     )
-    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+    action = tables.TemplateColumn(
+        verbose_name="",
+        orderable=False,
+        template_name="opportunity/assigned_task_edit_button.html",
+    )
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ()
         sequence = (
             "assigned_task_id",
@@ -1827,10 +1833,6 @@ class AssignedTaskListTable(OrgContextTable):
             value.username,
         )
 
-    def render_action(self, record):
-        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
-        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
-
 
 class WorkerCompletedTaskTable(tables.Table):
     use_view_url = True
@@ -1847,7 +1849,7 @@ class WorkerCompletedTaskTable(tables.Table):
     status = TaskStatusColumn(verbose_name=_("Status"), accessor="status")
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ()
         sequence = ("task_type", "assigned_by", "assigned_date", "due_date", "status")
         order_by = ("-assigned_date",)

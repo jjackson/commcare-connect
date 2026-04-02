@@ -4,9 +4,9 @@ from django.db.models import Q
 from commcare_connect.opportunity.forms import OpportunityAccessCreationForm
 from commcare_connect.opportunity.models import (
     Assessment,
+    AssignedTask,
     CommCareApp,
     CompletedModule,
-    CompletedTask,
     CompletedWork,
     DeliverUnit,
     DeliverUnitFlagRules,
@@ -208,7 +208,7 @@ class TaskAdmin(admin.ModelAdmin):
     search_fields = ["name", "app__name"]
 
 
-@admin.register(CompletedTask)
-class CompletedTaskAdmin(admin.ModelAdmin):
+@admin.register(AssignedTask)
+class AssignedTaskAdmin(admin.ModelAdmin):
     list_display = ["task", "opportunity_access", "status", "completed_at"]
     search_fields = ["task__name", "opportunity_access__user__username"]
