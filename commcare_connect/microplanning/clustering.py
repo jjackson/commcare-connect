@@ -1,14 +1,12 @@
 import logging
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from uuid import uuid4
 
 from django.db import transaction
 from pyproj import Transformer
-from shapely import unary_union, wkb
+from shapely import get_dimensions, wkb
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
-from shapely.prepared import prep
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
@@ -85,6 +83,7 @@ class WorkAreaGrouper:
             return
 
         work_area_groups = defaultdict(set)
+        group_index = 0
 
         wards = defaultdict(list)
         for wa_id, wa_data in work_areas.items():
@@ -135,8 +134,9 @@ class WorkAreaGrouper:
                         wa_id,
                     )
 
-                group_id = str(uuid4())
-                work_area_groups[(ward, group_id)].update(cluster)
+                group_index += 1
+                group_name = f"{ward}_{group_index}"
+                work_area_groups[(ward, group_name)].update(cluster)
                 ward_group_count += 1
 
             logger.info(
@@ -150,16 +150,10 @@ class WorkAreaGrouper:
         with transaction.atomic():
             for key, work_area_ids in work_area_groups.items():
                 ward, group_id = key
-                combined_work_area_boundary = unary_union([work_areas[wa_id].boundary for wa_id in work_area_ids])
-                hull = combined_work_area_boundary.convex_hull
-                if hull.geom_type != "Polygon":
-                    hull = hull.buffer(DEGENERATE_HULL_BUFFER)
-                group_boundary = hull.wkt
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
                     ward=ward,
                     name=group_id,
-                    boundary=group_boundary,
                 )
                 WorkArea.objects.filter(
                     id__in=work_area_ids,
@@ -175,20 +169,18 @@ class WorkAreaGrouper:
 
     def _build_adjacency(self, ward_data: dict) -> dict:
         adjacency = {wa_id: set() for wa_id in ward_data.keys()}
+        distances = {}
 
         transformed_geoms = {}
         for wa_id, wa in ward_data.items():
             transformed_geoms[wa_id] = transform(self.transformer.transform, wa.boundary)
 
         wa_ids_list = list(transformed_geoms.keys())
-        geometries = [transformed_geoms[wa_id] for wa_id in wa_ids_list]
-
-        spatial_index = STRtree(geometries)
+        spatial_index = STRtree([transformed_geoms[wa_id] for wa_id in wa_ids_list])
 
         for work_area_id, geom in transformed_geoms.items():
             query_geom = geom.buffer(self.buffer_distance)
             candidate_indices = spatial_index.query(query_geom, predicate="intersects")
-            prepared_geom = prep(geom)
 
             for idx in candidate_indices:
                 neighbour_id = wa_ids_list[idx]
@@ -196,12 +188,20 @@ class WorkAreaGrouper:
                     continue
 
                 candidate_geom = transformed_geoms[neighbour_id]
+                shared_edge = geom.intersection(candidate_geom)
+                dist = geom.distance(candidate_geom)
 
-                if prepared_geom.intersects(candidate_geom) or geom.distance(candidate_geom) <= self.buffer_distance:
+                if get_dimensions(shared_edge) >= 1 or dist <= self.buffer_distance:
                     adjacency[work_area_id].add(neighbour_id)
                     adjacency[neighbour_id].add(work_area_id)
+                    pair = (min(work_area_id, neighbour_id), max(work_area_id, neighbour_id))
+                    distances[pair] = dist
 
-        return {wa_id: sorted(neighbours) for wa_id, neighbours in adjacency.items()}
+        def _dist(wa_id, neighbour_id):
+            pair = (min(wa_id, neighbour_id), max(wa_id, neighbour_id))
+            return distances[pair]
+
+        return {wa_id: sorted(neighbours, key=lambda n: _dist(wa_id, n)) for wa_id, neighbours in adjacency.items()}
 
     def _bfs_cluster(
         self,

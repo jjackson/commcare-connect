@@ -135,16 +135,6 @@ class TestWorkAreaGrouper:
         work_area.refresh_from_db()
         assert work_area.work_area_group == work_area_groups[0]
 
-    def test_cluster_sets_boundary_and_building_count_on_group(self, opportunity):
-        work_areas = self.create_adjacent_work_areas(opportunity, ward="ward-1")
-
-        grouper = WorkAreaGrouper(opportunity_id=opportunity.id, max_buildings=300)
-        grouper.cluster_work_areas()
-
-        group = WorkAreaGroup.objects.get(opportunity=opportunity)
-        assert group.building_count == sum(wa.building_count for wa in work_areas)
-        assert group.boundary is not None
-
     def test_cluster_idempotent(self, opportunity):
         self.create_adjacent_work_areas(opportunity, ward="ward-1")
 
@@ -177,6 +167,50 @@ class TestWorkAreaGrouper:
         assert not WorkAreaGroup.objects.filter(opportunity=opportunity).exists()
         work_area.refresh_from_db()
         assert work_area.work_area_group is None
+
+    def test_cluster_corner_sharing_work_areas(self, opportunity):
+        """Work areas sharing only a corner (point) should be grouped together
+        because their distance is 0, which is within the default buffer_distance."""
+        size = 0.01
+        # Create two squares that touch only at a corner point
+        wa1 = WorkAreaFactory(
+            opportunity=opportunity,
+            slug="corner-1",
+            ward="ward-1",
+            centroid=Point(77.0 + size / 2, 28.0 + size / 2, srid=SRID),
+            boundary=Polygon(
+                ((77.0, 28.0), (77.0 + size, 28.0), (77.0 + size, 28.0 + size), (77.0, 28.0 + size), (77.0, 28.0)),
+                srid=SRID,
+            ),
+            building_count=50,
+        )
+        wa2 = WorkAreaFactory(
+            opportunity=opportunity,
+            slug="corner-2",
+            ward="ward-1",
+            centroid=Point(77.0 + size + size / 2, 28.0 + size + size / 2, srid=SRID),
+            boundary=Polygon(
+                (
+                    (77.0 + size, 28.0 + size),
+                    (77.0 + 2 * size, 28.0 + size),
+                    (77.0 + 2 * size, 28.0 + 2 * size),
+                    (77.0 + size, 28.0 + 2 * size),
+                    (77.0 + size, 28.0 + size),
+                ),
+                srid=SRID,
+            ),
+            building_count=50,
+        )
+
+        grouper = WorkAreaGrouper(opportunity_id=opportunity.id, max_buildings=300)
+        grouper.cluster_work_areas()
+
+        groups = WorkAreaGroup.objects.filter(opportunity=opportunity)
+        assert groups.count() == 1
+
+        wa1.refresh_from_db()
+        wa2.refresh_from_db()
+        assert wa1.work_area_group == wa2.work_area_group
 
     def test_cluster_single_work_area_exceeding_max_buildings(self, opportunity):
         work_area = WorkAreaFactory(

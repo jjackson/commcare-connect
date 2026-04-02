@@ -608,6 +608,30 @@ def get_worker_learn_table_data(opportunity):
     return queryset
 
 
+def get_worker_tasks_base_queryset(opportunity):
+    """Return the annotated queryset for the worker tasks table.
+
+    One row per (worker, active task) pair. Only workers with active tasks
+    are included. Ordered by user name then task creation date, as required
+    by `GroupedByWorkerMixin` for correct row grouping.
+    """
+    return (
+        OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
+        .select_related("user")
+        .annotate(
+            status=Subquery(UserInvite.objects.filter(opportunity_access=OuterRef("pk")).values("status")[:1]),
+            task_name=F("assignedtask__task__name"),
+            task_id=F("assignedtask__task__id"),
+            date_assigned=F("assignedtask__date_created"),
+            task_due_date=F("assignedtask__due_date"),
+            task_status=F("assignedtask__status"),
+            task_is_active=F("assignedtask__task__is_active"),
+        )
+        .filter(task_is_active=True)
+        .order_by("user__name", "assignedtask__date_created")
+    )
+
+
 def get_opportunity_delivery_progress(opp_id):
     today = now().replace(hour=0, minute=0, second=0, microsecond=0)
     three_days_ago = today - timedelta(days=3)

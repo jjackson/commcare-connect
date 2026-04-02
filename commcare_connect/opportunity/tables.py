@@ -14,9 +14,9 @@ from django_tables2 import columns
 
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
 from commcare_connect.opportunity.models import (
+    AssignedTask,
+    AssignedTaskStatus,
     CatchmentArea,
-    CompletedTask,
-    CompletedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     DeliverUnit,
@@ -260,6 +260,10 @@ class SuspendedUsersTable(tables.Table):
         orderable = False
         empty_text = "No suspended users."
 
+    def __init__(self, *args, **kwargs):
+        self.has_suspension_perm = kwargs.pop("has_suspension_perm", False)
+        super().__init__(*args, **kwargs)
+
     def render_suspension_date(self, record, value):
         return date_with_time_popup(self, value)
 
@@ -267,18 +271,18 @@ class SuspendedUsersTable(tables.Table):
         revoke_url = reverse(
             "opportunity:revoke_user_suspension",
             args=(
-                record.opportunity.organization.slug,
+                self.context.request.org.slug,
                 record.opportunity.opportunity_id,
                 record.opportunity_access_id,
             ),
         )
         page_url = reverse(
             "opportunity:suspended_users_list",
-            args=(record.opportunity.organization.slug, record.opportunity.opportunity_id),
+            args=(self.context.request.org.slug, record.opportunity.opportunity_id),
         )
         return render_to_string(
             "opportunity/partials/revoke_suspension.html",
-            {"revoke_url": revoke_url, "page_url": page_url},
+            {"revoke_url": revoke_url, "page_url": page_url, "has_suspension_perm": self.has_suspension_perm},
             request=self.context.request,
         )
 
@@ -1052,12 +1056,18 @@ class SuspendedIndicatorColumn(tables.Column):
 
 
 class StatusIndicatorColumn(tables.Column):
-    def _init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         kwargs.setdefault("verbose_name", "Status")
         super().__init__(*args, **kwargs)
 
+    def _is_suspended(self, record):
+        opportunity_access = getattr(record, "opportunity_access", None)
+        if opportunity_access:
+            return opportunity_access.suspended
+        return getattr(record, "suspended", False)
+
     def render(self, record):
-        if record.opportunity_access and record.opportunity_access.suspended:
+        if self._is_suspended(record):
             return format_html(
                 '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-minus-square text-black-600"></i>' "</span>",
                 _("User suspended"),
@@ -1079,6 +1089,26 @@ class StatusIndicatorColumn(tables.Column):
                 '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-xmark text-red-600"></i>' "</span>",
                 _("User not found") if record.status == UserInviteStatus.not_found else _("Invite failed"),
             )
+
+
+class TaskStatusColumn(tables.Column):
+    def render(self, value):
+        if value is None:
+            return "—"
+        if value == AssignedTaskStatus.ASSIGNED:
+            status = _("To Do")
+            badge_classes = "bg-amber-100 text-amber-800"
+        elif value == AssignedTaskStatus.COMPLETED:
+            status = _("Complete")
+            badge_classes = "bg-green-100 text-green-800"
+        else:
+            return str(value)
+        return format_html(
+            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
+            "{}</span>",
+            badge_classes,
+            status,
+        )
 
 
 class WorkerStatusTable(tables.Table):
@@ -1221,6 +1251,103 @@ class WorkerPaymentsTable(tables.Table):
         )
 
 
+class GroupedByWorkerMixin:
+    """Mixin for tables that show multiple rows per worker, hiding worker-level
+    columns on sub-rows. Subclasses must call `run_after_every_row(record)`
+    in their last rendered column."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._seen_users = set()
+
+    def _is_seen(self, record):
+        return record.pk in self._seen_users
+
+    def run_after_every_row(self, record):
+        self._seen_users.add(record.pk)
+
+    def _get_user_url(self, record):
+        base_url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id))
+        return f"{base_url}?{urlencode({'user': record.user.user_id})}"
+
+    def render_user(self, value, record):
+        if self._is_seen(record):
+            return ""
+        return format_html(
+            '<a href="{}" class="w-40">'
+            '<p class="text-sm text-slate-900">{}</p>'
+            '<p class="text-xs text-slate-400">{}</p>'
+            "</a>",
+            self._get_user_url(record),
+            value.name,
+            value.username,
+        )
+
+    def render_index(self, value, record):
+        page = getattr(self, "page", None)
+
+        if not hasattr(self, "_row_counter"):
+            unique_before_page = 0
+
+            if page:
+                per_page = page.paginator.per_page
+                page_start_index = (page.number - 1) * per_page
+                seen_ids = set()
+
+                for d in self.data[:page_start_index]:
+                    if d.pk not in seen_ids:
+                        seen_ids.add(d.pk)
+                        unique_before_page += 1
+
+            self._row_counter = itertools.count(start=unique_before_page + 1)
+
+        if self._is_seen(record):
+            return ""
+
+        return next(self._row_counter)
+
+
+class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
+    index = IndexColumn()
+    worker_status = StatusIndicatorColumn(verbose_name=_("Status"), empty_values=())
+    user = tables.Column(verbose_name=_("Name"), orderable=True, order_by="user__name")
+    task_name = tables.Column(verbose_name=_("Task Name"), empty_values=())
+    date_assigned = DMYTColumn(verbose_name=_("Date Assigned"))
+    due_date = DMYTColumn(verbose_name=_("Due Date"), accessor="task_due_date")
+    task_status = TaskStatusColumn(verbose_name=_("Task Status"), empty_values=())
+
+    class Meta:
+        fields = ()
+        orderable = False
+        sequence = (
+            "index",
+            "worker_status",
+            "user",
+            "task_name",
+            "date_assigned",
+            "due_date",
+            "task_status",
+        )
+        row_attrs = {"class": "group"}
+        empty_text = gettext_lazy("No workers have accepted this opportunity yet.")
+
+    def __init__(self, *args, **kwargs):
+        self.opp_id = kwargs.pop("opp_id")
+        super().__init__(*args, **kwargs)
+
+    def render_worker_status(self, record, value):
+        if self._is_seen(record):
+            return ""
+        return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
+
+    def render_task_name(self, value):
+        return value
+
+    def render_task_status(self, value, record):
+        self.run_after_every_row(record)
+        return TaskStatusColumn.render(self.columns["task_status"].column, value)
+
+
 class WorkerLearnTable(OrgContextTable):
     index = IndexColumn()
     user = UserInfoColumn()
@@ -1352,7 +1479,7 @@ class TotalDeliveredColumn(tables.Column):
         )
 
 
-class WorkerDeliveryTable(OrgContextTable):
+class WorkerDeliveryTable(GroupedByWorkerMixin, OrgContextTable):
     id = tables.Column(visible=False)
     index = IndexColumn()
     user = tables.Column(orderable=False, verbose_name="Name", footer="Total")
@@ -1414,7 +1541,6 @@ class WorkerDeliveryTable(OrgContextTable):
         self.opp_id = kwargs.pop("opp_id")
         self.use_view_url = False
         super().__init__(*args, **kwargs)
-        self._seen_users = set()
 
     def render_delivery_progress(self, record):
         current = record.completed
@@ -1445,54 +1571,10 @@ class WorkerDeliveryTable(OrgContextTable):
         self.run_after_every_row(record)
         return format_html(template, url)
 
-    def render_user(self, value, record):
-        if record.id in self._seen_users:
-            return ""
-
-        base_url = reverse("opportunity:user_visits_list", args=(self.org_slug, self.opp_id))
-        url = f"{base_url}?{urlencode({'user': record.user.user_id})}"
-
-        return format_html(
-            """
-                <a href="{}" class="w-40">
-                    <p class="text-sm text-slate-900">{}</p>
-                    <p class="text-xs text-slate-400">{}</p>
-                </a>
-            """,
-            url,
-            value.name,
-            value.username,
-        )
-
     def render_suspended(self, record, value):
-        if record.id in self._seen_users:
+        if self._is_seen(record):
             return ""
         return SuspendedIndicatorColumn().render(value)
-
-    def run_after_every_row(self, record):
-        self._seen_users.add(record.id)
-
-    def render_index(self, value, record):
-        page = getattr(self, "page", None)
-
-        if not hasattr(self, "_row_counter"):
-            seen_ids = set()
-            unique_before_page = 0
-
-            per_page = page.paginator.per_page
-            page_start_index = (page.number - 1) * per_page
-
-            for d in self.data[:page_start_index]:
-                if d.id not in seen_ids:
-                    seen_ids.add(d.id)
-                    unique_before_page += 1
-
-            self._row_counter = itertools.count(start=unique_before_page + 1)
-
-        if record.id in self._seen_users:
-            return ""
-
-        return next(self._row_counter)
 
     def render_delivered(self, record, value):
         rows = [
@@ -1537,7 +1619,7 @@ class WorkerDeliveryTable(OrgContextTable):
         return self._render_flag_counts(record, value, status=CompletedWorkStatus.rejected)
 
     def render_last_active(self, record, value):
-        if record.id in self._seen_users:
+        if self._is_seen(record):
             return ""
 
         return DMYTColumn().render(value)
@@ -1693,10 +1775,10 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class AssignedTaskListTable(OrgContextTable):
+class AssignedTaskListTable(OpportunityContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
-    status = tables.Column(verbose_name=gettext_lazy("Status"), accessor="status")
+    status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
     task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
     assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
@@ -1706,10 +1788,14 @@ class AssignedTaskListTable(OrgContextTable):
         empty_values=(None,),
         default=gettext_lazy("Deleted user"),
     )
-    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+    action = tables.TemplateColumn(
+        verbose_name="",
+        orderable=False,
+        template_name="opportunity/assigned_task_edit_button.html",
+    )
 
     class Meta:
-        model = CompletedTask
+        model = AssignedTask
         fields = ()
         sequence = (
             "assigned_task_id",
@@ -1743,32 +1829,32 @@ class AssignedTaskListTable(OrgContextTable):
             value.username,
         )
 
-    def render_status(self, value):
-        if value == CompletedTaskStatus.ASSIGNED:
-            status = _("To Do")
-            badge_classes = "bg-amber-100 text-amber-800"
-        else:
-            status = _("Complete")
-            badge_classes = "bg-green-100 text-green-800"
-        return format_html(
-            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
-            "{}</span>",
-            badge_classes,
-            status,
-        )
 
-    def render_action(self, record):
-        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
-        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
-
-
-class TaskTable(tables.Table):
+class TaskTable(OpportunityContextTable):
     index = IndexColumn()
     name = tables.Column(verbose_name=gettext_lazy("Task Type Name"))
     description = tables.Column(verbose_name=gettext_lazy("Description"))
     linked_task_unit = tables.Column(verbose_name=gettext_lazy("Linked Task Unit"), accessor="unit_name")
+    archived = tables.DateColumn(verbose_name=gettext_lazy("Archived"))
+    actions = tables.TemplateColumn(
+        verbose_name=gettext_lazy("Actions"),
+        orderable=False,
+        template_code="""
+            {% load i18n %}
+            <button
+                type="button"
+                class="button button-md outline-style"
+                hx-get="{% url 'opportunity:edit_task_type' table.org_slug table.opp_id record.pk %}"
+                hx-target="#edit-task-form"
+                @htmx:after-request="if ($event.detail.successful) {
+                        showEditTaskTypeModal = true; editTaskError = false
+                    } else { editTaskError = true }">
+                <i class="fa-regular fa-pen-to-square mr-1"></i> {% translate "Edit" %}
+            </button>
+        """,
+    )
 
     class Meta:
         model = Task
-        fields = ("index", "name", "description", "linked_task_unit")
+        fields = ("index", "name", "description", "linked_task_unit", "archived", "actions")
         empty_text = gettext_lazy("No task types configured for this opportunity.")

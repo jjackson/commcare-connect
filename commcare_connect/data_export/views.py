@@ -13,6 +13,15 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from commcare_connect.data_export.const import (
+    APP_TYPE_BOTH,
+    APP_TYPE_DELIVER,
+    APP_TYPE_LEARN,
+    DELIVER_APP_KEY,
+    LEARN_APP_KEY,
+    VALID_APP_TYPES,
+)
+from commcare_connect.data_export.pagination import IdKeysetPagination
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
     CompletedModuleDataSerializer,
@@ -43,6 +52,9 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
+from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
+
+STREAM_CHUNK_SIZE = 2000
 
 
 class BaseDataExportView(APIView):
@@ -67,8 +79,9 @@ class EchoWriter:
         return value
 
 
-class BaseStreamingCSVExportView(BaseDataExportView):
+class BaseDataExportListView(BaseDataExportView):
     serializer_class = None
+    pagination_class = IdKeysetPagination
 
     def get_serializer_class(self, *args, **kwargs):
         return self.serializer_class
@@ -80,20 +93,41 @@ class BaseStreamingCSVExportView(BaseDataExportView):
         serializer_class = self.get_serializer_class()
         fieldnames = serializer_class().get_fields().keys()
         writer = csv.DictWriter(EchoWriter(), fieldnames=fieldnames)
-        objects = self.get_queryset(*args, **kwargs).iterator(chunk_size=2000)
+        objects = self.get_queryset(*args, **kwargs).iterator(chunk_size=STREAM_CHUNK_SIZE)
         yield writer.writeheader()
 
         for obj in objects:
             serialized_data = serializer_class(obj).data
             yield writer.writerow(serialized_data)
 
+    def paginate_queryset(self, queryset):
+        self._paginator = self.pagination_class()
+        return self._paginator.paginate_queryset(queryset, self.request)
+
+    def get_paginated_response(self, data):
+        return self._paginator.get_paginated_response(data)
+
+    def post_paginate(self, page):
+        """Hook called after pagination, before serialization. Override to modify the page list in-place.
+
+        Note: this hook is only called for v2.0 requests (paginated JSON). It is not invoked
+        for v1.0 requests, which use streaming CSV via ``get_data_generator``.
+        """
+        pass
+
     @extend_schema(
         description=(
-            "This API returns a CSV text StreamingHttpResponse. "
-            "The values shown in the example will be in CSV text format."
+            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
+        if self.request.version == "2.0":
+            queryset = self.get_queryset(*args, **kwargs)
+            page = self.paginate_queryset(queryset)
+            self.post_paginate(page)
+            serializer_class = self.get_serializer_class()
+            serializer = serializer_class(page, many=True)
+            return self.get_paginated_response(serializer.data)
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
 
 
@@ -175,7 +209,7 @@ class SingleOpportunityDataView(RetrieveAPIView, BaseDataExportView):
         return _get_opportunity_or_404(self.request.user, self.kwargs.get("opp_id"))
 
 
-class OpportunityScopedDataView(OpportunityDataExportView, BaseStreamingCSVExportView):
+class OpportunityScopedDataView(OpportunityDataExportView, BaseDataExportListView):
     pass
 
 
@@ -210,6 +244,10 @@ class UserVisitDataView(OpportunityScopedDataView):
             .select_related("user")
         )
 
+    def post_paginate(self, page):
+        if self._include_images():
+            self._prefetch_images(page)
+
     def get_data_generator(self, *args, **kwargs):
         serializer_class = self.get_serializer_class()
         fieldnames = serializer_class().get_fields().keys()
@@ -220,13 +258,13 @@ class UserVisitDataView(OpportunityScopedDataView):
         include_images = self._include_images()
 
         if not include_images:
-            for obj in queryset.iterator(chunk_size=2000):
+            for obj in queryset.iterator(chunk_size=STREAM_CHUNK_SIZE):
                 yield writer.writerow(serializer_class(obj).data)
         else:
             batch = []
-            for obj in queryset.iterator(chunk_size=2000):
+            for obj in queryset.iterator(chunk_size=STREAM_CHUNK_SIZE):
                 batch.append(obj)
-                if len(batch) >= 2000:
+                if len(batch) >= STREAM_CHUNK_SIZE:
                     self._prefetch_images(batch)
                     for visit in batch:
                         yield writer.writerow(serializer_class(visit).data)
@@ -401,14 +439,43 @@ class ImageView(OpportunityDataExportView):
         return FileResponse(attachment, filename=blob_meta.name, content_type=blob_meta.content_type)
 
 
-class OrganizationProgramDataView(BaseStreamingCSVExportView):
+class AppStructureView(OpportunityDataExportView):
+    def get(self, request, opp_id):
+        app_type = request.query_params.get("app_type", APP_TYPE_BOTH)
+        if app_type not in VALID_APP_TYPES:
+            return Response(
+                {"error": f"Invalid app_type. Must be one of: {', '.join(VALID_APP_TYPES)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not self.opportunity.api_key:
+            raise NotFound("Opportunity does not have an associated API key.")
+
+        result = {LEARN_APP_KEY: None, DELIVER_APP_KEY: None}
+
+        try:
+            if app_type in (APP_TYPE_LEARN, APP_TYPE_BOTH) and self.opportunity.learn_app:
+                result[LEARN_APP_KEY] = get_app_structure(self.opportunity.api_key, self.opportunity.learn_app)
+
+            if app_type in (APP_TYPE_DELIVER, APP_TYPE_BOTH) and self.opportunity.deliver_app:
+                result[DELIVER_APP_KEY] = get_app_structure(self.opportunity.api_key, self.opportunity.deliver_app)
+        except CommCareHQAPIException:
+            return Response(
+                {"error": "Failed to fetch app structure from CommCare HQ."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(result)
+
+
+class OrganizationProgramDataView(BaseDataExportListView):
     serializer_class = ProgramDataExportSerializer
 
     def get_queryset(self, request, org_slug):
         return Program.objects.filter(organization__slug=org_slug, organization__memberships__user=self.request.user)
 
 
-class ProgramOpportunityDataView(BaseStreamingCSVExportView):
+class ProgramOpportunityDataView(BaseDataExportListView):
     serializer_class = OpportunitySerializer
 
     def get_queryset(self, request, program_id):

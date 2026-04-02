@@ -5,10 +5,8 @@ from unittest import mock
 import pytest
 from django.utils.timezone import now
 from tablib import Dataset
-from waffle.testutils import override_switch
 
 from commcare_connect.connect_id_client.models import ConnectIdUser, Message
-from commcare_connect.flags.switch_names import AUTOMATED_INVOICES_MONTHLY
 from commcare_connect.opportunity.models import (
     BlobMeta,
     CompletedWorkStatus,
@@ -233,7 +231,6 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
 
             yield
 
-    @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_generate_invoice_for_two_active_managed_opportunities(self):
         opportunity1 = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
         opportunity2 = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 12, 1))
@@ -285,7 +282,6 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert invoice2.invoice_number == "INV002"
         assert completed_work2.invoice == invoice2
 
-    @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_inactive_opportunities(self):
         inactive_opportunity = OpportunityFactory(active=False, managed=True, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=inactive_opportunity)
@@ -306,7 +302,6 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert PaymentInvoice.objects.count() == 0
         assert completed_work.invoice is None
 
-    @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_for_active_unmanaged_opportunity(self):
         unmanaged_opportunity = OpportunityFactory(active=True, managed=False, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=unmanaged_opportunity, amount=Decimal("100.00"))
@@ -325,26 +320,6 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert PaymentInvoice.objects.count() == 0
         assert completed_work.invoice is None
 
-    @override_switch(AUTOMATED_INVOICES_MONTHLY, active=False)
-    def test_no_invoice_when_switch_inactive(self):
-        opportunity = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
-        payment_unit = PaymentUnitFactory(opportunity=opportunity, amount=Decimal("100.00"))
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        completed_work = CompletedWorkFactory(
-            opportunity_access=access,
-            payment_unit=payment_unit,
-            status=CompletedWorkStatus.approved,
-            status_modified_date=now(),
-        )
-        completed_work.saved_payment_accrued = Decimal("100.00")
-        completed_work.save()
-
-        generate_automated_service_delivery_invoice()
-
-        assert PaymentInvoice.objects.count() == 0
-        assert completed_work.invoice is None
-
-    @override_switch(AUTOMATED_INVOICES_MONTHLY, active=True)
     def test_no_invoice_with_no_approved_work(self):
         opportunity = OpportunityFactory(active=True, managed=True, start_date=datetime.date(2026, 1, 1))
 

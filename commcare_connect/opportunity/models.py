@@ -79,7 +79,7 @@ class Country(models.Model):
         return self.name
 
 
-@pghistory.track(fields=["active"])
+@pghistory.track(pghistory.UpdateEvent(), fields=["active"])
 class Opportunity(BaseModel):
     opportunity_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     organization = models.ForeignKey(
@@ -268,6 +268,7 @@ class Task(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
+    archived = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=False)
     duration = models.IntegerField(null=True, blank=True)
 
@@ -418,12 +419,13 @@ class CompletedModule(XFormBaseModel):
         ]
 
 
-class CompletedTaskStatus(models.TextChoices):
+class AssignedTaskStatus(models.TextChoices):
     ASSIGNED = "assigned", gettext("assigned")
     COMPLETED = "completed", gettext("completed")
 
 
-class CompletedTask(XFormBaseModel):
+@pghistory.track(pghistory.UpdateEvent(), fields=["due_date"])
+class AssignedTask(XFormBaseModel):
     assigned_task_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     task = models.ForeignKey(Task, on_delete=models.PROTECT)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
@@ -431,8 +433,8 @@ class CompletedTask(XFormBaseModel):
     duration = models.DurationField()
     xform_id = models.CharField(max_length=50, null=True)
     status = models.CharField(
-        choices=CompletedTaskStatus.choices,
-        default=CompletedTaskStatus.ASSIGNED,
+        choices=AssignedTaskStatus.choices,
+        default=AssignedTaskStatus.ASSIGNED,
         max_length=50,
     )
     due_date = models.DateField()
@@ -442,13 +444,13 @@ class CompletedTask(XFormBaseModel):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="completed_tasks",
+        related_name="assigned_tasks",
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["xform_id", "task", "opportunity_access"], name="unique_xform_completed_task"
+                fields=["xform_id", "task", "opportunity_access"], name="unique_xform_assigned_task"
             )
         ]
 
