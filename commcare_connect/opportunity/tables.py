@@ -1778,7 +1778,11 @@ class InvoiceDeliveriesTable(tables.Table):
 
 class AssignedTaskListTable(OpportunityContextTable):
     select = select_column(
-        td_extra={"@change": "updateSelectAll()"},
+        td_extra={
+            "@change": "updateSelectAll()",
+            # return None instead of False to skip the attribute.
+            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
+        },
     )
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")

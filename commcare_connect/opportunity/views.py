@@ -3409,12 +3409,16 @@ def delete_tasks(request, org_slug, opp_id):
     except (TypeError, ValueError):
         return HttpResponseBadRequest()
 
-    deleted_count, _info = AssignedTask.objects.filter(
-        pk__in=task_ids,
-        opportunity_access__opportunity=request.opportunity,
-    ).delete()
+    deleted_count, _info = (
+        AssignedTask.objects.filter(
+            pk__in=task_ids,
+            opportunity_access__opportunity=request.opportunity,
+        )
+        .exclude(status=AssignedTaskStatus.COMPLETED)
+        .delete()
+    )
 
-    if deleted_count > 0:
+    if deleted_count:
         messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
 
     redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))

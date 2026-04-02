@@ -11,14 +11,14 @@
         this.selectAll = !this.selectAll;
         this.selected = this.selectAll
           ? Array.from(document.querySelectorAll(selector))
+            .filter((c) => !c.disabled && (!opts.exclude || c.value !== opts.exclude))
             .map((c) => c.value)
-            .filter((v) => !opts.exclude || v !== opts.exclude)
           : [];
       },
 
       updateSelectAll() {
         const total = Array.from(document.querySelectorAll(selector))
-          .filter((c) => !opts.exclude || c.value !== opts.exclude).length;
+          .filter((c) => !c.disabled && (!opts.exclude || c.value !== opts.exclude)).length;
         this.selectAll = total > 0 && this.selected.length === total;
       },
     };
