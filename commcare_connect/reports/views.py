@@ -282,6 +282,7 @@ class InvoiceReportView(
             .annotate(
                 date_paid=F("payment__date_paid"),
                 org_slug=F("opportunity__managedopportunity__program__organization__slug"),
+                program_name=F("opportunity__managedopportunity__program__name"),
             )
             .order_by("-date")
         )
