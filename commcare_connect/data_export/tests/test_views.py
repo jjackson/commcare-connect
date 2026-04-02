@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+from django.contrib.auth.models import Permission
 from django.urls import reverse
 from django.utils.timezone import now
 
@@ -132,6 +133,8 @@ class TestWorkAreaDataView:
 class TestLLOEntityDataView:
     def test_returns_llo_entity_list(self, api_client, user):
         entity = LLOEntityFactory(short_name="TST")
+        permission = Permission.objects.get(codename="workspace_entity_management_access")
+        user.user_permissions.add(permission)
         _add_export_credentials(api_client, user)
         _add_v2_header(api_client)
         url = reverse("data_export:llo_entity_data")
@@ -149,3 +152,10 @@ class TestLLOEntityDataView:
         url = reverse("data_export:llo_entity_data")
         response = api_client.get(url)
         assert response.status_code == 401
+
+    def test_requires_entity_management_permission(self, api_client, user):
+        _add_export_credentials(api_client, user)
+        _add_v2_header(api_client)
+        url = reverse("data_export:llo_entity_data")
+        response = api_client.get(url)
+        assert response.status_code == 404

@@ -61,6 +61,7 @@ from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
+from commcare_connect.utils.permission_const import WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 STREAM_CHUNK_SIZE = 2000
 
@@ -538,6 +539,11 @@ class WorkAreaDataView(OpportunityDataExportView, BaseDataExportListViewV2):
 
 class LLOEntityDataView(BaseDataExportListViewV2):
     serializer_class = LLOEntityDataSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if not request.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+            raise NotFound
 
     def get_queryset(self, *args, **kwargs):
         return LLOEntity.objects.all()
