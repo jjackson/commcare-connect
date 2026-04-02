@@ -6,7 +6,7 @@ from django.urls import reverse
 from commcare_connect.organization.forms import OrganizationChangeForm, OrganizationSelectOrCreateForm
 from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.users.models import User
-from commcare_connect.users.tests.factories import UserFactory
+from commcare_connect.users.tests.factories import LLOEntityFactory, UserFactory
 from commcare_connect.utils.forms import TOMSELECT_NEW_ENTRY_PREFIX
 from commcare_connect.utils.permission_const import WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
@@ -138,7 +138,7 @@ class TestOrganizationChangeForm:
     def test_existing_llo_entity_short_name_not_updated(self, organization: Organization, user: User):
         user = self._grant_entity_management_perm(user)
 
-        llo_entity = LLOEntity.objects.create(name="Test LLO", short_name="OLD")
+        llo_entity = LLOEntityFactory(short_name="OLD")
         organization.llo_entity = llo_entity
         organization.save()
 
@@ -274,7 +274,7 @@ class TestOrganizationSelectOrCreateForm:
         assert org.llo_entity.short_name == "NL"
 
     def test_existing_llo_entity_short_name_not_updated(self):
-        existing_llo = LLOEntity.objects.create(name="Existing LLO", short_name="EL")
+        existing_llo = LLOEntityFactory(short_name="EL")
         form = OrganizationSelectOrCreateForm(
             data={
                 "org": TOMSELECT_NEW_ENTRY_PREFIX + "New Org",
