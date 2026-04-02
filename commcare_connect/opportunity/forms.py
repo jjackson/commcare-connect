@@ -21,6 +21,7 @@ from waffle import switch_is_active
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.app_xml import get_task_units_for_app
 from commcare_connect.opportunity.models import (
+    AssignedTask,
     CommCareApp,
     CompletedWork,
     CompletedWorkStatus,
@@ -828,14 +829,8 @@ class DateRanges(TextChoices):
 
 class VisitExportForm(forms.Form):
     format = forms.ChoiceField(choices=(("csv", "CSV"), ("xlsx", "Excel")), initial="csv")
-    from_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    to_date = forms.DateField(
-        widget=forms.DateInput(attrs={"type": "date"}),
-        required=False,
-        initial=datetime.date.today().strftime("%Y-%m-%d"),
-    )
+    from_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
+    to_date = forms.DateField(widget=forms.DateInput(attrs={"type": "date"}))
     status = forms.MultipleChoiceField(
         choices=[("all", "All")] + VisitValidationStatus.choices,
         widget=forms.SelectMultiple(
@@ -1990,3 +1985,61 @@ class AddTaskTypeForm(forms.ModelForm):
         if Task.objects.filter(app=self.opportunity.deliver_app, slug=task_unit_id).exists():
             self.add_error("task_unit_id", _("A task with this task unit ID already exists."))
         return cleaned_data
+
+
+class EditTaskTypeForm(forms.ModelForm):
+    is_archived = forms.BooleanField(required=False, label=_("Archive this task type"))
+
+    class Meta:
+        model = Task
+        fields = ["name", "description"]
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.archived:
+            self.fields["is_archived"].initial = True
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.cleaned_data["is_archived"]:
+            if not instance.archived:
+                instance.archived = now()
+        else:
+            instance.archived = None
+        if commit:
+            instance.save()
+        return instance
+
+
+class EditAssignedTaskForm(forms.ModelForm):
+    reason = forms.CharField(
+        required=False,
+        label=_("Reason for change (Optional)"),
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": _("Enter reason...")}),
+    )
+
+    class Meta:
+        model = AssignedTask
+        fields = ["due_date"]
+        widgets = {
+            "due_date": forms.DateInput(attrs={"type": "date"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["due_date"].widget.attrs["min"] = datetime.date.today().isoformat()
+        self.helper = FormHelper(self)
+        self.helper.form_tag = False
+
+    def clean_due_date(self):
+        due_date = self.cleaned_data["due_date"]
+        if due_date < datetime.date.today():
+            raise ValidationError(_("Due date cannot be in the past."))
+        return due_date
+
+    def has_changed(self):
+        # Ignore "reason" field if no updated due date is given
+        return "due_date" in self.changed_data

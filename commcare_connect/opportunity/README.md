@@ -13,7 +13,7 @@ The opportunity app is the core domain of CommCare Connect. It manages paid prog
 - **TaskUnit** — A task module from the delivery app XML. A task unit links to a task.
 - **UserVisit** — A single form submission from a mobile user during delivery.
 - **CompletedWork** — Aggregates visits for a specific entity (beneficiary) and payment unit. Tracks approval status and payment.
-- **CompletedTask** — Tracks completion of individual tasks by a user (assigned → completed).
+- **AssignedTask** — Tracks completion of individual tasks by a user (assigned → completed).
 - **Payment** — A confirmed payment to a user for approved work.
 - **PaymentInvoice** — An invoice for a managed opportunity. Tracks status through NM/PM review workflow and links to completed work and payments.
 
@@ -93,7 +93,7 @@ Organization
               ├── OpportunityClaim (1:1)
               │     └── OpportunityClaimLimit (per PaymentUnit)
               ├── CompletedModule (per LearnModule)
-              ├── CompletedTask (per Task)
+              ├── AssignedTask (per Task)
               ├── Assessment (per attempt)
               ├── CompletedWork (per entity + PaymentUnit)
               │     └── UserVisit (per form submission)
