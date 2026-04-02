@@ -139,7 +139,9 @@ def get_org_opps_for_review(organization):
             organization=organization,
             opportunityaccess__completedwork__uservisit__status=VisitValidationStatus.pending,
             is_test=False,
-        ).only("name", "id")
+        )
+        .distinct()
+        .only("name", "id")
     )
 
 
@@ -151,7 +153,9 @@ def get_org_managed_opps_for_review(organization):
             opportunityaccess__completedwork__uservisit__review_status=VisitReviewStatus.pending,
             opportunityaccess__completedwork__uservisit__status=VisitValidationStatus.approved,
             is_test=False,
-        ).only("id", "name")
+        )
+        .distinct()
+        .only("id", "name")
     )
 
 
