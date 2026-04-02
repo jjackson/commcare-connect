@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("opportunity", "0124_rename_completedtask_assignedtask"),
+        ("opportunity", "0126_update_generate_invoice_date"),
     ]
 
     operations = [
