@@ -3381,7 +3381,7 @@ def create_task(request, org_slug, opp_id):
         )
 
     task = form.cleaned_data["task"]
-    access = form.cleaned_data["connect_worker"]
+    access = form.cleaned_data["access"]
     due_date = form.cleaned_data["due_date"]
 
     AssignedTask.objects.create(
@@ -3402,7 +3402,11 @@ def create_task(request, org_slug, opp_id):
 @managed_opportunity_pm_required
 def delete_tasks(request, org_slug, opp_id):
     task_ids = request.POST.getlist("task_ids")
-    if not task_ids:
+    try:
+        task_ids = [int(tid) for tid in request.POST.getlist("task_ids")]
+        if not task_ids:
+            raise ValueError
+    except (TypeError, ValueError):
         return HttpResponseBadRequest()
 
     deleted_count, _info = AssignedTask.objects.filter(

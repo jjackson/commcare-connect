@@ -1878,7 +1878,7 @@ class CreateTaskForm(forms.Form):
         empty_label=_("Select a task"),
         widget=forms.Select(attrs={"data-tomselect": "1"}),
     )
-    connect_worker = forms.ModelChoiceField(
+    access = forms.ModelChoiceField(
         label=_("Connect Worker"),
         queryset=OpportunityAccess.objects.none(),
         empty_label=_("Select a Connect Worker"),
@@ -1893,12 +1893,12 @@ class CreateTaskForm(forms.Form):
         super().__init__(*args, **kwargs)
         if opportunity is not None:
             self.fields["task"].queryset = Task.objects.filter(app=opportunity.deliver_app)
-            self.fields["connect_worker"].queryset = OpportunityAccess.objects.filter(
+            self.fields["access"].queryset = OpportunityAccess.objects.filter(
                 opportunity=opportunity,
                 accepted=True,
                 suspended=False,
             ).select_related("user")
-            self.fields["connect_worker"].label_from_instance = lambda obj: obj.user.display_name_with_username()
+            self.fields["access"].label_from_instance = lambda obj: obj.user.display_name_with_username()
 
         self.fields["due_date"].widget.attrs["min"] = datetime.date.today().isoformat()
 
@@ -1906,7 +1906,7 @@ class CreateTaskForm(forms.Form):
         self.helper.form_tag = False
         self.helper.layout = Layout(
             Field("task"),
-            Field("connect_worker"),
+            Field("access"),
             Field("due_date"),
         )
 
