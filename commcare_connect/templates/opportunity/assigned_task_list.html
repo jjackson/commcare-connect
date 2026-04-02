@@ -91,7 +91,7 @@
                                             title: '{% trans "Delete Tasks" %}',
                                             message: `{% blocktrans %}Are you sure you want to delete __count__ task(s)? This action cannot be undone.{% endblocktrans %}`.replace('__count__', selected.length),
                                             confirmBtnText: '{% trans "Delete" %}',
-                                            confirmBtnColor: 'red',
+                                            confirmBtnRed: true,
                                             formRef: $refs.deleteTasksForm,
                                         })" :disabled="selected.length === 0" x-tooltip.raw="{% trans 'Delete Task(s)' %}">
                     <i class="fa-solid fa-trash"></i>

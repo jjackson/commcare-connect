@@ -6,10 +6,10 @@
  *
  * Usage:
  *   $store.confirmModal.show({
- *     title: 'Delete Tasks',              // Modal heading
- *     message: 'Are you sure?',           // Body text
+ *     title: 'Delete Tasks',
+ *     message: 'Are you sure?',
  *     confirmBtnText: 'Delete',           // Confirm button label (default: 'Confirm')
- *     confirmBtnColor: 'red',             // 'primary' (default) or 'red' for destructive actions
+ *     confirmBtnRed: true,              // true = red confirm button (default: false / primary purple)
  *     formRef: $refs.myForm,              // Form element to submit on confirm (optional)
  *     onConfirm: () => { ... },           // Callback after confirm (optional)
  *     onCancel: () => { ... },            // Callback after cancel/escape/click-outside (optional)
@@ -25,16 +25,16 @@ document.addEventListener('alpine:init', () => {
       title: '',
       message: '',
       confirmBtnText: '',
-      confirmBtnColor: 'primary',
+      confirmBtnRed: false,
       _formRef: null,
       _onConfirm: null,
       _onCancel: null,
 
-      show({ title, message, confirmBtnText, confirmBtnColor, formRef, onConfirm, onCancel }) {
+      show({ title, message, confirmBtnText, confirmBtnRed, formRef, onConfirm, onCancel }) {
         this.title = title || '';
         this.message = message || '';
         this.confirmBtnText = confirmBtnText || '';
-        this.confirmBtnColor = confirmBtnColor || 'primary';
+        this.confirmBtnRed = confirmBtnRed || false;
         this._formRef = formRef || null;
         this._onConfirm = onConfirm || null;
         this._onCancel = onCancel || null;
@@ -97,7 +97,7 @@ document.addEventListener('alpine:init', () => {
                 {% trans 'Cancel' %}
             </button>
             <button type="button" class="button button-md text-white"
-                    :class="$store.confirmModal.confirmBtnColor === 'red'
+                    :class="$store.confirmModal.confirmBtnRed
                         ? 'bg-red-600 hover:bg-red-700'
                         : 'bg-brand-deep-purple hover:bg-brand-deep-purple/90'"
                     @click="$store.confirmModal.confirm()">
