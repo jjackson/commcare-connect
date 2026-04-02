@@ -2339,10 +2339,12 @@ class VisitVerificationTableView(WorkerVisitTableView):
         return queryset
 
 
-def visit_verification_table_view(request, *args, **kwargs):
+@org_viewer_required
+@opportunity_required
+def visit_verification_table_view(request, org_slug, opp_id):
     if switch_is_active(WORKER_VISITS_TASKS):
-        return WorkerVisitTableView.as_view()(request, *args, **kwargs)
-    return VisitVerificationTableView.as_view()(request, *args, **kwargs)
+        return WorkerVisitTableView.as_view()(request, org_slug=org_slug, opp_id=opp_id)
+    return VisitVerificationTableView.as_view()(request, org_slug=org_slug, opp_id=opp_id)
 
 
 @org_viewer_required
