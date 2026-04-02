@@ -534,9 +534,9 @@ def _filter_worker_tasks(opportunity, filters):
 def test_get_worker_tasks_base_queryset(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    task = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
-    AssignedTaskFactory(opportunity_access=access, task=task)
-    AssignedTaskFactory(opportunity_access=access, task=task)
+    task_type = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
+    AssignedTaskFactory(opportunity_access=access, task_type=task_type)
+    AssignedTaskFactory(opportunity_access=access, task_type=task_type)
 
     result = list(get_worker_tasks_base_queryset(opportunity))
     assert len(result) == 2

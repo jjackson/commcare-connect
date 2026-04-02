@@ -2504,7 +2504,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=opp, user=user)
         return AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskTypeFactory(app=opp.deliver_app),
+            task_type=TaskTypeFactory(app=opp.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
             due_date=date.today() + timedelta(days=7),
         )
@@ -2554,7 +2554,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=opp, user=user)
         completed_task = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskTypeFactory(app=opp.deliver_app),
+            task_type=TaskTypeFactory(app=opp.deliver_app),
             status=AssignedTaskStatus.COMPLETED,
         )
         client.force_login(org_user_member)
@@ -2572,7 +2572,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=managed_opp)
         task = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskTypeFactory(app=managed_opp.deliver_app),
+            task_type=TaskTypeFactory(app=managed_opp.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
         )
         url = reverse(
