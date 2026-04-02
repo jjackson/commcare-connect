@@ -36,6 +36,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
+    Task,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -667,6 +668,16 @@ def get_opportunity_delivery_progress(opp_id):
         .values("latest")[:1],
         output_field=DateTimeField(),
     )
+    active_tasks_count = Coalesce(
+        Subquery(
+            Task.objects.filter(opportunity_id=OuterRef("pk"), is_active=True)
+            .values("opportunity_id")
+            .annotate(total=Count("pk"))
+            .values("total"),
+            output_field=IntegerField(),
+        ),
+        0,
+    )
 
     annotated_opportunity = Opportunity.objects.filter(id=opp_id).annotate(
         inactive_workers=inactive_workers_subquery(three_days_ago),
@@ -680,6 +691,7 @@ def get_opportunity_delivery_progress(opp_id):
         total_accrued=total_accrued_sq(),
         total_paid=total_paid_sq(),
         payments_due=ExpressionWrapper(F("total_accrued") - F("total_paid"), output_field=DecimalField()),
+        active_tasks_count=active_tasks_count,
     )
 
     return annotated_opportunity.first()

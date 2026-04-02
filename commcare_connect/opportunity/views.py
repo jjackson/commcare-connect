@@ -2999,13 +2999,11 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "name": _("Audit Opportunity"),
             "status": "",
             "value": "",
-            "url": "#",
+            "url": "",
         },
     ]
 
     tasks_url = reverse("opportunity:worker_tasks", args=(org_slug, opp_id))
-    active_tasks_count = Task.objects.filter(opportunity=request.opportunity, is_active=True).count()
-
     opp_stats = [
         {
             "title": _("Connect Workers"),
@@ -3033,7 +3031,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
                     "icon": "fa-list-check",
                     "name": _("Tasks Assigned to Connect Workers"),
                     "status": "",
-                    "value": active_tasks_count,
+                    "value": stats.active_tasks_count,
                     "url": tasks_url,
                 },
             ],
