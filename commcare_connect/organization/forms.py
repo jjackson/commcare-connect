@@ -11,6 +11,10 @@ from commcare_connect.users.models import User
 from commcare_connect.utils.forms import CreatableModelChoiceField, DynamicCreatableChoiceField
 from commcare_connect.utils.permission_const import ORG_MANAGEMENT_SETTINGS_ACCESS, WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
+LLO_ENTITY_SHORT_NAME_HELP_TEXT = gettext_lazy(
+    "A brief abbreviation for the entity. This will be used to reference the organization in the Connect application."
+)
+
 
 class OrganizationChangeForm(forms.ModelForm):
     llo_entity = forms.ChoiceField(
@@ -62,6 +66,7 @@ class OrganizationChangeForm(forms.ModelForm):
                 max_length=40,
                 required=False,
                 widget=forms.TextInput(attrs={"x-ref": "llo_entity_short_name", ":required": "isNewEntity"}),
+                help_text=LLO_ENTITY_SHORT_NAME_HELP_TEXT,
             )
             layout_fields.append(
                 layout.Div(
@@ -200,6 +205,7 @@ class OrganizationSelectOrCreateForm(forms.Form):
         max_length=40,
         required=False,
         widget=forms.TextInput(attrs={":required": "isNewEntity"}),
+        help_text=LLO_ENTITY_SHORT_NAME_HELP_TEXT,
     )
     org = DynamicCreatableChoiceField(
         queryset=Organization.objects.order_by("name"),
