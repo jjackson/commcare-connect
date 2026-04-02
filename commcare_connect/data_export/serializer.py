@@ -1,4 +1,3 @@
-import json
 from collections import OrderedDict
 
 from drf_spectacular.utils import extend_schema_field
@@ -385,12 +384,10 @@ class WorkAreaDataSerializer(serializers.ModelSerializer):
         return obj.work_area_group.name
 
     def get_centroid(self, obj) -> dict:
-        # .geojson returns a JSON string; parse to dict for DRF to nest in response
-        return json.loads(obj.centroid.geojson)
+        return {"type": "Point", "coordinates": [obj.centroid.x, obj.centroid.y]}
 
     def get_boundary(self, obj) -> dict:
-        # .geojson returns a JSON string; parse to dict for DRF to nest in response
-        return json.loads(obj.boundary.geojson)
+        return {"type": "Polygon", "coordinates": obj.boundary.coords}
 
 
 class LLOEntityDataSerializer(serializers.ModelSerializer):
