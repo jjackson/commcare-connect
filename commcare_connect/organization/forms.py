@@ -104,12 +104,14 @@ class OrganizationChangeForm(forms.ModelForm):
         llo_entity = self.cleaned_data.get("llo_entity")
         short_name = self.cleaned_data.get("llo_entity_short_name") or None
 
-        if commit:
-            if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
-                if llo_entity and not llo_entity.pk:
-                    llo_entity.short_name = short_name
+        if self.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+            if llo_entity and not llo_entity.pk:
+                llo_entity.short_name = short_name
+                if commit:
                     llo_entity.save()
-                org.llo_entity = llo_entity
+            org.llo_entity = llo_entity
+
+        if commit:
             org.save()
         return org
 
