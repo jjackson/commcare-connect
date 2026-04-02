@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from django.db import transaction
 from pyproj import Transformer
-from shapely import get_dimensions, unary_union, wkb
+from shapely import get_dimensions, wkb
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
 from shapely.strtree import STRtree
@@ -150,16 +150,10 @@ class WorkAreaGrouper:
         with transaction.atomic():
             for key, work_area_ids in work_area_groups.items():
                 ward, group_id = key
-                combined_work_area_boundary = unary_union([work_areas[wa_id].boundary for wa_id in work_area_ids])
-                hull = combined_work_area_boundary.convex_hull
-                if hull.geom_type != "Polygon":
-                    hull = hull.buffer(DEGENERATE_HULL_BUFFER)
-                group_boundary = hull.wkt
                 work_area_group = WorkAreaGroup.objects.create(
                     opportunity_id=self.opportunity_id,
                     ward=ward,
                     name=group_id,
-                    boundary=group_boundary,
                 )
                 WorkArea.objects.filter(
                     id__in=work_area_ids,

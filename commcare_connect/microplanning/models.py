@@ -28,7 +28,6 @@ class WorkAreaGroup(geo_models.Model):
     opportunity_access = geo_models.ForeignKey(OpportunityAccess, null=True, blank=True, on_delete=geo_models.SET_NULL)
     ward = geo_models.SlugField(max_length=255)
     name = geo_models.CharField(max_length=255)
-    boundary = geo_models.PolygonField(srid=SRID, null=True, blank=True)
 
     def __str__(self):
         return self.name

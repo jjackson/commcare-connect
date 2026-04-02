@@ -135,16 +135,6 @@ class TestWorkAreaGrouper:
         work_area.refresh_from_db()
         assert work_area.work_area_group == work_area_groups[0]
 
-    def test_cluster_sets_boundary_and_building_count_on_group(self, opportunity):
-        work_areas = self.create_adjacent_work_areas(opportunity, ward="ward-1")
-
-        grouper = WorkAreaGrouper(opportunity_id=opportunity.id, max_buildings=300)
-        grouper.cluster_work_areas()
-
-        group = WorkAreaGroup.objects.get(opportunity=opportunity)
-        assert group.building_count == sum(wa.building_count for wa in work_areas)
-        assert group.boundary is not None
-
     def test_cluster_idempotent(self, opportunity):
         self.create_adjacent_work_areas(opportunity, ward="ward-1")
 
