@@ -2906,99 +2906,93 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
     delivery_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
     payment_url = reverse("opportunity:worker_payments", args=(org_slug, opp_id))
 
+    microplanning_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
+
     deliveries_panels = [
         {
             "icon": "fa-clipboard-list",
-            "name": "Services Delivered",
-            "status": "Total",
-            "value": header_with_tooltip(stats.total_deliveries, "Total delivered so far excluding duplicates"),
+            "name": _("Services Delivered"),
+            "status": _("Total"),
+            "value": header_with_tooltip(stats.total_deliveries, _("Total delivered so far excluding duplicates")),
             "url": f"{delivery_url}?{urlencode({'sort': '-last_active'})}",
             "incr": stats.deliveries_from_yesterday,
         },
         {
-            "icon": "fa-clipboard-list",
-            "name": "Services Delivered",
-            "status": "Pending NM Review",
-            "value": header_with_tooltip(
-                stats.flagged_deliveries_waiting_for_review, "Flagged and pending review with NM"
-            ),
-            "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
-            "incr": stats.flagged_deliveries_waiting_for_review_since_yesterday,
+            "icon": "fa-map-location-dot",
+            "name": _("View Progress Map"),
+            "status": "",
+            "value": "",
+            "url": microplanning_url,
+        },
+        {
+            "icon": "fa-magnifying-glass",
+            "name": _("Audit Opportunity"),
+            "status": "",
+            "value": "",
+            "url": "",
         },
     ]
 
-    if request.opportunity.managed:
-        deliveries_panels.append(
-            {
-                "icon": "fa-clipboard-list",
-                "name": "Services Delivered",
-                "status": "Pending PM Review",
-                "url": f"{delivery_url}?{urlencode({'review_pending': 'True'})}",
-                "value": header_with_tooltip(
-                    stats.deliveries_pending_for_pm_review, "Flagged and pending review with PM"
-                ),
-                "incr": stats.deliveries_pending_for_pm_review_since_yesterday,
-            }
-        )
-
+    tasks_url = reverse("opportunity:worker_tasks", args=(org_slug, opp_id))
     opp_stats = [
         {
-            "title": "Connect Workers",
+            "title": _("Connect Workers"),
             "sub_heading": "",
             "value": "",
             "panels": [
                 {
                     "icon": "fa-user-group",
-                    "name": "Connect Workers",
-                    "status": "Invited",
-                    "value": stats.workers_invited,
+                    "name": _("Connect Workers"),
+                    "status": "",
+                    "value": "",
                     "url": status_url,
                 },
                 {
-                    "icon": "fa-user-check",
-                    "name": "Connect Workers",
-                    "status": "Yet to Accept Invitation",
-                    "value": stats.pending_invites,
-                },
-                {
                     "icon": "fa-clipboard-list",
-                    "name": "Connect Workers",
-                    "status": "Inactive last 3 days",
+                    "name": _("Connect Workers"),
+                    "status": _("Inactive last 3 days"),
                     "url": f"{delivery_url}?{urlencode({'last_active': '3'})}",
                     "value": header_with_tooltip(
-                        stats.inactive_workers, "Did not submit a Learn or Deliver form in the last 3 days"
+                        stats.inactive_workers, _("Did not submit a Learn or Deliver form in the last 3 days")
                     ),
                     **panel_type_2,
+                },
+                {
+                    "icon": "fa-list-check",
+                    "name": _("Tasks Assigned to Connect Workers"),
+                    "status": "",
+                    "value": stats.active_tasks_count,
+                    "url": tasks_url,
                 },
             ],
         },
         {
-            "title": "Services Delivered",
-            "sub_heading": "Last Delivery",
+            "title": _("Services Delivered"),
+            "sub_heading": _("Last Delivery"),
             "value": stats.most_recent_delivery or "--",
             "panels": deliveries_panels,
         },
         {
-            "title": f"Worker Payments ({request.opportunity.currency_code})",
-            "sub_heading": "Last Payment",
+            "title": f"{_('Worker Payments')} ({request.opportunity.currency_code})",
+            "sub_heading": _("Last Payment"),
             "value": stats.recent_payment or "--",
             "panels": [
                 {
                     "icon": "fa-hand-holding-dollar",
-                    "name": "Payments",
-                    "status": "Earned",
+                    "name": _("Payments"),
+                    "status": _("Earned"),
                     "value": header_with_tooltip(
-                        intcomma(stats.total_accrued), "Worker payment accrued based on approved service deliveries"
+                        intcomma(stats.total_accrued), _("Worker payment accrued based on approved service deliveries")
                     ),
                     "url": payment_url,
                     "incr": stats.accrued_since_yesterday,
                 },
                 {
                     "icon": "fa-hand-holding-droplet",
-                    "name": "Payments",
-                    "status": "Due",
+                    "name": _("Payments"),
+                    "status": _("Due"),
                     "value": header_with_tooltip(
-                        intcomma(stats.payments_due), "Worker payments earned but yet unpaid"
+                        intcomma(stats.payments_due), _("Worker payments earned but yet unpaid")
                     ),
                 },
             ],
