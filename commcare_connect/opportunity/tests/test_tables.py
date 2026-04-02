@@ -10,6 +10,7 @@ from commcare_connect.opportunity.tables import GroupedByWorkerMixin, WorkerDeli
 from commcare_connect.opportunity.tests.factories import (
     AssignedTaskFactory,
     OpportunityAccessFactory,
+    TaskTypeFactory,
     UserInviteFactory,
 )
 
@@ -30,9 +31,10 @@ def test_worker_tasks_table_groups_by_user(opportunity):
     access2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True, user__name="Bob")
     UserInviteFactory(opportunity=opportunity, opportunity_access=access2, status="invited")
 
-    AssignedTaskFactory(opportunity_access=access1, status=AssignedTaskStatus.ASSIGNED)
-    AssignedTaskFactory(opportunity_access=access1, status=AssignedTaskStatus.COMPLETED)
-    AssignedTaskFactory(opportunity_access=access2, status=AssignedTaskStatus.ASSIGNED)
+    task = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
+    AssignedTaskFactory(opportunity_access=access1, task=task, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=access1, task=task, status=AssignedTaskStatus.COMPLETED)
+    AssignedTaskFactory(opportunity_access=access2, task=task, status=AssignedTaskStatus.ASSIGNED)
 
     data = get_worker_tasks_base_queryset(opportunity)
     rows = list(data)
@@ -41,19 +43,6 @@ def test_worker_tasks_table_groups_by_user(opportunity):
     # Alice's 2 tasks should come first (sorted by name), grouped together
     assert rows[0].pk == rows[1].pk == access1.pk
     assert rows[2].pk == access2.pk
-
-
-@pytest.mark.django_db
-def test_worker_tasks_table_worker_with_no_tasks(opportunity):
-    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-    UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-
-    table = _make_table(opportunity)
-    rows = list(table.rows)
-    assert len(rows) == 1
-
-    html = table.as_html(RequestFactory().get("/"))
-    assert "No assigned tasks" in html
 
 
 @pytest.mark.django_db

@@ -1,0 +1,11 @@
+{% load crispy_forms_tags %}
+
+<form
+    id="edit-assigned-task-form-el"
+    hx-post="{{ hx_post_url }}"
+    hx-target="#edit-assigned-task-form"
+    hx-swap="innerHTML"
+    method="post"
+>
+    {% crispy form %}
+</form>
