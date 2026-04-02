@@ -188,6 +188,7 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
+    managed_opportunity_pm_required,
     opportunity_required,
     org_admin_required,
     org_member_required,
@@ -3317,10 +3318,13 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
-        context["create_task_form"] = CreateTaskForm(opportunity=opportunity)
-        context["create_task_url"] = reverse(
-            "opportunity:create_task", args=(self.request.org.slug, opportunity.opportunity_id)
-        )
+        can_manage_tasks = not opportunity.managed or self.request.is_opportunity_pm
+        context["can_manage_tasks"] = can_manage_tasks
+        if can_manage_tasks:
+            context["create_task_form"] = CreateTaskForm(opportunity=opportunity)
+            context["create_task_url"] = reverse(
+                "opportunity:create_task", args=(self.request.org.slug, opportunity.opportunity_id)
+            )
 
         return context
 
@@ -3361,6 +3365,7 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 @require_POST
 @org_member_required
 @opportunity_required
+@managed_opportunity_pm_required
 def create_task(request, org_slug, opp_id):
     opportunity = request.opportunity
     form = CreateTaskForm(request.POST, opportunity=opportunity)
@@ -3394,6 +3399,7 @@ def create_task(request, org_slug, opp_id):
 @require_POST
 @org_member_required
 @opportunity_required
+@managed_opportunity_pm_required
 def delete_tasks(request, org_slug, opp_id):
     task_ids = request.POST.getlist("task_ids")
     if not task_ids:

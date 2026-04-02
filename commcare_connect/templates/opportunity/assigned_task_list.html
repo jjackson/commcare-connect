@@ -74,6 +74,7 @@
              hx-trigger="reloadTable from:body"
              hx-select="#task-list-table"
              hx-swap="outerHTML">
+            {% if can_manage_tasks %}
             <div class="flex gap-x-4 items-center justify-end mb-4">
                 <button type="button" class="button-icon shadow-sm" @click="showCreateTaskModal = true"
                     x-tooltip.raw="{% trans 'Create Task' %}">
@@ -97,10 +98,13 @@
                     <i class="fa-solid fa-trash"></i>
                 </button>
             </div>
+            {% endif %}
             {% render_table table %}
         </div>
 
-        {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+        {% if can_manage_tasks %}
+            {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+        {% endif %}
         {% include 'components/confirm_modal.html' %}
         {% include "opportunity/edit_assigned_task_modal.html" %}
     </div>
