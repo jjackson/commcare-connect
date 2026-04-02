@@ -794,9 +794,9 @@ class TestCreateTaskForm:
         assert "due_date" in form.errors
 
     def test_flw_queryset_filtering(self, opportunity):
-        active = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False).user
-        unaccepted = OpportunityAccessFactory(opportunity=opportunity, accepted=False, suspended=False).user
-        suspended = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=True).user
+        active = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
+        unaccepted = OpportunityAccessFactory(opportunity=opportunity, accepted=False, suspended=False)
+        suspended = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=True)
 
         flw_queryset = CreateTaskForm(opportunity=opportunity).fields["connect_worker"].queryset
 

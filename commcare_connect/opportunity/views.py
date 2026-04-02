@@ -3365,13 +3365,19 @@ def create_task(request, org_slug, opp_id):
     opportunity = request.opportunity
     form = CreateTaskForm(request.POST, opportunity=opportunity)
     if not form.is_valid():
-        html = render_crispy_form(form, context={"request": request})
-        return HttpResponse(html)
+        return render(
+            request,
+            "tasks/new_task_modal.html",
+            {
+                "form": form,
+                "modal_name": "showCreateTaskModal",
+                "create_task_url": request.path,
+            },
+        )
 
     task = form.cleaned_data["task"]
-    worker = form.cleaned_data["connect_worker"]
+    access = form.cleaned_data["connect_worker"]
     due_date = form.cleaned_data["due_date"]
-    access = get_object_or_404(OpportunityAccess, opportunity=opportunity, user=worker, accepted=True)
 
     AssignedTask.objects.create(
         task=task,
@@ -3393,7 +3399,7 @@ def delete_tasks(request, org_slug, opp_id):
     if not task_ids:
         return HttpResponseBadRequest()
 
-    deleted_count, _ = AssignedTask.objects.filter(
+    deleted_count, _info = AssignedTask.objects.filter(
         pk__in=task_ids,
         opportunity_access__opportunity=request.opportunity,
     ).delete()
