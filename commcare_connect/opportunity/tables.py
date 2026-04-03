@@ -837,28 +837,7 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
         return mark_safe(html)
 
 
-class UserVisitVerificationTable(tables.Table):
-    select = tables.CheckBoxColumn(
-        accessor="pk",
-        attrs={
-            "th__input": {
-                "@click": "toggleSelectAll()",
-                "x-model": "selectAll",
-                "name": "select_all",
-                "type": "checkbox",
-                "class": "checkbox ga-all-visit-checkbox",
-            },
-            "td__input": {
-                "x-model": "selected",
-                "@click.stop": "",  # used to stop click propagation
-                "name": "row_select",
-                "type": "checkbox",
-                "class": "checkbox",
-                "value": lambda record: record.pk,
-                "id": lambda record: f"row_checkbox_{record.pk}",
-            },
-        },
-    )
+class WorkerVisitTable(tables.Table):
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
@@ -896,7 +875,6 @@ class UserVisitVerificationTable(tables.Table):
     class Meta:
         model = UserVisit
         sequence = (
-            "select",
             "date_time",
             "entity_name",
             "deliver_unit",
@@ -931,7 +909,6 @@ class UserVisitVerificationTable(tables.Table):
         self.organization = kwargs.pop("organization", None)
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
-        self.columns["select"].column.visible = not self.is_opportunity_pm
         self.use_view_url = True
 
     def get_icons(self, statuses):
@@ -995,6 +972,37 @@ class UserVisitVerificationTable(tables.Table):
                 status.append(record.status)
 
         return self.get_icons(status)
+
+
+class UserVisitVerificationTable(WorkerVisitTable):
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox ga-all-visit-checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",  # used to stop click propagation
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
+            },
+        },
+    )
+
+    class Meta(WorkerVisitTable.Meta):
+        sequence = ("select",) + WorkerVisitTable.Meta.sequence
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.columns["select"].column.visible = not self.is_opportunity_pm
 
 
 class UserInfoColumn(tables.Column):
@@ -1824,6 +1832,53 @@ class AssignedTaskListTable(OpportunityContextTable):
             value.name,
             value.username,
         )
+
+
+class WorkerCompletedTaskTable(tables.Table):
+    use_view_url = True
+
+    task_type = tables.Column(verbose_name=_("Task Type"), accessor="task", orderable=False)
+    assigned_by = tables.Column(
+        verbose_name=_("Assigned By"),
+        accessor="assigned_by__name",
+        empty_values=(None,),
+        default=gettext_lazy("Deleted user"),
+    )
+    assigned_date = DMYTColumn(verbose_name=_("Assigned Date"), accessor="date_created")
+    due_date = DMYTColumn(verbose_name=_("Due Date"))
+    status = TaskStatusColumn(verbose_name=_("Status"), accessor="status")
+
+    class Meta:
+        model = AssignedTask
+        fields = ()
+        sequence = ("task_type", "assigned_by", "assigned_date", "due_date", "status")
+        order_by = ("-assigned_date",)
+        empty_text = gettext_lazy("No tasks have been assigned to this worker yet.")
+        attrs = {"class": "w-full", "x-data": "{selectedRow: null}"}
+        row_attrs = {
+            "hx-get": lambda record, table: reverse(
+                "opportunity:user_task_details",
+                args=[
+                    table.organization.slug,
+                    record.opportunity_access.opportunity.opportunity_id,
+                    record.assigned_task_id,
+                ],
+            ),
+            "hx-trigger": "click",
+            "hx-indicator": "#task-loading-indicator",
+            "hx-target": "#task-details",
+            "hx-params": "none",
+            "hx-swap": "innerHTML",
+            "@click": lambda record: f"selectedRow = {record.id}",
+            ":class": lambda record: f"selectedRow == {record.id} && 'active'",
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization", None)
+        super().__init__(*args, **kwargs)
+
+    def render_task_type(self, value):
+        return format_html("{} ({})", value.name, value.slug)
 
 
 class TaskTable(OpportunityContextTable):
