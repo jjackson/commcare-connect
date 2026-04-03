@@ -36,7 +36,7 @@ from commcare_connect.data_export.serializer import (
     OrganizationDataExportSerializer,
     PaymentDataSerializer,
     ProgramDataExportSerializer,
-    TaskDataSerializer,
+    TaskTypeDataSerializer,
     UserVisitDataSerializer,
     UserVisitDataWithImagesSerializer,
     WorkAreaDataSerializer,
@@ -54,7 +54,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     Payment,
     PaymentInvoice,
-    Task,
+    TaskType,
     UserVisit,
 )
 from commcare_connect.organization.models import LLOEntity, Organization
@@ -507,11 +507,11 @@ class ProgramOpportunityDataView(BaseDataExportListView):
         )
 
 
-class TaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
-    serializer_class = TaskDataSerializer
+class TaskTypeDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = TaskTypeDataSerializer
 
     def get_queryset(self, *args, **kwargs):
-        return Task.objects.filter(opportunity=self.opportunity)
+        return TaskType.objects.filter(opportunity=self.opportunity)
 
 
 class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
@@ -519,7 +519,7 @@ class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
 
     def get_queryset(self, *args, **kwargs):
         return AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
-            "task", "opportunity_access__user"
+            "task_type", "opportunity_access__user"
         )
 
 

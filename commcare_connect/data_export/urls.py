@@ -40,7 +40,7 @@ urlpatterns = [
         views.OrganizationProgramDataView.as_view(),
         name="organization_program_data",
     ),
-    path("opportunity/<int:opp_id>/tasks/", views.TaskDataView.as_view(), name="task_data"),
+    path("opportunity/<int:opp_id>/task_types/", views.TaskTypeDataView.as_view(), name="task_type_data"),
     path("opportunity/<int:opp_id>/assigned_tasks/", views.AssignedTaskDataView.as_view(), name="assigned_task_data"),
     path(
         "opportunity/<int:opp_id>/work_area_groups/",

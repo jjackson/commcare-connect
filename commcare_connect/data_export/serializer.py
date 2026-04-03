@@ -20,7 +20,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentInvoice,
-    Task,
+    TaskType,
     UserVisit,
 )
 from commcare_connect.organization.models import LLOEntity, Organization
@@ -305,9 +305,9 @@ class OpportunitySerializer(serializers.ModelSerializer):
         return data
 
 
-class TaskDataSerializer(serializers.ModelSerializer):
+class TaskTypeDataSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Task
+        model = TaskType
         fields = [
             "id",
             "task_type_id",
@@ -323,8 +323,7 @@ class TaskDataSerializer(serializers.ModelSerializer):
 
 
 class AssignedTaskDataSerializer(serializers.ModelSerializer):
-    task_id = serializers.IntegerField(source="task.id", read_only=True)
-    task_name = serializers.CharField(source="task.name", read_only=True)
+    task_type_name = serializers.CharField(source="task_type.name", read_only=True)
     username = serializers.CharField(source="opportunity_access.user.username", read_only=True)
 
     class Meta:
@@ -332,8 +331,8 @@ class AssignedTaskDataSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "assigned_task_id",
-            "task_id",
-            "task_name",
+            "task_type",
+            "task_type_name",
             "username",
             "completed_at",
             "duration",

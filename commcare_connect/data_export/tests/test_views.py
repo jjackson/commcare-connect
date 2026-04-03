@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils.timezone import now
 
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
-from commcare_connect.opportunity.tests.factories import AssignedTaskFactory, OpportunityAccessFactory, TaskFactory
+from commcare_connect.opportunity.tests.factories import AssignedTaskFactory, OpportunityAccessFactory, TaskTypeFactory
 from commcare_connect.users.tests.factories import LLOEntityFactory
 
 
@@ -33,10 +33,10 @@ def v2_export_client(api_client, org_user_member):
 
 
 @pytest.mark.django_db
-class TestTaskDataView:
+class TestTaskTypeDataView:
     def test_returns_task_list(self, v2_export_client, opportunity):
-        task = TaskFactory(opportunity=opportunity)
-        url = reverse("data_export:task_data", kwargs={"opp_id": opportunity.id})
+        task = TaskTypeFactory(opportunity=opportunity)
+        url = reverse("data_export:task_type_data", kwargs={"opp_id": opportunity.id})
         response = v2_export_client.get(url)
         assert response.status_code == 200
         data = response.json()
@@ -48,7 +48,7 @@ class TestTaskDataView:
     def test_returns_404_for_unauthorized_opportunity(self, api_client, opportunity, user):
         _add_export_credentials(api_client, user)
         _add_v2_header(api_client)
-        url = reverse("data_export:task_data", kwargs={"opp_id": opportunity.id})
+        url = reverse("data_export:task_type_data", kwargs={"opp_id": opportunity.id})
         response = api_client.get(url)
         assert response.status_code == 404
 
@@ -57,8 +57,8 @@ class TestTaskDataView:
 class TestAssignedTaskDataView:
     def test_returns_assigned_task_list(self, v2_export_client, opportunity):
         opp_access = OpportunityAccessFactory(opportunity=opportunity)
-        task = TaskFactory(opportunity=opportunity)
-        assigned_task = AssignedTaskFactory(task=task, opportunity_access=opp_access)
+        task_type = TaskTypeFactory(opportunity=opportunity)
+        assigned_task = AssignedTaskFactory(task_type=task_type, opportunity_access=opp_access)
         url = reverse("data_export:assigned_task_data", kwargs={"opp_id": opportunity.id})
         response = v2_export_client.get(url)
         assert response.status_code == 200
@@ -66,8 +66,8 @@ class TestAssignedTaskDataView:
         assert len(data["results"]) == 1
         result = data["results"][0]
         assert result["id"] == assigned_task.id
-        assert result["task_id"] == task.id
-        assert result["task_name"] == task.name
+        assert result["task_type"] == task_type.id
+        assert result["task_type_name"] == task_type.name
         assert result["username"] == opp_access.user.username
 
     def test_returns_404_for_unauthorized_opportunity(self, api_client, opportunity, user):
