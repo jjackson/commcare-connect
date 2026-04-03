@@ -45,6 +45,7 @@ from django.utils.safestring import mark_safe
 from django.utils.text import slugify
 from django.utils.timezone import now
 from django.utils.translation import gettext as _
+from django.utils.translation import gettext_lazy
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -2097,7 +2098,7 @@ class WorkerPageView(OrganizationUserMixin, OpportunityObjectMixin, TemplateView
 
 class UserVisitVerificationView(WorkerPageView):
     template_name = "opportunity/user_visit_verification.html"
-    page_title = "Visits"
+    page_title = gettext_lazy("Visits")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2108,7 +2109,7 @@ class UserVisitVerificationView(WorkerPageView):
 
 class UserTasksView(WorkerPageView):
     template_name = "opportunity/user_tasks.html"
-    page_title = "Tasks"
+    page_title = gettext_lazy("Tasks")
 
 
 class WorkerTableView(OrganizationUserMixin, OpportunityObjectMixin, SingleTableView):
