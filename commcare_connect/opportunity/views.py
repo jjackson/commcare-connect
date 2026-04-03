@@ -121,7 +121,7 @@ from commcare_connect.opportunity.models import (
     Payment,
     PaymentInvoice,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -1206,7 +1206,7 @@ class TaskTypesConfig(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberR
         opportunity = self.get_opportunity()
         org_slug = self.request.org.slug
 
-        tasks = Task.objects.filter(app=opportunity.deliver_app)
+        tasks = TaskType.objects.filter(app=opportunity.deliver_app)
         path = [
             {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
             {
@@ -1243,7 +1243,7 @@ class TaskTypesConfig(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberR
 class EditTaskType(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRoleMixin, UpdateView):
     template_name = "opportunity/edit_task_type_form.html"
     form_class = EditTaskTypeForm
-    model = Task
+    model = TaskType
 
     def get_object(self, queryset=None):
         return get_object_or_404(self.model, pk=self.kwargs["pk"], app=self.get_opportunity().deliver_app)
@@ -3214,7 +3214,7 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
         opportunity = self.get_opportunity()
         return (
             AssignedTask.objects.filter(opportunity_access__opportunity=opportunity)
-            .select_related("task", "opportunity_access__user", "assigned_by")
+            .select_related("task_type", "opportunity_access__user", "assigned_by")
             .order_by("-date_created")
         )
 

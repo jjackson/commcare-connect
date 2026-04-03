@@ -36,7 +36,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaim,
     OpportunityClaimLimit,
     Payment,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -621,12 +621,12 @@ def get_worker_tasks_base_queryset(opportunity):
         .select_related("user")
         .annotate(
             status=Subquery(UserInvite.objects.filter(opportunity_access=OuterRef("pk")).values("status")[:1]),
-            task_name=F("assignedtask__task__name"),
-            task_id=F("assignedtask__task__id"),
+            task_name=F("assignedtask__task_type__name"),
+            task_id=F("assignedtask__task_type__id"),
             date_assigned=F("assignedtask__date_created"),
             task_due_date=F("assignedtask__due_date"),
             task_status=F("assignedtask__status"),
-            task_is_active=F("assignedtask__task__is_active"),
+            task_is_active=F("assignedtask__task_type__is_active"),
         )
         .filter(task_is_active=True)
         .order_by("user__name", "assignedtask__date_created")
@@ -670,7 +670,7 @@ def get_opportunity_delivery_progress(opp_id):
     )
     active_tasks_count = Coalesce(
         Subquery(
-            Task.objects.filter(opportunity_id=OuterRef("pk"), is_active=True)
+            TaskType.objects.filter(opportunity_id=OuterRef("pk"), is_active=True)
             .values("opportunity_id")
             .annotate(total=Count("pk"))
             .values("total"),

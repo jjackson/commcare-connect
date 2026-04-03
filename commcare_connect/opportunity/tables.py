@@ -25,7 +25,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     PaymentInvoice,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -1775,7 +1775,7 @@ class AssignedTaskListTable(OpportunityContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
-    task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
+    task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task_type__name")
     assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
     assigned_by = tables.Column(
@@ -1851,6 +1851,6 @@ class TaskTable(OpportunityContextTable):
     )
 
     class Meta:
-        model = Task
+        model = TaskType
         fields = ("index", "name", "description", "linked_task_unit", "archived", "actions")
         empty_text = gettext_lazy("No task types configured for this opportunity.")
