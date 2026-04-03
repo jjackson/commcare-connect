@@ -7,7 +7,6 @@ import pghistory
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Count, F, Q, Sum
-from django.db.models.expressions import RawSQL
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
 from django.utils.timezone import now
@@ -259,7 +258,7 @@ class LearnModule(models.Model):
         return self.name
 
 
-class Task(models.Model):
+class TaskType(models.Model):
     task_type_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     app = models.ForeignKey(CommCareApp, on_delete=models.CASCADE, related_name="tasks")
     opportunity = models.ForeignKey(Opportunity, on_delete=models.CASCADE, null=True, blank=True)
@@ -277,7 +276,7 @@ class Task(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["app_id", "slug"], name="unique_task_per_app"),
+            models.UniqueConstraint(fields=["app_id", "slug"], name="unique_task_type_per_app"),
         ]
 
 
@@ -427,7 +426,7 @@ class AssignedTaskStatus(models.TextChoices):
 @pghistory.track(pghistory.UpdateEvent(), fields=["due_date"])
 class AssignedTask(XFormBaseModel):
     assigned_task_id = models.UUIDField(editable=False, default=uuid4, unique=True)
-    task = models.ForeignKey(Task, on_delete=models.PROTECT)
+    task_type = models.ForeignKey(TaskType, on_delete=models.PROTECT)
     opportunity_access = models.ForeignKey(OpportunityAccess, on_delete=models.CASCADE)
     completed_at = models.DateTimeField()
     duration = models.DurationField()
@@ -450,7 +449,7 @@ class AssignedTask(XFormBaseModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["xform_id", "task", "opportunity_access"], name="unique_xform_assigned_task"
+                fields=["xform_id", "task_type", "opportunity_access"], name="unique_xform_assigned_task"
             )
         ]
 
@@ -799,37 +798,7 @@ class VisitReviewStatus(models.TextChoices):
     disagree = "disagree", gettext("Disagree")
 
 
-class UserVisitQuerySet(models.QuerySet):
-    def with_any_flags(self, flags):
-        from commcare_connect.utils.flags import Flags
-
-        # flags should be a subset of Flags
-        allowed_flags = {flag.value for flag in Flags}
-        flags = list(set(flags) & allowed_flags)
-
-        if not flags:
-            return self
-
-        conditions = " || ".join([f"@[0] == $f{i}" for i in range(len(flags))])
-
-        params = []
-        for i, f in enumerate(flags):
-            params.extend([f"f{i}", f])
-
-        sql = f"""
-            jsonb_path_exists(
-                flag_reason,
-                '$.flags[*] ? ({conditions})',
-                jsonb_build_object({', '.join(['%s'] * len(params))})
-            )
-        """
-
-        return self.annotate(has_flag=RawSQL(sql, params)).filter(has_flag=True)
-
-
 class UserVisit(XFormBaseModel):
-    objects = UserVisitQuerySet.as_manager()
-
     user_visit_id = models.UUIDField(editable=False, default=uuid4, unique=True)
     opportunity = models.ForeignKey(
         Opportunity,
