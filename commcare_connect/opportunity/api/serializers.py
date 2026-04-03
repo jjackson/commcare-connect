@@ -297,8 +297,8 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class AssignedTaskSerializer(serializers.ModelSerializer):
-    task_name = serializers.CharField(source="task.name")
-    task_description = serializers.CharField(source="task.description")
+    task_name = serializers.CharField(source="task_type.name")
+    task_description = serializers.CharField(source="task_type.description")
 
     class Meta:
         model = AssignedTask
@@ -333,6 +333,6 @@ class DeliveryProgressSerializer(serializers.Serializer):
 
     def get_assigned_tasks(self, obj):
         assigned_tasks = (
-            AssignedTask.objects.filter(opportunity_access=obj).select_related("task").order_by("due_date")
+            AssignedTask.objects.filter(opportunity_access=obj).select_related("task_type").order_by("due_date")
         )
         return AssignedTaskSerializer(assigned_tasks, many=True).data
