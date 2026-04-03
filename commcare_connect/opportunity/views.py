@@ -2145,7 +2145,7 @@ class WorkerCompletedTaskTableView(WorkerTableView):
 
     def get_queryset(self):
         queryset = AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
-            "task", "assigned_by", "opportunity_access__opportunity"
+            "task_type", "assigned_by", "opportunity_access__opportunity"
         )
         user_id = self.request.GET.get("user")
         if user_id:
@@ -2462,7 +2462,7 @@ def user_visit_details(request, org_slug, opp_id, pk):
 def user_task_details(request, org_slug, opp_id, pk):
     completed_task = get_object_or_404(
         AssignedTask.objects.select_related(
-            "task__app__hq_server",
+            "task_type__app__hq_server",
             "opportunity_access__opportunity__deliver_app",
             "assigned_by",
         ),
@@ -2474,7 +2474,7 @@ def user_task_details(request, org_slug, opp_id, pk):
     hq_link = None
     if completed_task.xform_id:
         images = BlobMeta.objects.filter(parent_id=completed_task.xform_id, content_type__startswith="image/")
-        hq_url = completed_task.task.app.hq_server.url
+        hq_url = completed_task.task_type.app.hq_server.url
         domain = completed_task.opportunity_access.opportunity.deliver_app.cc_domain
         hq_link = f"{hq_url}/a/{domain}/reports/form_data/{completed_task.xform_id}/"
 
