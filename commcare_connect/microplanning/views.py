@@ -368,6 +368,7 @@ def cluster_work_areas(request, org_slug, opp_id):
 @opportunity_required
 def clustering_status(request, org_slug, opp_id):
     task_id = request.GET.get("clustering_task_id", None)
+    redirect_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
 
     if task_id:
         try:
@@ -379,10 +380,13 @@ def clustering_status(request, org_slug, opp_id):
         status = task.state
         message = None
         icon = None
+        refresh_page = False
 
         if status == CELERY_TASK_SUCCESS:
             message = _("Work Area Clustering was successful. You may close this window.")
             icon = "fa-solid fa-circle-check text-green-600"
+            refresh_page = True
+            messages.success(request, "Work Area Clustering was successful.")
         elif status == CELERY_TASK_FAILURE:
             message = _("There was an error. Please try again.")
             icon = "fa-solid fa-circle-exclamation text-red-600"
@@ -393,13 +397,15 @@ def clustering_status(request, org_slug, opp_id):
             # non-refreshing div to show final status.
             return HttpResponse(status=HTTPStatus.NO_CONTENT)
 
-        return render(
+        response = render(
             request,
             "microplanning/cluster_work_area_final_status.html",
             context={"icon": icon, "message": message},
         )
+        if refresh_page:
+            response.headers["HX-Redirect"] = redirect_url
+        return response
 
-    redirect_url = reverse("microplanning:microplanning_home", args=(org_slug, opp_id))
     return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
