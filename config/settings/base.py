@@ -325,8 +325,8 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_VERSIONING_CLASS": "rest_framework.versioning.AcceptHeaderVersioning",
-    "DEFAULT_VERSION": "1.0",
-    "ALLOWED_VERSIONS": ["1.0", "2.0"],
+    "DEFAULT_VERSION": "1",
+    "ALLOWED_VERSIONS": ["1", "2"],
     "EXCEPTION_HANDLER": "commcare_connect.utils.exceptions.drf_permission_denied_handler",
 }
 

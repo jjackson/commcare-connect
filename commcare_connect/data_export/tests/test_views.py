@@ -20,9 +20,7 @@ def _add_export_credentials(api_client, user):
 
 
 def _add_v2_header(api_client):
-    api_client.credentials(
-        **{**getattr(api_client, "_credentials", {}), "HTTP_ACCEPT": "application/json; version=2.0"}
-    )
+    api_client.credentials(**{**getattr(api_client, "_credentials", {}), "HTTP_ACCEPT": "application/json; version=2"})
 
 
 @pytest.fixture
