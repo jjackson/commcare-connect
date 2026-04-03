@@ -29,7 +29,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     VisitReviewStatus,
@@ -52,7 +52,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentFactory,
     PaymentInvoiceFactory,
     PaymentUnitFactory,
-    TaskFactory,
+    TaskTypeFactory,
     UserInviteFactory,
     UserVisitFactory,
 )
@@ -2280,10 +2280,10 @@ class TestAssignedTaskListView:
         self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task = TaskFactory(app=opportunity.deliver_app)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2329,16 +2329,13 @@ class TestTaskTypesConfig:
             response = client.get(url)
         assert response.status_code == HTTPStatus.OK
 
-    def test_managed_opp_non_pm_redirects(self, client, organization, org_user_admin, program_manager_org):
+    def test_managed_opp_non_pm_not_found(self, client, organization, org_user_admin, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
         url = reverse("opportunity:task_types_config", args=(organization.slug, managed_opp.opportunity_id))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
-        assert response["Location"] == reverse(
-            "opportunity:detail", args=(organization.slug, managed_opp.opportunity_id)
-        )
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_managed_opp_pm_success(
         self, client, organization, program_manager_org, program_manager_org_user_admin, task_units
@@ -2365,8 +2362,8 @@ class TestTaskTypesConfig:
             )
         assert response.status_code == HTTPStatus.FOUND
         assert response["Location"] == self._url(opp)
-        task = Task.objects.get(app=opp.deliver_app, name="My Task")
-        assert task.slug == "task_1"
+        task_type = TaskType.objects.get(app=opp.deliver_app, name="My Task")
+        assert task_type.slug == "task_1"
 
     def test_post_missing_data_rerenders_form_with_errors(
         self, client, program_manager_org_user_admin, opp, task_units
@@ -2382,23 +2379,23 @@ class TestTaskTypesConfig:
                 },
             )
         assert response.status_code == HTTPStatus.OK
-        assert not Task.objects.filter(app=opp.deliver_app).exists()
+        assert not TaskType.objects.filter(app=opp.deliver_app).exists()
         assert response.context["form"].errors
 
     # --- Edit task type tests ---
 
     @pytest.fixture
-    def task(self, opp):
-        return TaskFactory(app=opp.deliver_app)
+    def task_type(self, opp):
+        return TaskTypeFactory(app=opp.deliver_app)
 
-    def _edit_url(self, opp, task):
-        return reverse("opportunity:edit_task_type", args=(opp.organization.slug, opp.opportunity_id, task.pk))
+    def _edit_url(self, opp, task_type):
+        return reverse("opportunity:edit_task_type", args=(opp.organization.slug, opp.opportunity_id, task_type.pk))
 
-    def test_edit_task_type_get_returns_form(self, client, program_manager_org_user_admin, opp, task):
+    def test_edit_task_type_get_returns_form(self, client, program_manager_org_user_admin, opp, task_type):
         client.force_login(program_manager_org_user_admin)
-        response = client.get(self._edit_url(opp, task))
+        response = client.get(self._edit_url(opp, task_type))
         assert response.status_code == HTTPStatus.OK
-        assert response.context["form"].instance == task
+        assert response.context["form"].instance == task_type
 
     @pytest.mark.parametrize(
         "data, is_valid",
@@ -2407,22 +2404,22 @@ class TestTaskTypesConfig:
             ({"name": "", "description": "Desc"}, False),
         ],
     )
-    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task, data, is_valid):
+    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task_type, data, is_valid):
         client.force_login(program_manager_org_user_admin)
-        response = client.post(self._edit_url(opp, task), data=data)
+        response = client.post(self._edit_url(opp, task_type), data=data)
         assert response.status_code == HTTPStatus.OK
         if is_valid:
             assert response["HX-Redirect"] == self._url(opp)
-            task.refresh_from_db()
-            assert task.name == data["name"]
-            assert task.description == data["description"]
+            task_type.refresh_from_db()
+            assert task_type.name == data["name"]
+            assert task_type.description == data["description"]
         else:
             assert "HX-Redirect" not in response
             assert response.context["form"].errors
 
-    def test_edit_task_type_requires_org_membership(self, client, user, opp, task):
+    def test_edit_task_type_requires_org_membership(self, client, user, opp, task_type):
         client.force_login(user)
-        response = client.get(self._edit_url(opp, task))
+        response = client.get(self._edit_url(opp, task_type))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_managed_opp_requires_pm_role(
@@ -2430,26 +2427,26 @@ class TestTaskTypesConfig:
     ):
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
-        task = TaskFactory(app=managed_opp.deliver_app)
-        url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task.pk))
+        task_type = TaskTypeFactory(app=managed_opp.deliver_app)
+        url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task_type.pk))
         client.force_login(org_user_admin)
         response = client.get(url)
-        assert response.status_code == HTTPStatus.FOUND
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_scoped_to_opportunity_app(self, client, program_manager_org_user_admin, opp):
-        other_task = TaskFactory()  # different app
+        other_task_type = TaskTypeFactory()  # different app
         client.force_login(program_manager_org_user_admin)
-        response = client.get(self._edit_url(opp, other_task))
+        response = client.get(self._edit_url(opp, other_task_type))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.django_db
 class TestTaskTable:
     def test_edit_button_renders_htmx_attributes(self, rf, opportunity, organization):
-        task = TaskFactory(app=opportunity.deliver_app)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app)
         request = rf.get("/")
         table = TaskTable(
-            Task.objects.filter(app=opportunity.deliver_app),
+            TaskType.objects.filter(app=opportunity.deliver_app),
             org_slug=organization.slug,
             opp_id=opportunity.opportunity_id,
         )
@@ -2457,7 +2454,7 @@ class TestTaskTable:
         table.context = Context({"table": table})
         html = table.rows[0].get_cell("actions")
         expected_url = reverse(
-            "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task.pk)
+            "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task_type.pk)
         )
         assert f'hx-get="{expected_url}"' in html
         assert 'hx-target="#edit-task-form"' in html
@@ -2494,3 +2491,94 @@ class TestWorkerTasksView:
         response = client.get(url, HTTP_HX_REQUEST="true")
         assert response.status_code == 200
         assert b"Task Name" in response.content
+
+
+@pytest.mark.django_db
+class TestEditAssignedTask:
+    @pytest.fixture
+    def opp(self, organization):
+        return OpportunityFactory(organization=organization)
+
+    @pytest.fixture
+    def assigned_task(self, opp, user):
+        access = OpportunityAccessFactory(opportunity=opp, user=user)
+        return AssignedTaskFactory(
+            opportunity_access=access,
+            task_type=TaskTypeFactory(app=opp.deliver_app),
+            status=AssignedTaskStatus.ASSIGNED,
+            due_date=date.today() + timedelta(days=7),
+        )
+
+    def _edit_url(self, opp, task):
+        return reverse("opportunity:edit_assigned_task", args=(opp.organization.slug, opp.opportunity_id, task.pk))
+
+    def test_list_page_renders_edit_button(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        url = reverse("opportunity:assigned_task_list", args=(opp.organization.slug, opp.opportunity_id))
+        response = client.get(url)
+        content = response.content.decode()
+        edit_url = self._edit_url(opp, assigned_task)
+        # Check button renders with correct hx-get
+        assert f'hx-get="{edit_url}"' in content, f'Edit button hx-get not found. Looking for: hx-get="{edit_url}"'
+        assert 'hx-target="#edit-assigned-task-form"' in content
+
+    def test_get_returns_form(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        response = client.get(self._edit_url(opp, assigned_task))
+        assert response.status_code == HTTPStatus.OK
+        assert "form" in response.context
+
+    def test_post_valid_future_date(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        future_date = date.today() + timedelta(days=14)
+        response = client.post(
+            self._edit_url(opp, assigned_task),
+            data={"due_date": future_date.isoformat(), "reason": "Extended deadline"},
+        )
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        assert response["HX-Trigger"] == "reloadTable"
+        assigned_task.refresh_from_db()
+        assert assigned_task.due_date == future_date
+
+    def test_post_past_date_rejected(self, client, org_user_member, opp, assigned_task):
+        client.force_login(org_user_member)
+        past_date = date.today() - timedelta(days=1)
+        response = client.post(
+            self._edit_url(opp, assigned_task),
+            data={"due_date": past_date.isoformat()},
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert response.context["form"].errors
+
+    def test_cannot_edit_completed_task(self, client, org_user_member, opp, user):
+        access = OpportunityAccessFactory(opportunity=opp, user=user)
+        completed_task = AssignedTaskFactory(
+            opportunity_access=access,
+            task_type=TaskTypeFactory(app=opp.deliver_app),
+            status=AssignedTaskStatus.COMPLETED,
+        )
+        client.force_login(org_user_member)
+        response = client.get(self._edit_url(opp, completed_task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_requires_org_membership(self, client, user, opp, assigned_task):
+        client.force_login(user)
+        response = client.get(self._edit_url(opp, assigned_task))
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_managed_opp_requires_pm_role(self, client, organization, org_user_admin, program_manager_org):
+        program = ProgramFactory(organization=program_manager_org)
+        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        access = OpportunityAccessFactory(opportunity=managed_opp)
+        task = AssignedTaskFactory(
+            opportunity_access=access,
+            task_type=TaskTypeFactory(app=managed_opp.deliver_app),
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+        url = reverse(
+            "opportunity:edit_assigned_task",
+            args=(organization.slug, managed_opp.opportunity_id, task.pk),
+        )
+        client.force_login(org_user_admin)
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.NOT_FOUND

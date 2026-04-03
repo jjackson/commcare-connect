@@ -25,7 +25,7 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     PaymentInvoice,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     UserVisit,
@@ -860,7 +860,6 @@ class UserVisitVerificationTable(tables.Table):
         },
     )
     date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
-    worker_name = columns.Column(verbose_name="Worker Name", accessor="opportunity_access__user__name")
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
     payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
@@ -899,7 +898,6 @@ class UserVisitVerificationTable(tables.Table):
         sequence = (
             "select",
             "date_time",
-            "worker_name",
             "entity_name",
             "deliver_unit",
             "payment_unit",
@@ -932,9 +930,7 @@ class UserVisitVerificationTable(tables.Table):
     def __init__(self, *args, **kwargs):
         self.organization = kwargs.pop("organization", None)
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
-        hide_worker_name = kwargs.pop("hide_worker_name", False)
         super().__init__(*args, **kwargs)
-        self.columns["worker_name"].column.visible = not hide_worker_name
         self.columns["select"].column.visible = not self.is_opportunity_pm
         self.use_view_url = True
 
@@ -1341,8 +1337,6 @@ class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
         return StatusIndicatorColumn.render(self.columns["worker_status"].column, record)
 
     def render_task_name(self, value):
-        if value is None:
-            return format_html('<span class="italic text-slate-400">{}</span>', _("No assigned tasks"))
         return value
 
     def render_task_status(self, value, record):
@@ -1777,11 +1771,11 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
-class AssignedTaskListTable(OrgContextTable):
+class AssignedTaskListTable(OpportunityContextTable):
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
-    task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task__name")
+    task_type = tables.Column(verbose_name=gettext_lazy("Task Type"), accessor="task_type__name")
     assigned_date = DMYTColumn(verbose_name=gettext_lazy("Assigned Date"), accessor="date_created")
     due_date = DMYTColumn(verbose_name=gettext_lazy("Due Date"), accessor="due_date")
     assigned_by = tables.Column(
@@ -1790,7 +1784,11 @@ class AssignedTaskListTable(OrgContextTable):
         empty_values=(None,),
         default=gettext_lazy("Deleted user"),
     )
-    action = tables.Column(verbose_name="", orderable=False, empty_values=())
+    action = tables.TemplateColumn(
+        verbose_name="",
+        orderable=False,
+        template_name="opportunity/assigned_task_edit_button.html",
+    )
 
     class Meta:
         model = AssignedTask
@@ -1827,10 +1825,6 @@ class AssignedTaskListTable(OrgContextTable):
             value.username,
         )
 
-    def render_action(self, record):
-        # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
-        return format_html('<a href="#" class="hover:text-brand-indigo"><i class="fa-solid fa-chevron-right"></i></a>')
-
 
 class TaskTable(OpportunityContextTable):
     index = IndexColumn()
@@ -1857,6 +1851,6 @@ class TaskTable(OpportunityContextTable):
     )
 
     class Meta:
-        model = Task
+        model = TaskType
         fields = ("index", "name", "description", "linked_task_unit", "archived", "actions")
         empty_text = gettext_lazy("No task types configured for this opportunity.")

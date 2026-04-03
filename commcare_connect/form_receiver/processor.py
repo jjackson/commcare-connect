@@ -158,8 +158,8 @@ def process_task_modules(user: User, xform: XForm, app: CommCareApp, opportunity
                 assigned_task = (
                     AssignedTask.objects.select_for_update()
                     .filter(
-                        task__app=app,
-                        task__slug=task_slug,
+                        task_type__app=app,
+                        task_type__slug=task_slug,
                         opportunity_access=access,
                         xform_id=None,
                         status=AssignedTaskStatus.ASSIGNED,
@@ -462,7 +462,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             access.last_active = user_visit.visit_date
 
         if completed_work is not None:
-            if completed_work.completed_count > 0 and completed_work.status == CompletedWorkStatus.incomplete:
+            if completed_work.status == CompletedWorkStatus.incomplete:
                 completed_work.status = CompletedWorkStatus.pending
                 completed_work_needs_save = True
             if completed_work_needs_save:

@@ -1,23 +1,11 @@
 import django_filters
 from crispy_forms.helper import FormHelper
 from django import forms
-from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
-from waffle import switch_is_active
 
-from commcare_connect.flags.switch_names import USER_VISIT_FILTERS
-from commcare_connect.opportunity.models import (
-    AssignedTaskStatus,
-    DeliverUnitFlagRules,
-    OpportunityAccess,
-    OpportunityVerificationFlags,
-    Task,
-    UserVisit,
-    VisitValidationStatus,
-)
+from commcare_connect.opportunity.models import AssignedTaskStatus, OpportunityAccess, TaskType
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
-from commcare_connect.utils.flags import FlagLabels, Flags
 
 
 class FilterMixin:
@@ -163,110 +151,9 @@ class OpportunityListFilterSet(django_filters.FilterSet):
                 del self.filters["program"]
 
 
-class UserVisitFilterSet(django_filters.FilterSet):
-    user = django_filters.ChoiceFilter(
-        label="Worker",
-        choices=[],
-        empty_label="All",
-        widget=forms.Select(attrs={"data-tomselect": "1"}),
-        method="filter_user",
-    )
-    visit_date = django_filters.DateFilter(
-        label="Visit Date",
-        field_name="visit_date",
-        lookup_expr="date",
-        widget=forms.DateInput(attrs={"type": "date"}),
-    )
-    status = django_filters.MultipleChoiceFilter(
-        label="Visit Status",
-        choices=[
-            (c.value, c.label)
-            for c in [VisitValidationStatus.over_limit, VisitValidationStatus.duplicate, VisitValidationStatus.trial]
-        ],
-        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-    )
-    flagged = YesNoFilter(label="Flagged")
-    flags = django_filters.MultipleChoiceFilter(
-        label="Flags",
-        choices=[],
-        widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_flags",
-    )
-
-    class Meta:
-        model = UserVisit
-        fields = ["user", "visit_date", "status", "flagged", "flags"]
-        form = CSRFExemptForm
-
-    def __init__(self, *args, **kwargs):
-        opportunity = kwargs.pop("opportunity", None)
-        super().__init__(*args, **kwargs)
-
-        if not switch_is_active(USER_VISIT_FILTERS):
-            self._restrict_to_user_filter()
-
-        if opportunity and "user" in self.filters:
-            user_filter = self.filters["user"]
-            user_queryset = (
-                User.objects.filter(opportunityaccess__opportunity=opportunity).distinct().order_by("name", "username")
-            )
-            user_choices = [(str(user.user_id), user.display_name_with_username()) for user in user_queryset]
-            user_filter.extra["choices"] = user_choices
-
-        if opportunity and "flags" in self.filters:
-            flag_choices = self._get_flag_choices(opportunity)
-            if flag_choices:
-                self.filters["flags"].extra["choices"] = flag_choices
-            else:
-                del self.filters["flags"]
-
-    def filter_flags(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.with_any_flags(value)
-
-    def filter_user(self, queryset, name, value):
-        if not value:
-            return queryset
-        return queryset.filter(user__user_id=value)
-
-    def _restrict_to_user_filter(self):
-        for filter_name in list(self.filters.keys()):
-            if filter_name != "user":
-                del self.filters[filter_name]
-
-    def _get_flag_choices(self, opportunity):
-        verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=opportunity).first()
-        if not verification_flags:
-            return []
-
-        enabled_flags = []
-        if verification_flags.duplicate:
-            enabled_flags.append(Flags.DUPLICATE.value)
-        if verification_flags.gps:
-            enabled_flags.append(Flags.GPS.value)
-        if verification_flags.location and verification_flags.location > 0:
-            enabled_flags.append(Flags.LOCATION.value)
-        if verification_flags.catchment_areas:
-            enabled_flags.append(Flags.CATCHMENT.value)
-        if verification_flags.form_submission_start or verification_flags.form_submission_end:
-            enabled_flags.append(Flags.FORM_SUBMISSION_PERIOD.value)
-
-        deliver_unit_flag_rules = DeliverUnitFlagRules.objects.filter(opportunity=opportunity).all()
-        for rule in deliver_unit_flag_rules:
-            if rule.duration > 0:
-                enabled_flags.append(Flags.DURATION.value)
-            if rule.check_attachments:
-                enabled_flags.append(Flags.ATTACHMENT_MISSING.value)
-        return [(flag, FlagLabels.get_label(flag)) for flag in set(enabled_flags)]
-
-
-NO_TASKS_FILTER_VALUE = "no_tasks"
-
 TASK_STATUS_CHOICES = [
     (AssignedTaskStatus.ASSIGNED, _("To Do")),
     (AssignedTaskStatus.COMPLETED, _("Completed")),
-    (NO_TASKS_FILTER_VALUE, _("No Tasks")),
 ]
 
 
@@ -281,7 +168,7 @@ class TasksFilterSet(django_filters.FilterSet):
         label=_("Task Status"),
         choices=TASK_STATUS_CHOICES,
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1"}),
-        method="filter_task_status",
+        field_name="task_status",
     )
     task_type = django_filters.MultipleChoiceFilter(
         label=_("Task Type"),
@@ -321,7 +208,7 @@ class TasksFilterSet(django_filters.FilterSet):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
         if self.opportunity:
-            active_tasks = Task.objects.filter(opportunity=self.opportunity)
+            active_tasks = TaskType.objects.filter(opportunity=self.opportunity, is_active=True)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
 
             worker_queryset = (
@@ -335,14 +222,3 @@ class TasksFilterSet(django_filters.FilterSet):
             self.filters["worker_name"].extra["choices"] = [
                 (str(user.pk), user.display_name_with_username()) for user in worker_queryset
             ]
-
-    def filter_task_status(self, queryset, name, value):
-        if not value:
-            return queryset
-        status_q = Q()
-        real_statuses = [s for s in value if s != NO_TASKS_FILTER_VALUE]
-        if real_statuses:
-            status_q |= Q(task_status__in=real_statuses)
-        if NO_TASKS_FILTER_VALUE in value:
-            status_q |= Q(task_status__isnull=True)
-        return queryset.filter(status_q)
