@@ -22,7 +22,7 @@ def _add_export_credentials(api_client, user):
 
 @pytest.fixture
 def api_client_v2(api_client):
-    api_client.credentials(HTTP_ACCEPT="application/json; version=2.0")
+    api_client.credentials(HTTP_ACCEPT="application/json; version=2")
     return api_client
 
 
