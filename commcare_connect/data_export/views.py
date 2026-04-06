@@ -11,6 +11,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.versioning import AcceptHeaderVersioning
 from rest_framework.views import APIView
 
 from commcare_connect.data_export.const import (
@@ -140,13 +141,18 @@ class BaseDataExportListView(BaseDataExportView):
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
 
 
-class BaseDataExportListViewV2(BaseDataExportListView):
-    """V2-only export view. Returns 404 for v1.0 requests."""
+class V2OnlyVersioning(AcceptHeaderVersioning):
+    # DRF's is_allowed_version() always permits the default_version, even if it's
+    # not in allowed_versions. Setting None ensures requests without a version header
+    # are rejected with 406 instead of falling through to the CSV streaming response.
+    default_version = None
+    allowed_versions = ["2.0"]
 
-    def get(self, *args, **kwargs):
-        if self.request.version != "2.0":
-            raise NotFound()
-        return super().get(*args, **kwargs)
+
+class BaseDataExportListViewV2(BaseDataExportListView):
+    """V2-only export view. Returns 406 for non-v2 requests."""
+
+    versioning_class = V2OnlyVersioning
 
 
 def _get_opportunity_or_404(user, opp_id):
