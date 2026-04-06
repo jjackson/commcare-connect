@@ -119,18 +119,18 @@ class BaseDataExportListView(BaseDataExportView):
     def post_paginate(self, page):
         """Hook called after pagination, before serialization. Override to modify the page list in-place.
 
-        Note: this hook is only called for v2 requests (paginated JSON). It is not invoked
-        for v1 requests, which use streaming CSV via ``get_data_generator``.
+        Note: this hook is only called for v2.0 requests (paginated JSON). It is not invoked
+        for v1.0 requests, which use streaming CSV via ``get_data_generator``.
         """
         pass
 
     @extend_schema(
         description=(
-            "v1: Returns CSV text StreamingHttpResponse. " "v2: Returns paginated JSON with 'next' and 'results'."
+            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
-        if self.request.version == "2":
+        if self.request.version == "2.0":
             queryset = self.get_queryset(*args, **kwargs)
             page = self.paginate_queryset(queryset)
             self.post_paginate(page)
@@ -141,10 +141,10 @@ class BaseDataExportListView(BaseDataExportView):
 
 
 class BaseDataExportListViewV2(BaseDataExportListView):
-    """V2-only export view. Returns 404 for v1 requests."""
+    """V2-only export view. Returns 404 for v1.0 requests."""
 
     def get(self, *args, **kwargs):
-        if self.request.version != "2":
+        if self.request.version != "2.0":
             raise NotFound()
         return super().get(*args, **kwargs)
 
