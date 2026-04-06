@@ -24,21 +24,28 @@ from commcare_connect.data_export.const import (
 from commcare_connect.data_export.pagination import IdKeysetPagination
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
+    AssignedTaskDataSerializer,
     CompletedModuleDataSerializer,
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
     LabsRecordDataSerializer,
+    LLOEntityDataSerializer,
     OpportunityDataExportSerializer,
     OpportunitySerializer,
     OpportunityUserDataSerializer,
     OrganizationDataExportSerializer,
     PaymentDataSerializer,
     ProgramDataExportSerializer,
+    TaskTypeDataSerializer,
     UserVisitDataSerializer,
     UserVisitDataWithImagesSerializer,
+    WorkAreaDataSerializer,
+    WorkAreaGroupDataSerializer,
 )
+from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.opportunity.models import (
     Assessment,
+    AssignedTask,
     BlobMeta,
     CompletedModule,
     CompletedWork,
@@ -47,12 +54,14 @@ from commcare_connect.opportunity.models import (
     OpportunityAccess,
     Payment,
     PaymentInvoice,
+    TaskType,
     UserVisit,
 )
-from commcare_connect.organization.models import Organization
+from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
+from commcare_connect.utils.permission_const import WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 STREAM_CHUNK_SIZE = 2000
 
@@ -110,18 +119,18 @@ class BaseDataExportListView(BaseDataExportView):
     def post_paginate(self, page):
         """Hook called after pagination, before serialization. Override to modify the page list in-place.
 
-        Note: this hook is only called for v2.0 requests (paginated JSON). It is not invoked
-        for v1.0 requests, which use streaming CSV via ``get_data_generator``.
+        Note: this hook is only called for v2 requests (paginated JSON). It is not invoked
+        for v1 requests, which use streaming CSV via ``get_data_generator``.
         """
         pass
 
     @extend_schema(
         description=(
-            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
+            "v1: Returns CSV text StreamingHttpResponse. " "v2: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
-        if self.request.version == "2.0":
+        if self.request.version == "2":
             queryset = self.get_queryset(*args, **kwargs)
             page = self.paginate_queryset(queryset)
             self.post_paginate(page)
@@ -129,6 +138,15 @@ class BaseDataExportListView(BaseDataExportView):
             serializer = serializer_class(page, many=True)
             return self.get_paginated_response(serializer.data)
         return StreamingHttpResponse(self.get_data_generator(*args, **kwargs), content_type="text/csv")
+
+
+class BaseDataExportListViewV2(BaseDataExportListView):
+    """V2-only export view. Returns 404 for v1 requests."""
+
+    def get(self, *args, **kwargs):
+        if self.request.version != "2":
+            raise NotFound()
+        return super().get(*args, **kwargs)
 
 
 def _get_opportunity_or_404(user, opp_id):
@@ -487,3 +505,45 @@ class ProgramOpportunityDataView(BaseDataExportListView):
             .select_related("learn_app", "deliver_app")
             .prefetch_related("paymentunit_set", "opportunityverificationflags")
         )
+
+
+class TaskTypeDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = TaskTypeDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return TaskType.objects.filter(opportunity=self.opportunity)
+
+
+class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = AssignedTaskDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return AssignedTask.objects.filter(opportunity_access__opportunity=self.opportunity).select_related(
+            "task_type", "opportunity_access__user"
+        )
+
+
+class WorkAreaGroupDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = WorkAreaGroupDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return WorkAreaGroup.objects.filter(opportunity=self.opportunity).select_related("opportunity_access__user")
+
+
+class WorkAreaDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = WorkAreaDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return WorkArea.objects.filter(opportunity=self.opportunity).select_related("work_area_group")
+
+
+class LLOEntityDataView(BaseDataExportListViewV2):
+    serializer_class = LLOEntityDataSerializer
+
+    def check_permissions(self, request):
+        super().check_permissions(request)
+        if not request.user.has_perm(WORKSPACE_ENTITY_MANAGEMENT_ACCESS):
+            raise NotFound
+
+    def get_queryset(self, *args, **kwargs):
+        return LLOEntity.objects.all()

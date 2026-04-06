@@ -444,7 +444,7 @@ def test_confirm_payment_request_v2(
         endpoint,
         payload,
         format="json",
-        HTTP_ACCEPT="application/json; version=2.0",
+        HTTP_ACCEPT="application/json; version=2",
     )
     assert response.status_code == 200
 
@@ -459,6 +459,6 @@ def test_confirm_payment_request_v2(
         endpoint,
         payload,
         format="json",
-        HTTP_ACCEPT="application/json; version=2.0",
+        HTTP_ACCEPT="application/json; version=2",
     )
     assert response.status_code == 200
