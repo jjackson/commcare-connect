@@ -838,12 +838,16 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 
 
 class WorkerVisitTable(tables.Table):
-    date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
-    entity_name = columns.Column(verbose_name="Entity Name")
-    deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
-    payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
-    last_activity = columns.DateColumn(verbose_name="Last Activity", accessor="status_modified_date", format="d M, Y")
-    status = columns.Column(verbose_name="Status", accessor="status")
+    date_time = columns.DateTimeColumn(verbose_name=gettext_lazy("Date"), accessor="visit_date", format="d M, Y H:i")
+    entity_name = columns.Column(verbose_name=gettext_lazy("Entity Name"))
+    deliver_unit = columns.Column(verbose_name=gettext_lazy("Deliver Unit"), accessor="deliver_unit__name")
+    payment_unit = columns.Column(
+        verbose_name=gettext_lazy("Payment Unit"), accessor="completed_work__payment_unit__name"
+    )
+    last_activity = columns.DateColumn(
+        verbose_name=gettext_lazy("Last Activity"), accessor="status_modified_date", format="d M, Y"
+    )
+    status = columns.Column(verbose_name=gettext_lazy("Status"), accessor="status")
 
     class Meta:
         model = UserVisit
@@ -856,7 +860,7 @@ class WorkerVisitTable(tables.Table):
             "status",
         )
         fields = []
-        empty_text = "No Visits for this filter."
+        empty_text = gettext_lazy("No Visits for this filter.")
         attrs = {
             "x-data": "{selectedRow: null}",
             "@change": "updateSelectAll()",
