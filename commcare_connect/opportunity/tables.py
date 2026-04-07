@@ -44,12 +44,10 @@ from commcare_connect.utils.tables import (
 
 
 def header_with_tooltip(label, tooltip_text):
-    return mark_safe(
-        f"""
-        <span x-data x-tooltip.raw="{tooltip_text}">
-            {label}
-        </span>
-        """
+    return format_html(
+        '<span x-data x-tooltip.raw="{}">{}</span>',
+        tooltip_text,
+        label,
     )
 
 
