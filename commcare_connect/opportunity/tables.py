@@ -843,6 +843,7 @@ class WorkerVisitTable(tables.Table):
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
     payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
     last_activity = columns.DateColumn(verbose_name="Last Activity", accessor="status_modified_date", format="d M, Y")
+    status = columns.Column(verbose_name="Status", accessor="status")
 
     class Meta:
         model = UserVisit
@@ -852,6 +853,7 @@ class WorkerVisitTable(tables.Table):
             "deliver_unit",
             "payment_unit",
             "last_activity",
+            "status",
         )
         fields = []
         empty_text = "No Visits for this filter."
@@ -880,6 +882,21 @@ class WorkerVisitTable(tables.Table):
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
         self.use_view_url = True
+
+    def render_status(self, record):
+        status = record.status
+        if status == VisitValidationStatus.rejected:
+            badge_classes = "bg-red-100 text-red-800"
+        elif status == VisitValidationStatus.approved:
+            badge_classes = "bg-green-100 text-green-800"
+        else:
+            badge_classes = "bg-gray-100 text-gray-800"
+        return format_html(
+            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
+            "{}</span>",
+            badge_classes,
+            record.get_status_display(),
+        )
 
 
 class UserVisitVerificationTable(WorkerVisitTable):
@@ -944,6 +961,7 @@ class UserVisitVerificationTable(WorkerVisitTable):
             "last_activity",
             "icons",
         )
+        exclude = ("status",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
