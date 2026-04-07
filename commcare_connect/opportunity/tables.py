@@ -842,35 +842,7 @@ class WorkerVisitTable(tables.Table):
     entity_name = columns.Column(verbose_name="Entity Name")
     deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
     payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
-    flags = columns.TemplateColumn(
-        verbose_name="Flags",
-        orderable=False,
-        template_code="""
-            <div class="flex relative justify-start text-sm text-brand-deep-purple font-normal">
-                {% if record %}
-                    {% if record.status == 'over_limit' %}
-                    <span class="badge badge-sm negative-light mx-1">{{ record.get_status_display|lower }}</span>
-                    {% endif %}
-                {% endif %}
-                {% if value %}
-                    {% for flag in value|slice:":2" %}
-                        {% if flag == "duplicate"%}
-                        <span class="badge badge-sm warning-light mx-1">
-                        {% else %}
-                        <span class="badge badge-sm primary-light mx-1">
-                        {% endif %}
-                            {{ flag }}
-                        </span>
-                    {% endfor %}
-                    {% if value|length > 2 %}
-                    {% include "components/badges/badge_sm_dropdown.html" with title='All Flags' list=value %}
-                    {% endif %}
-                {% endif %}
-            </div>
-            """,
-    )
     last_activity = columns.DateColumn(verbose_name="Last Activity", accessor="status_modified_date", format="d M, Y")
-    icons = columns.Column(verbose_name="", empty_values=("",), orderable=False)
 
     class Meta:
         model = UserVisit
@@ -879,9 +851,7 @@ class WorkerVisitTable(tables.Table):
             "entity_name",
             "deliver_unit",
             "payment_unit",
-            "flags",
             "last_activity",
-            "icons",
         )
         fields = []
         empty_text = "No Visits for this filter."
@@ -910,6 +880,74 @@ class WorkerVisitTable(tables.Table):
         self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
         self.use_view_url = True
+
+
+class UserVisitVerificationTable(WorkerVisitTable):
+    flags = columns.TemplateColumn(
+        verbose_name="Flags",
+        orderable=False,
+        template_code="""
+            <div class="flex relative justify-start text-sm text-brand-deep-purple font-normal">
+                {% if record %}
+                    {% if record.status == 'over_limit' %}
+                    <span class="badge badge-sm negative-light mx-1">{{ record.get_status_display|lower }}</span>
+                    {% endif %}
+                {% endif %}
+                {% if value %}
+                    {% for flag in value|slice:":2" %}
+                        {% if flag == "duplicate"%}
+                        <span class="badge badge-sm warning-light mx-1">
+                        {% else %}
+                        <span class="badge badge-sm primary-light mx-1">
+                        {% endif %}
+                            {{ flag }}
+                        </span>
+                    {% endfor %}
+                    {% if value|length > 2 %}
+                    {% include "components/badges/badge_sm_dropdown.html" with title='All Flags' list=value %}
+                    {% endif %}
+                {% endif %}
+            </div>
+            """,
+    )
+    icons = columns.Column(verbose_name="", empty_values=("",), orderable=False)
+    select = tables.CheckBoxColumn(
+        accessor="pk",
+        attrs={
+            "th__input": {
+                "@click": "toggleSelectAll()",
+                "x-model": "selectAll",
+                "name": "select_all",
+                "type": "checkbox",
+                "class": "checkbox ga-all-visit-checkbox",
+            },
+            "td__input": {
+                "x-model": "selected",
+                "@click.stop": "",  # used to stop click propagation
+                "name": "row_select",
+                "type": "checkbox",
+                "class": "checkbox",
+                "value": lambda record: record.pk,
+                "id": lambda record: f"row_checkbox_{record.pk}",
+            },
+        },
+    )
+
+    class Meta(WorkerVisitTable.Meta):
+        sequence = (
+            "select",
+            "date_time",
+            "entity_name",
+            "deliver_unit",
+            "payment_unit",
+            "flags",
+            "last_activity",
+            "icons",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.columns["select"].column.visible = not self.is_opportunity_pm
 
     def get_icons(self, statuses):
         status_meta = {
@@ -972,37 +1010,6 @@ class WorkerVisitTable(tables.Table):
                 status.append(record.status)
 
         return self.get_icons(status)
-
-
-class UserVisitVerificationTable(WorkerVisitTable):
-    select = tables.CheckBoxColumn(
-        accessor="pk",
-        attrs={
-            "th__input": {
-                "@click": "toggleSelectAll()",
-                "x-model": "selectAll",
-                "name": "select_all",
-                "type": "checkbox",
-                "class": "checkbox ga-all-visit-checkbox",
-            },
-            "td__input": {
-                "x-model": "selected",
-                "@click.stop": "",  # used to stop click propagation
-                "name": "row_select",
-                "type": "checkbox",
-                "class": "checkbox",
-                "value": lambda record: record.pk,
-                "id": lambda record: f"row_checkbox_{record.pk}",
-            },
-        },
-    )
-
-    class Meta(WorkerVisitTable.Meta):
-        sequence = ("select",) + WorkerVisitTable.Meta.sequence
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.columns["select"].column.visible = not self.is_opportunity_pm
 
 
 class UserInfoColumn(tables.Column):
