@@ -67,8 +67,8 @@
     </div>
 
     {% if request.user.is_authenticated and chat_widget_enabled %}
-      <div class="chat-widget-container">
         <open-chat-studio-widget
+          class="z-50"
           visible="false"
           chatbot-id="{{ chatbot_id }}"
           embed-key="{{ chatbot_embed_key }}"
@@ -76,7 +76,6 @@
           position="right"
           expanded="false">
         </open-chat-studio-widget>
-      </div>
     {% endif %}
 
   {% block inline_javascript %}
