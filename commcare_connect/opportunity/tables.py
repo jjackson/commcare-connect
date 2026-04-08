@@ -404,8 +404,8 @@ class PaymentInvoiceTable(OpportunityContextTable):
         verbose_name=header_with_tooltip(
             "Amount (USD)",
             "Sum of USD amount over all line items in this invoice. Each line item is calculated as "
-            "approved count × (payment unit amount ÷ exchange rate at time of approval rounded to 2 "
-            "decimals) for each delivery",
+            "approved count × (payment unit amount ÷ exchange rate at time of approval) rounded to 2 "
+            "decimals for each delivery",
         ),
     )
     status = tables.Column(verbose_name="Invoice Status")
@@ -1737,8 +1737,8 @@ class InvoiceLineItemsTable(tables.Table):
     total_amount_usd = tables.Column(
         verbose_name=header_with_tooltip(
             "Total Amount (USD)",
-            "Approved count × (payment unit amount ÷ exchange rate at time of approval rounded to "
-            "2 decimals) for each delivery",
+            "Approved count × (payment unit amount ÷ exchange rate at time of approval)  "
+            "rounded to 2 decimals for each delivery",
         ),
     )
 
