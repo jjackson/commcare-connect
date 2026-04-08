@@ -635,7 +635,11 @@ def get_worker_tasks_base_queryset(opportunity):
 
 def get_worker_work_area_table_data(opportunity):
     visits_done_subquery = (
-        UserVisit.objects.filter(opportunity_access=OuterRef("pk"), work_area__isnull=False)
+        UserVisit.objects.filter(
+            opportunity=opportunity,
+            opportunity_access=OuterRef("pk"),
+            work_area__isnull=False,
+        )
         .values("opportunity_access")
         .annotate(total=Count("id"))
         .values("total")[:1]
