@@ -8,6 +8,8 @@
 <div class="w-full space-y-4"
      x-data="{
        showCreateTaskModal: false,
+       showEditTaskModal: false,
+       editTaskError: false,
        ...selectableTable()
      }">
   {% include "components/worker_page/worker_profile_kpi.html" %}
@@ -77,6 +79,7 @@
 
   {% if can_manage_tasks %}
   {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+  {% include 'opportunity/edit_assigned_task_modal.html' %}
   {% include 'components/confirm_modal.html' %}
   {% endif %}
 </div>

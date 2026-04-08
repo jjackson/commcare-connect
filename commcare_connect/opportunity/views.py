@@ -2512,6 +2512,7 @@ def user_task_details(request, org_slug, opp_id, pk):
             completed_task=completed_task,
             images=images,
             hq_link=hq_link,
+            can_manage_tasks=_can_manage_tasks(request, request.opportunity),
         ),
     )
 
