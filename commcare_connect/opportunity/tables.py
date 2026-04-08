@@ -44,6 +44,14 @@ from commcare_connect.utils.tables import (
 )
 
 
+def header_with_tooltip(label, tooltip_text):
+    return format_html(
+        '<span x-data x-tooltip.raw="{}">{}</span>',
+        tooltip_text,
+        label,
+    )
+
+
 class OpportunityContextTable(OrgContextTable):
     def __init__(self, *args, **kwargs):
         self.opp_id = kwargs.pop("opp_id", None)
@@ -392,7 +400,13 @@ class PaymentInvoiceTable(OpportunityContextTable):
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Actions")
     exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
-    amount_usd = tables.Column(verbose_name="Amount (USD)")
+    amount_usd = tables.Column(
+        verbose_name=header_with_tooltip(
+            "Amount (USD)",
+            "Sum of USD amount over all line items in this invoice. Each line item is calculated by taking the "
+            "sum of (approved count × payment unit amount ÷ exchange rate at time of approval) for each delivery",
+        ),
+    )
     status = tables.Column(verbose_name="Invoice Status")
     invoice_type = tables.Column(verbose_name="Invoice Type", accessor="service_delivery", empty_values=())
     last_status_modified_at = tables.Column(
@@ -525,16 +539,6 @@ def date_with_time_popup(table, date):
     return popup_html(
         date.strftime("%d %b, %Y"),
         date.strftime("%d %b %Y, %I:%M%p"),
-    )
-
-
-def header_with_tooltip(label, tooltip_text):
-    return mark_safe(
-        f"""
-        <span x-data x-tooltip.raw="{tooltip_text}">
-            {label}
-        </span>
-        """
     )
 
 
@@ -1730,12 +1734,14 @@ class InvoiceLineItemsTable(tables.Table):
     )
     exchange_rate = tables.Column()
     total_amount_usd = tables.Column(
-        verbose_name="Total Amount (USD)",
+        verbose_name=header_with_tooltip(
+            "Total Amount (USD)",
+            "Sum of (approved count × payment unit amount ÷ exchange rate at time of approval) for each delivery",
+        ),
     )
 
     def __init__(self, currency, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         if currency:
             self.columns["amount_per_unit"].column.verbose_name = f"Payment Unit Amount ({currency})"
             self.columns["total_amount_local"].column.verbose_name = f"Total Amount ({currency})"
