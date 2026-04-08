@@ -190,6 +190,7 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
+    _request_user_is_member,
     managed_opportunity_pm_required,
     opportunity_required,
     org_admin_required,
@@ -3346,7 +3347,9 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
-        can_manage_tasks = not opportunity.managed or self.request.is_opportunity_pm
+        can_manage_tasks = (
+            not opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        )
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=opportunity)

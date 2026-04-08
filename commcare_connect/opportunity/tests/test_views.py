@@ -2624,7 +2624,7 @@ class TestCreateTask:
         )
         assert response.status_code == HTTPStatus.OK
         assert "HX-Redirect" in response
-        assigned = AssignedTask.objects.get(task=task, opportunity_access=access)
+        assigned = AssignedTask.objects.get(task_type=task, opportunity_access=access)
         assert assigned.due_date == due_date
         assert assigned.status == AssignedTaskStatus.ASSIGNED
         assert assigned.assigned_by == org_user_member
