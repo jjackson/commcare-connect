@@ -2116,8 +2116,8 @@ class UserTasksView(WorkerPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        can_manage_tasks = (
-            not self.opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        can_manage_tasks = _request_user_is_member(self.request) and (
+            not self.opportunity.managed or self.request.is_opportunity_pm
         )
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
@@ -2158,8 +2158,8 @@ class WorkerCompletedTaskTableView(WorkerTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["organization"] = self.request.org
-        can_manage_tasks = (
-            not self.opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        can_manage_tasks = _request_user_is_member(self.request) and (
+            not self.opportunity.managed or self.request.is_opportunity_pm
         )
         kwargs["can_manage_tasks"] = can_manage_tasks
         return kwargs
