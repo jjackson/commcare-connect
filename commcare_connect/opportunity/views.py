@@ -2110,15 +2110,17 @@ class UserVisitVerificationView(WorkerPageView):
         return context
 
 
+def _can_manage_tasks(request, opportunity):
+    return _request_user_is_member(request) and (not opportunity.managed or request.is_opportunity_pm)
+
+
 class UserTasksView(WorkerPageView):
     template_name = "opportunity/user_tasks.html"
     page_title = gettext_lazy("Tasks")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        can_manage_tasks = _request_user_is_member(self.request) and (
-            not self.opportunity.managed or self.request.is_opportunity_pm
-        )
+        can_manage_tasks = _can_manage_tasks(self.request, self.opportunity)
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=self.opportunity, access=self.opportunity_access)
@@ -2158,10 +2160,7 @@ class WorkerCompletedTaskTableView(WorkerTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["organization"] = self.request.org
-        can_manage_tasks = _request_user_is_member(self.request) and (
-            not self.opportunity.managed or self.request.is_opportunity_pm
-        )
-        kwargs["can_manage_tasks"] = can_manage_tasks
+        kwargs["can_manage_tasks"] = _can_manage_tasks(self.request, self.opportunity)
         return kwargs
 
     def get_queryset(self):
@@ -3365,9 +3364,7 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
-        can_manage_tasks = _request_user_is_member(self.request) and (
-            not opportunity.managed or self.request.is_opportunity_pm
-        )
+        can_manage_tasks = _can_manage_tasks(self.request, opportunity)
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=opportunity)
