@@ -15,7 +15,7 @@ from django_tables2 import RequestConfig
 from waffle.testutils import override_switch
 
 from commcare_connect.connect_id_client.models import ConnectIdUser
-from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW
+from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
@@ -30,7 +30,7 @@ from commcare_connect.opportunity.models import (
     OpportunityClaimLimit,
     Payment,
     PaymentUnit,
-    Task,
+    TaskType,
     UserInvite,
     UserInviteStatus,
     VisitReviewStatus,
@@ -53,7 +53,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentFactory,
     PaymentInvoiceFactory,
     PaymentUnitFactory,
-    TaskFactory,
+    TaskTypeFactory,
     UserInviteFactory,
     UserVisitFactory,
 )
@@ -2281,10 +2281,10 @@ class TestAssignedTaskListView:
         self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task = TaskFactory(app=opportunity.deliver_app)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task=task, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2363,8 +2363,8 @@ class TestTaskTypesConfig:
             )
         assert response.status_code == HTTPStatus.FOUND
         assert response["Location"] == self._url(opp)
-        task = Task.objects.get(app=opp.deliver_app, name="My Task")
-        assert task.slug == "task_1"
+        task_type = TaskType.objects.get(app=opp.deliver_app, name="My Task")
+        assert task_type.slug == "task_1"
 
     def test_post_missing_data_rerenders_form_with_errors(
         self, client, program_manager_org_user_admin, opp, task_units
@@ -2380,23 +2380,23 @@ class TestTaskTypesConfig:
                 },
             )
         assert response.status_code == HTTPStatus.OK
-        assert not Task.objects.filter(app=opp.deliver_app).exists()
+        assert not TaskType.objects.filter(app=opp.deliver_app).exists()
         assert response.context["form"].errors
 
     # --- Edit task type tests ---
 
     @pytest.fixture
-    def task(self, opp):
-        return TaskFactory(app=opp.deliver_app)
+    def task_type(self, opp):
+        return TaskTypeFactory(app=opp.deliver_app)
 
-    def _edit_url(self, opp, task):
-        return reverse("opportunity:edit_task_type", args=(opp.organization.slug, opp.opportunity_id, task.pk))
+    def _edit_url(self, opp, task_type):
+        return reverse("opportunity:edit_task_type", args=(opp.organization.slug, opp.opportunity_id, task_type.pk))
 
-    def test_edit_task_type_get_returns_form(self, client, program_manager_org_user_admin, opp, task):
+    def test_edit_task_type_get_returns_form(self, client, program_manager_org_user_admin, opp, task_type):
         client.force_login(program_manager_org_user_admin)
-        response = client.get(self._edit_url(opp, task))
+        response = client.get(self._edit_url(opp, task_type))
         assert response.status_code == HTTPStatus.OK
-        assert response.context["form"].instance == task
+        assert response.context["form"].instance == task_type
 
     @pytest.mark.parametrize(
         "data, is_valid",
@@ -2405,22 +2405,22 @@ class TestTaskTypesConfig:
             ({"name": "", "description": "Desc"}, False),
         ],
     )
-    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task, data, is_valid):
+    def test_edit_task_type_post(self, client, program_manager_org_user_admin, opp, task_type, data, is_valid):
         client.force_login(program_manager_org_user_admin)
-        response = client.post(self._edit_url(opp, task), data=data)
+        response = client.post(self._edit_url(opp, task_type), data=data)
         assert response.status_code == HTTPStatus.OK
         if is_valid:
             assert response["HX-Redirect"] == self._url(opp)
-            task.refresh_from_db()
-            assert task.name == data["name"]
-            assert task.description == data["description"]
+            task_type.refresh_from_db()
+            assert task_type.name == data["name"]
+            assert task_type.description == data["description"]
         else:
             assert "HX-Redirect" not in response
             assert response.context["form"].errors
 
-    def test_edit_task_type_requires_org_membership(self, client, user, opp, task):
+    def test_edit_task_type_requires_org_membership(self, client, user, opp, task_type):
         client.force_login(user)
-        response = client.get(self._edit_url(opp, task))
+        response = client.get(self._edit_url(opp, task_type))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_managed_opp_requires_pm_role(
@@ -2428,26 +2428,26 @@ class TestTaskTypesConfig:
     ):
         program = ProgramFactory(organization=program_manager_org)
         managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
-        task = TaskFactory(app=managed_opp.deliver_app)
-        url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task.pk))
+        task_type = TaskTypeFactory(app=managed_opp.deliver_app)
+        url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task_type.pk))
         client.force_login(org_user_admin)
         response = client.get(url)
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     def test_edit_task_type_scoped_to_opportunity_app(self, client, program_manager_org_user_admin, opp):
-        other_task = TaskFactory()  # different app
+        other_task_type = TaskTypeFactory()  # different app
         client.force_login(program_manager_org_user_admin)
-        response = client.get(self._edit_url(opp, other_task))
+        response = client.get(self._edit_url(opp, other_task_type))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
 
 @pytest.mark.django_db
 class TestTaskTable:
     def test_edit_button_renders_htmx_attributes(self, rf, opportunity, organization):
-        task = TaskFactory(app=opportunity.deliver_app)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app)
         request = rf.get("/")
         table = TaskTable(
-            Task.objects.filter(app=opportunity.deliver_app),
+            TaskType.objects.filter(app=opportunity.deliver_app),
             org_slug=organization.slug,
             opp_id=opportunity.opportunity_id,
         )
@@ -2455,7 +2455,7 @@ class TestTaskTable:
         table.context = Context({"table": table})
         html = table.rows[0].get_cell("actions")
         expected_url = reverse(
-            "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task.pk)
+            "opportunity:edit_task_type", args=(organization.slug, opportunity.opportunity_id, task_type.pk)
         )
         assert f'hx-get="{expected_url}"' in html
         assert 'hx-target="#edit-task-form"' in html
@@ -2495,6 +2495,26 @@ class TestWorkerTasksView:
 
 
 @pytest.mark.django_db
+class TestWorkerCompletedTaskTableView:
+    def _url(self, organization, opportunity):
+        return reverse("opportunity:user_tasks_table", args=(organization.slug, opportunity.opportunity_id))
+
+    @override_switch(WORKER_VISITS_TASKS, active=True)
+    def test_filters_tasks_by_user(self, client, organization, opportunity, org_user_member):
+        client.force_login(org_user_member)
+        access1 = OpportunityAccessFactory(opportunity=opportunity)
+        access2 = OpportunityAccessFactory(opportunity=opportunity)
+        task1 = AssignedTaskFactory(opportunity_access=access1)
+        AssignedTaskFactory(opportunity_access=access2)
+
+        response = client.get(self._url(organization, opportunity), {"user": access1.user.user_id})
+
+        assert response.status_code == HTTPStatus.OK
+        table = response.context["table"]
+        assert list(table.data.data.values_list("pk", flat=True)) == [task1.pk]
+
+
+@pytest.mark.django_db
 class TestEditAssignedTask:
     @pytest.fixture
     def opp(self, organization):
@@ -2505,7 +2525,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=opp, user=user)
         return AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskFactory(app=opp.deliver_app),
+            task_type=TaskTypeFactory(app=opp.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
             due_date=date.today() + timedelta(days=7),
         )
@@ -2555,7 +2575,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=opp, user=user)
         completed_task = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskFactory(app=opp.deliver_app),
+            task_type=TaskTypeFactory(app=opp.deliver_app),
             status=AssignedTaskStatus.COMPLETED,
         )
         client.force_login(org_user_member)
@@ -2573,7 +2593,7 @@ class TestEditAssignedTask:
         access = OpportunityAccessFactory(opportunity=managed_opp)
         task = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskFactory(app=managed_opp.deliver_app),
+            task_type=TaskTypeFactory(app=managed_opp.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
         )
         url = reverse(
@@ -2596,7 +2616,7 @@ class TestCreateTask:
 
     def test_create_task_success(self, client, org_user_member, opportunity, access):
         client.force_login(org_user_member)
-        task = TaskFactory(app=opportunity.deliver_app)
+        task = TaskTypeFactory(app=opportunity.deliver_app)
         due_date = date.today() + timedelta(days=7)
         response = client.post(
             self._url(opportunity),
@@ -2642,7 +2662,7 @@ class TestDeleteTasks:
         return AssignedTaskFactory.create_batch(
             3,
             opportunity_access=access,
-            task=TaskFactory(app=opportunity.deliver_app),
+            task_type=TaskTypeFactory(app=opportunity.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
         )
 
@@ -2664,12 +2684,12 @@ class TestDeleteTasks:
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskFactory(app=opportunity.deliver_app),
+            task_type=TaskTypeFactory(app=opportunity.deliver_app),
             status=AssignedTaskStatus.COMPLETED,
         )
         assigned = AssignedTaskFactory(
             opportunity_access=access,
-            task=TaskFactory(app=opportunity.deliver_app),
+            task_type=TaskTypeFactory(app=opportunity.deliver_app),
             status=AssignedTaskStatus.ASSIGNED,
         )
         client.force_login(org_user_member)
@@ -2702,7 +2722,7 @@ class TestDeleteTasks:
         other_access = OpportunityAccessFactory(opportunity=other_opp)
         other_task = AssignedTaskFactory(
             opportunity_access=other_access,
-            task=TaskFactory(app=other_opp.deliver_app),
+            task_type=TaskTypeFactory(app=other_opp.deliver_app),
         )
         client.force_login(org_user_member)
         response = client.post(self._url(opportunity), data={"task_ids": [other_task.pk]})
