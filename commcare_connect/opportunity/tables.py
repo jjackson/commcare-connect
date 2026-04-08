@@ -1737,7 +1737,7 @@ class InvoiceLineItemsTable(tables.Table):
     total_amount_usd = tables.Column(
         verbose_name=header_with_tooltip(
             "Total Amount (USD)",
-            "Approved count × (payment unit amount ÷ exchange rate at time of approval)  "
+            "Approved count × (payment unit amount ÷ exchange rate at time of approval) "
             "rounded to 2 decimals for each delivery",
         ),
     )
