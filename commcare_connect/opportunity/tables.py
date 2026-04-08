@@ -40,6 +40,7 @@ from commcare_connect.utils.tables import (
     IndexColumn,
     OrgContextTable,
     merge_attrs,
+    select_column,
 )
 
 
@@ -1780,6 +1781,13 @@ class InvoiceDeliveriesTable(tables.Table):
 
 
 class AssignedTaskListTable(OpportunityContextTable):
+    select = select_column(
+        td_extra={
+            "@change": "updateSelectAll()",
+            # return None instead of False to skip the attribute.
+            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
+        },
+    )
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1802,6 +1810,7 @@ class AssignedTaskListTable(OpportunityContextTable):
         model = AssignedTask
         fields = ()
         sequence = (
+            "select",
             "assigned_task_id",
             "connect_worker",
             "status",
