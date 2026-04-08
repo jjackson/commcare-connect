@@ -1261,6 +1261,51 @@ class WorkerPaymentsTable(tables.Table):
         )
 
 
+class WorkerWorkAreaTable(OrgContextTable):
+    index = IndexColumn()
+    user = UserInfoColumn()
+    last_active = DMYTColumn(verbose_name=gettext_lazy("Last Active"))
+    assigned_buildings = tables.Column(
+        verbose_name=gettext_lazy("Assigned Buildings"),
+        footer=lambda table: intcomma(sum(x.assigned_buildings or 0 for x in table.data)),
+    )
+    assigned_visits = tables.Column(
+        verbose_name=gettext_lazy("Assigned Visits"),
+        footer=lambda table: intcomma(sum(x.assigned_visits or 0 for x in table.data)),
+    )
+    assigned_work_areas = tables.Column(
+        verbose_name=gettext_lazy("Assigned Work Areas"),
+        footer=lambda table: intcomma(sum(x.assigned_work_areas or 0 for x in table.data)),
+    )
+    assigned_work_area_groups = tables.Column(
+        verbose_name=gettext_lazy("Assigned Work Area Groups"),
+        footer=lambda table: intcomma(sum(x.assigned_work_area_groups or 0 for x in table.data)),
+    )
+    visits_done = tables.Column(
+        verbose_name=gettext_lazy("Visits Done"),
+        footer=lambda table: intcomma(sum(x.visits_done or 0 for x in table.data)),
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.use_view_url = False
+        super().__init__(*args, **kwargs)
+
+    class Meta:
+        model = OpportunityAccess
+        fields = ("user",)
+        sequence = (
+            "index",
+            "user",
+            "last_active",
+            "assigned_buildings",
+            "assigned_visits",
+            "assigned_work_areas",
+            "assigned_work_area_groups",
+            "visits_done",
+        )
+        order_by = ("-last_active",)
+
+
 class GroupedByWorkerMixin:
     """Mixin for tables that show multiple rows per worker, hiding worker-level
     columns on sub-rows. Subclasses must call `run_after_every_row(record)`
