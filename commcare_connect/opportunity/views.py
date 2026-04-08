@@ -2114,6 +2114,13 @@ def _can_manage_tasks(request, opportunity):
     return _request_user_is_member(request) and (not opportunity.managed or request.is_opportunity_pm)
 
 
+def _task_redirect_url(request, org_slug, opp_id):
+    user_id = request.GET.get("user", "")
+    if request.GET.get("next") == "worker_tasks" and user_id:
+        return reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
+    return reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+
+
 class UserTasksView(WorkerPageView):
     template_name = "opportunity/user_tasks.html"
     page_title = gettext_lazy("Tasks")
@@ -3443,11 +3450,7 @@ def create_task(request, org_slug, opp_id):
         assigned_by=request.user,
     )
     messages.success(request, _("Task created successfully."))
-    if request.GET.get("next") == "worker_tasks":
-        user_id = request.GET.get("user", "")
-        redirect_url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
-    else:
-        redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    redirect_url = _task_redirect_url(request, org_slug, opp_id)
     return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
@@ -3475,9 +3478,5 @@ def delete_tasks(request, org_slug, opp_id):
     if deleted_count:
         messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
 
-    if request.GET.get("next") == "worker_tasks":
-        user_id = request.GET.get("user", "")
-        redirect_url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
-    else:
-        redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    redirect_url = _task_redirect_url(request, org_slug, opp_id)
     return HttpResponse(headers={"HX-Redirect": redirect_url})
