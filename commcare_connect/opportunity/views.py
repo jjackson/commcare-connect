@@ -57,7 +57,9 @@ from geopy import distance
 from waffle import switch_is_active
 
 from commcare_connect.connect_id_client import fetch_users
+from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
+from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
@@ -100,6 +102,7 @@ from commcare_connect.opportunity.helpers import (
     get_worker_learn_table_data,
     get_worker_table_data,
     get_worker_tasks_base_queryset,
+    get_worker_work_area_table_data,
 )
 from commcare_connect.opportunity.models import (
     AssignedTask,
@@ -153,6 +156,7 @@ from commcare_connect.opportunity.tables import (
     WorkerStatusTable,
     WorkerTasksTable,
     WorkerVisitTable,
+    WorkerWorkAreaTable,
     header_with_tooltip,
 )
 from commcare_connect.opportunity.tasks import (
@@ -2554,6 +2558,10 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
 
     def get(self, request, org_slug, opp_id):
         opportunity = self.get_opportunity()
+        if is_flag_active(MICROPLANNING, opportunity):
+            self.tabs = self.tabs + [
+                {"key": "work_areas", "label": "Work Area Assignments", "url_name": "opportunity:worker_work_areas"}
+            ]
         context = self.get_context_data(opportunity, org_slug)
         context.update(self.get_extra_context(opportunity, org_slug))
         return render(
@@ -2721,6 +2729,22 @@ class WorkerTaskView(BaseWorkerListView, FilterMixin):
     def get_table(self, opportunity, org_slug):
         data = self._get_filter().qs
         table = WorkerTasksTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
+        RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
+        return table
+
+
+class WorkerWorkAreaView(BaseWorkerListView):
+    hx_template_name = "opportunity/worker_list_work_areas.html"
+    active_tab = "work_areas"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not is_flag_active(MICROPLANNING, self.get_opportunity()):
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_table(self, opportunity, org_slug):
+        data = get_worker_work_area_table_data(opportunity)
+        table = WorkerWorkAreaTable(data, org_slug=org_slug)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
 
