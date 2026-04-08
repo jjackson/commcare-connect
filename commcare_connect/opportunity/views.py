@@ -2501,11 +2501,11 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
     hx_template_name = "opportunity/workers.html"
     active_tab = "workers"
     tabs = [
-        {"key": "workers", "label": "Connect Workers", "url_name": "opportunity:worker_list"},
-        {"key": "learn", "label": "Learn", "url_name": "opportunity:worker_learn"},
-        {"key": "deliver", "label": "Deliver", "url_name": "opportunity:worker_deliver"},
-        {"key": "payments", "label": "Payments", "url_name": "opportunity:worker_payments"},
-        {"key": "tasks", "label": "Tasks", "url_name": "opportunity:worker_tasks"},
+        {"key": "workers", "label": gettext_lazy("Connect Workers"), "url_name": "opportunity:worker_list"},
+        {"key": "learn", "label": gettext_lazy("Learn"), "url_name": "opportunity:worker_learn"},
+        {"key": "deliver", "label": gettext_lazy("Deliver"), "url_name": "opportunity:worker_deliver"},
+        {"key": "payments", "label": gettext_lazy("Payments"), "url_name": "opportunity:worker_payments"},
+        {"key": "tasks", "label": gettext_lazy("Tasks"), "url_name": "opportunity:worker_tasks"},
     ]
 
     def _is_navigating_between_tabs(self, org_slug, opportunity):
@@ -2553,14 +2553,18 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
         workers_count = (
             UserInvite.objects.filter(opportunity=opportunity).exclude(status=UserInviteStatus.not_found).count()
         )
-        tabs_with_urls[0]["label"] = f"Connect Workers ({workers_count})"
+        tabs_with_urls[0]["label"] = _("Connect Workers") + f" ({workers_count})"
         return tabs_with_urls
 
     def get(self, request, org_slug, opp_id):
         opportunity = self.get_opportunity()
         if is_flag_active(MICROPLANNING, opportunity):
             self.tabs = self.tabs + [
-                {"key": "work_areas", "label": "Work Area Assignments", "url_name": "opportunity:worker_work_areas"}
+                {
+                    "key": "work_areas",
+                    "label": gettext_lazy("Work Area Assignments"),
+                    "url_name": "opportunity:worker_work_areas",
+                }
             ]
         context = self.get_context_data(opportunity, org_slug)
         context.update(self.get_extra_context(opportunity, org_slug))
