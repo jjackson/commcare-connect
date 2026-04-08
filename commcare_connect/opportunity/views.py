@@ -2114,6 +2114,20 @@ class UserTasksView(WorkerPageView):
     template_name = "opportunity/user_tasks.html"
     page_title = gettext_lazy("Tasks")
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        can_manage_tasks = (
+            not self.opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        )
+        context["can_manage_tasks"] = can_manage_tasks
+        if can_manage_tasks:
+            context["create_task_form"] = CreateTaskForm(opportunity=self.opportunity, access=self.opportunity_access)
+            context["create_task_url"] = (
+                reverse("opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id))
+                + f"?next=worker_tasks&user={self.opportunity_access.user.user_id}"
+            )
+        return context
+
 
 class WorkerTableView(OrganizationUserMixin, OpportunityObjectMixin, SingleTableView):
     redirect_url_name = None  # subclasses must set this to the parent page URL name
@@ -2144,6 +2158,10 @@ class WorkerCompletedTaskTableView(WorkerTableView):
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["organization"] = self.request.org
+        can_manage_tasks = (
+            not self.opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        )
+        kwargs["can_manage_tasks"] = can_manage_tasks
         return kwargs
 
     def get_queryset(self):
@@ -3347,8 +3365,8 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
-        can_manage_tasks = (
-            not opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        can_manage_tasks = _request_user_is_member(self.request) and (
+            not opportunity.managed or self.request.is_opportunity_pm
         )
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
@@ -3399,7 +3417,12 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 @managed_opportunity_pm_required
 def create_task(request, org_slug, opp_id):
     opportunity = request.opportunity
-    form = CreateTaskForm(request.POST, opportunity=opportunity)
+    access = None
+    if request.GET.get("next") == "worker_tasks":
+        user_id = request.GET.get("user")
+        if user_id:
+            access = OpportunityAccess.objects.filter(opportunity=opportunity, user__user_id=user_id).first()
+    form = CreateTaskForm(request.POST, opportunity=opportunity, access=access)
     if not form.is_valid():
         return render(
             request,
@@ -3407,7 +3430,7 @@ def create_task(request, org_slug, opp_id):
             {
                 "form": form,
                 "modal_name": "showCreateTaskModal",
-                "create_task_url": request.path,
+                "create_task_url": request.get_full_path(),
             },
         )
 
@@ -3423,7 +3446,11 @@ def create_task(request, org_slug, opp_id):
         assigned_by=request.user,
     )
     messages.success(request, _("Task created successfully."))
-    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    if request.GET.get("next") == "worker_tasks":
+        user_id = request.GET.get("user", "")
+        redirect_url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
+    else:
+        redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
     return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
@@ -3432,7 +3459,6 @@ def create_task(request, org_slug, opp_id):
 @opportunity_required
 @managed_opportunity_pm_required
 def delete_tasks(request, org_slug, opp_id):
-    task_ids = request.POST.getlist("task_ids")
     try:
         task_ids = [int(tid) for tid in request.POST.getlist("task_ids")]
         if not task_ids:
@@ -3452,5 +3478,9 @@ def delete_tasks(request, org_slug, opp_id):
     if deleted_count:
         messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
 
-    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    if request.GET.get("next") == "worker_tasks":
+        user_id = request.GET.get("user", "")
+        redirect_url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
+    else:
+        redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
     return HttpResponse(headers={"HX-Redirect": redirect_url})
