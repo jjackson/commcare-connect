@@ -1780,14 +1780,15 @@ class InvoiceDeliveriesTable(tables.Table):
         )
 
 
+_task_select_td_extra = {
+    "@change": "updateSelectAll()",
+    # return None instead of False to skip the attribute.
+    "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
+}
+
+
 class AssignedTaskListTable(OpportunityContextTable):
-    select = select_column(
-        td_extra={
-            "@change": "updateSelectAll()",
-            # return None instead of False to skip the attribute.
-            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
-        },
-    )
+    select = select_column(td_extra=_task_select_td_extra)
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1846,12 +1847,7 @@ class AssignedTaskListTable(OpportunityContextTable):
 class WorkerCompletedTaskTable(tables.Table):
     use_view_url = True
 
-    select = select_column(
-        td_extra={
-            "@change": "updateSelectAll()",
-            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
-        },
-    )
+    select = select_column(td_extra=_task_select_td_extra)
     task_type = tables.Column(verbose_name=_("Task Type"), accessor="task", orderable=False)
     assigned_by = tables.Column(
         verbose_name=_("Assigned By"),

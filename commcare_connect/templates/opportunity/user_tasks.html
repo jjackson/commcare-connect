@@ -23,7 +23,7 @@
       {% if can_manage_tasks %}
       <div class="flex gap-4 items-center justify-start mt-4">
         <form x-ref="deleteTasksForm"
-          hx-post="{% url 'opportunity:delete_tasks' org_slug=request.org.slug opp_id=opportunity.opportunity_id %}?next=worker_tasks&user={{ opportunity_access.user.user_id }}"
+          hx-post="{{ delete_tasks_url }}"
           hx-trigger="submit" class="hidden">
           {% csrf_token %}
           <template x-for="id in selected">

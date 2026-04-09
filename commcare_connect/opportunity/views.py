@@ -216,6 +216,7 @@ from commcare_connect.utils.tables import (
 )
 
 EXPORT_ROW_LIMIT = 10_000
+_NEXT_WORKER_TASKS = "worker_tasks"
 
 
 def get_opportunity_or_404(pk, org_slug):
@@ -2116,7 +2117,7 @@ def _can_manage_tasks(request, opportunity):
 
 def _task_redirect_url(request, org_slug, opp_id):
     user_id = request.GET.get("user", "")
-    if request.GET.get("next") == "worker_tasks" and user_id:
+    if request.GET.get("next") == _NEXT_WORKER_TASKS and user_id:
         return reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
     return reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
 
@@ -2131,9 +2132,14 @@ class UserTasksView(WorkerPageView):
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=self.opportunity, access=self.opportunity_access)
+            query_suffix = f"?next={_NEXT_WORKER_TASKS}&user={self.opportunity_access.user.user_id}"
             context["create_task_url"] = (
                 reverse("opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id))
-                + f"?next=worker_tasks&user={self.opportunity_access.user.user_id}"
+                + query_suffix
+            )
+            context["delete_tasks_url"] = (
+                reverse("opportunity:delete_tasks", args=(self.request.org.slug, self.opportunity.opportunity_id))
+                + query_suffix
             )
         return context
 
@@ -3390,7 +3396,7 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 
     def get_object(self, queryset=None):
         return get_object_or_404(
-            self.model,
+            self.model.objects.select_related("task_type"),
             pk=self.kwargs["pk"],
             opportunity_access__opportunity=self.get_opportunity(),
             status=AssignedTaskStatus.ASSIGNED,
@@ -3429,7 +3435,7 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 def create_task(request, org_slug, opp_id):
     opportunity = request.opportunity
     access = None
-    if request.GET.get("next") == "worker_tasks":
+    if request.GET.get("next") == _NEXT_WORKER_TASKS:
         user_id = request.GET.get("user")
         if user_id:
             access = OpportunityAccess.objects.filter(opportunity=opportunity, user__user_id=user_id).first()
