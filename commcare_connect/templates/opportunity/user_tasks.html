@@ -12,14 +12,14 @@
        editTaskError: false,
        ...selectableTable()
      }"
-     @reload-table.camel.window="showEditTaskModal = false; editTaskError = false">
+  >
   {% include "components/worker_page/worker_profile_kpi.html" %}
   {% include 'components/worker_page/visit_task_tabs.html' %}
   <div class="w-full grid grid-cols-10 gap-2">
     <div class="col-span-6" hx-indicator="#loading-spinner">
       <div
         hx-get="{% url 'opportunity:user_tasks_table' request.org.slug opportunity.opportunity_id %}{% querystring %}"
-        hx-trigger="load, reloadTable from:body" hx-swap="outerHTML"></div>
+        hx-trigger="load" hx-swap="outerHTML"></div>
       {% if can_manage_tasks %}
       <div class="flex gap-4 items-center justify-start mt-4">
         <form x-ref="deleteTasksForm"

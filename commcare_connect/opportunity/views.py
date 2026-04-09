@@ -3405,7 +3405,6 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
         return context
 
     def form_valid(self, form):
-        response = HttpResponse(status=204)
         if form.has_changed():
             task = form.save(commit=False)
             reason = form.cleaned_data.get("reason", "")
@@ -3415,8 +3414,12 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
                 user_email=self.request.user.email,
             ):
                 task.save(update_fields=["due_date"])
-            response["HX-Trigger"] = "reloadTable"
-        return response
+            messages.success(self.request, _("Task updated successfully."))
+        redirect_url = self.request.headers.get(
+            "HX-Current-URL",
+            _task_redirect_url(self.request, self.kwargs["org_slug"], self.kwargs["opp_id"]),
+        )
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 @require_POST

@@ -71,7 +71,6 @@
 
         <div id="task-list-table" class="bg-white rounded-lg shadow-xs p-4"
              hx-get="{{ request.get_full_path }}"
-             hx-trigger="reloadTable from:body"
              hx-select="#task-list-table"
              hx-swap="outerHTML">
             {% if can_manage_tasks %}

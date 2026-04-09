@@ -2556,8 +2556,8 @@ class TestEditAssignedTask:
             self._edit_url(opp, assigned_task),
             data={"due_date": future_date.isoformat(), "reason": "Extended deadline"},
         )
-        assert response.status_code == HTTPStatus.NO_CONTENT
-        assert response["HX-Trigger"] == "reloadTable"
+        assert response.status_code == HTTPStatus.OK
+        assert "HX-Redirect" in response
         assigned_task.refresh_from_db()
         assert assigned_task.due_date == future_date
 
