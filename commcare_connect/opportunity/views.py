@@ -2118,7 +2118,8 @@ def _can_manage_tasks(request, opportunity):
 def _task_redirect_url(request, org_slug, opp_id):
     user_id = request.GET.get("user", "")
     if request.GET.get("next") == _NEXT_WORKER_TASKS and user_id:
-        return reverse("opportunity:user_tasks_list", args=(org_slug, opp_id)) + f"?user={user_id}"
+        url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id))
+        return f"{url}?{urlencode({'user': user_id})}"
     return reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
 
 
@@ -2132,15 +2133,19 @@ class UserTasksView(WorkerPageView):
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=self.opportunity, access=self.opportunity_access)
-            query_suffix = f"?next={_NEXT_WORKER_TASKS}&user={self.opportunity_access.user.user_id}"
-            context["create_task_url"] = (
-                reverse("opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id))
-                + query_suffix
+            create_url = reverse(
+                "opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id)
             )
-            context["delete_tasks_url"] = (
-                reverse("opportunity:delete_tasks", args=(self.request.org.slug, self.opportunity.opportunity_id))
-                + query_suffix
+            context[
+                "create_task_url"
+            ] = f"{create_url}?{urlencode({'next': 'worker_tasks', 'user': self.opportunity_access.user.user_id})}"
+
+            delete_url = reverse(
+                "opportunity:delete_tasks", args=(self.request.org.slug, self.opportunity.opportunity_id)
             )
+            context[
+                "delete_tasks_url"
+            ] = f"{delete_url}?{urlencode({'next': 'worker_tasks', 'user': self.opportunity_access.user.user_id})}"
         return context
 
 
