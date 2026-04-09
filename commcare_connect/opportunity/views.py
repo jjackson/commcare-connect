@@ -3399,6 +3399,9 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["hx_post_url"] = self.request.path
+        task = self.object
+        context["task_type_name"] = task.task_type.name
+        context["current_due_date"] = task.due_date.isoformat()
         return context
 
     def form_valid(self, form):

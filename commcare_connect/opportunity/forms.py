@@ -2038,6 +2038,7 @@ class EditAssignedTaskForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["due_date"].label = _("New End Date")
         self.fields["due_date"].widget.attrs["min"] = datetime.date.today().isoformat()
         self.helper = FormHelper(self)
         self.helper.form_tag = False
