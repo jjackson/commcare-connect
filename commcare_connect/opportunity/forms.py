@@ -2033,7 +2033,7 @@ class EditAssignedTaskForm(forms.ModelForm):
         model = AssignedTask
         fields = ["due_date"]
         widgets = {
-            "due_date": forms.DateInput(attrs={"type": "date"}),
+            "due_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
