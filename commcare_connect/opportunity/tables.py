@@ -936,27 +936,7 @@ class UserVisitVerificationTable(WorkerVisitTable):
             """,
     )
     icons = columns.Column(verbose_name="", empty_values=("",), orderable=False)
-    select = tables.CheckBoxColumn(
-        accessor="pk",
-        attrs={
-            "th__input": {
-                "@click": "toggleSelectAll()",
-                "x-model": "selectAll",
-                "name": "select_all",
-                "type": "checkbox",
-                "class": "checkbox ga-all-visit-checkbox",
-            },
-            "td__input": {
-                "x-model": "selected",
-                "@click.stop": "",  # used to stop click propagation
-                "name": "row_select",
-                "type": "checkbox",
-                "class": "checkbox",
-                "value": lambda record: record.pk,
-                "id": lambda record: f"row_checkbox_{record.pk}",
-            },
-        },
-    )
+    select = select_column(th_extra={"class": "checkbox ga-all-visit-checkbox"})
 
     class Meta(WorkerVisitTable.Meta):
         sequence = (
