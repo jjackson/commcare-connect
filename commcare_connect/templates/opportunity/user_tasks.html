@@ -13,6 +13,16 @@
        ...selectableTable()
      }"
   >
+  <div x-show="editTaskError" x-cloak role="alert"
+    class="flex items-center justify-between p-4 rounded-lg border-[0.5px] bg-message-error text-message-error-text border-message-error-border">
+    <div class="flex items-center gap-2">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <span>{% trans "Failed to load task. Please try again." %}</span>
+    </div>
+    <button type="button" class="ml-4 text-xl font-light hover:font-normal focus:outline-none" aria-label="{% trans "Close" %}"
+      @click="editTaskError = false">&times;</button>
+  </div>
+
   {% include "components/worker_page/worker_profile_kpi.html" %}
   {% include 'components/worker_page/visit_task_tabs.html' %}
   <div class="w-full grid grid-cols-10 gap-2">
