@@ -10,6 +10,8 @@
            showEditTaskModal: false,
            editTaskError: false,
            editTaskSuccess: false,
+           showCreateTaskModal: false,
+           ...selectableTable()
          }"
          @reload-table.camel.window="showEditTaskModal = false; editTaskError = false; editTaskSuccess = true">
         {% include 'components/breadcrumbs.html' with path=path %}
@@ -72,9 +74,42 @@
              hx-trigger="reloadTable from:body"
              hx-select="#task-list-table"
              hx-swap="outerHTML">
+            {% if can_manage_tasks %}
+            <div class="flex gap-x-4 items-center justify-end mb-4">
+                <button type="button" class="button-icon shadow-sm" @click="showCreateTaskModal = true"
+                    x-tooltip.raw="{% trans 'Create Task' %}">
+                    <i class="fa-solid fa-plus text-brand-deep-purple"></i>
+                </button>
+                <form x-ref="deleteTasksForm"
+                    hx-post="{% url 'opportunity:delete_tasks' org_slug=request.org.slug opp_id=opportunity.opportunity_id %}"
+                    hx-trigger="submit" class="hidden">
+                    {% csrf_token %}
+                    <template x-for="id in selected">
+                        <input type="hidden" name="task_ids" :value="id">
+                    </template>
+                </form>
+                <button type="button" class="button-icon hover:bg-red-600 hover:text-white shadow-sm" @click="$store.confirmModal.show({
+                                            title: '{% trans "Delete Tasks" %}',
+                                            message: `{% blocktrans %}Are you sure you want to delete __count__ task(s)? This action cannot be undone.{% endblocktrans %}`.replace('__count__', selected.length),
+                                            confirmBtnText: '{% trans "Delete" %}',
+                                            confirmBtnRed: true,
+                                            formRef: $refs.deleteTasksForm,
+                                        })" :disabled="selected.length === 0" x-tooltip.raw="{% trans 'Delete Task(s)' %}">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+            {% endif %}
             {% render_table table %}
         </div>
 
+        {% if can_manage_tasks %}
+            {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+        {% endif %}
+        {% include 'components/confirm_modal.html' %}
         {% include "opportunity/edit_assigned_task_modal.html" %}
     </div>
+{% endblock %}
+
+{% block inline_javascript %}
+{% include "components/tables/selectable_table.html" %}
 {% endblock %}

@@ -72,6 +72,7 @@ from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
     AddTaskTypeForm,
     AutomatedPaymentInvoiceForm,
+    CreateTaskForm,
     DeliverUnitFlagsForm,
     EditAssignedTaskForm,
     EditTaskTypeForm,
@@ -189,6 +190,8 @@ from commcare_connect.organization.decorators import (
     OrganizationProgramManagerMixin,
     OrganizationUserMemberRoleMixin,
     OrganizationUserMixin,
+    _request_user_is_member,
+    managed_opportunity_pm_required,
     opportunity_required,
     org_admin_required,
     org_member_required,
@@ -3344,6 +3347,16 @@ class AssignedTaskListView(OpportunityObjectMixin, OrganizationUserMixin, OrgCon
             {"title": "Task List"},
         ]
 
+        can_manage_tasks = (
+            not opportunity.managed and _request_user_is_member(self.request) or self.request.is_opportunity_pm
+        )
+        context["can_manage_tasks"] = can_manage_tasks
+        if can_manage_tasks:
+            context["create_task_form"] = CreateTaskForm(opportunity=opportunity)
+            context["create_task_url"] = reverse(
+                "opportunity:create_task", args=(self.request.org.slug, opportunity.opportunity_id)
+            )
+
         return context
 
 
@@ -3378,3 +3391,66 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
                 task.save(update_fields=["due_date"])
             response["HX-Trigger"] = "reloadTable"
         return response
+
+
+@require_POST
+@org_member_required
+@opportunity_required
+@managed_opportunity_pm_required
+def create_task(request, org_slug, opp_id):
+    opportunity = request.opportunity
+    form = CreateTaskForm(request.POST, opportunity=opportunity)
+    if not form.is_valid():
+        return render(
+            request,
+            "tasks/new_task_modal.html",
+            {
+                "form": form,
+                "modal_name": "showCreateTaskModal",
+                "create_task_url": request.path,
+            },
+        )
+
+    task = form.cleaned_data["task"]
+    access = form.cleaned_data["access"]
+    due_date = form.cleaned_data["due_date"]
+
+    AssignedTask.objects.create(
+        task_type=task,
+        opportunity_access=access,
+        due_date=due_date,
+        status=AssignedTaskStatus.ASSIGNED,
+        assigned_by=request.user,
+    )
+    messages.success(request, _("Task created successfully."))
+    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})
+
+
+@require_POST
+@org_member_required
+@opportunity_required
+@managed_opportunity_pm_required
+def delete_tasks(request, org_slug, opp_id):
+    task_ids = request.POST.getlist("task_ids")
+    try:
+        task_ids = [int(tid) for tid in request.POST.getlist("task_ids")]
+        if not task_ids:
+            raise ValueError
+    except (TypeError, ValueError):
+        return HttpResponseBadRequest()
+
+    deleted_count, _info = (
+        AssignedTask.objects.filter(
+            pk__in=task_ids,
+            opportunity_access__opportunity=request.opportunity,
+        )
+        .exclude(status=AssignedTaskStatus.COMPLETED)
+        .delete()
+    )
+
+    if deleted_count:
+        messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
+
+    redirect_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
+    return HttpResponse(headers={"HX-Redirect": redirect_url})

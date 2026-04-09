@@ -40,7 +40,16 @@ from commcare_connect.utils.tables import (
     IndexColumn,
     OrgContextTable,
     merge_attrs,
+    select_column,
 )
+
+
+def header_with_tooltip(label, tooltip_text):
+    return format_html(
+        '<span x-data x-tooltip.raw="{}">{}</span>',
+        tooltip_text,
+        label,
+    )
 
 
 class OpportunityContextTable(OrgContextTable):
@@ -391,7 +400,14 @@ class PaymentInvoiceTable(OpportunityContextTable):
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Actions")
     exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
-    amount_usd = tables.Column(verbose_name="Amount (USD)")
+    amount_usd = tables.Column(
+        verbose_name=header_with_tooltip(
+            "Amount (USD)",
+            "Sum of USD amount over all line items in this invoice. Each line item is calculated as "
+            "approved count × (payment unit amount ÷ exchange rate at time of approval) rounded to 2 "
+            "decimals for each delivery",
+        ),
+    )
     status = tables.Column(verbose_name="Invoice Status")
     invoice_type = tables.Column(verbose_name="Invoice Type", accessor="service_delivery", empty_values=())
     last_status_modified_at = tables.Column(
@@ -524,16 +540,6 @@ def date_with_time_popup(table, date):
     return popup_html(
         date.strftime("%d %b, %Y"),
         date.strftime("%d %b %Y, %I:%M%p"),
-    )
-
-
-def header_with_tooltip(label, tooltip_text):
-    return mark_safe(
-        f"""
-        <span x-data x-tooltip.raw="{tooltip_text}">
-            {label}
-        </span>
-        """
     )
 
 
@@ -1756,12 +1762,15 @@ class InvoiceLineItemsTable(tables.Table):
     )
     exchange_rate = tables.Column()
     total_amount_usd = tables.Column(
-        verbose_name="Total Amount (USD)",
+        verbose_name=header_with_tooltip(
+            "Total Amount (USD)",
+            "Approved count × (payment unit amount ÷ exchange rate at time of approval) "
+            "rounded to 2 decimals for each delivery",
+        ),
     )
 
     def __init__(self, currency, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         if currency:
             self.columns["amount_per_unit"].column.verbose_name = f"Payment Unit Amount ({currency})"
             self.columns["total_amount_local"].column.verbose_name = f"Total Amount ({currency})"
@@ -1807,6 +1816,13 @@ class InvoiceDeliveriesTable(tables.Table):
 
 
 class AssignedTaskListTable(OpportunityContextTable):
+    select = select_column(
+        td_extra={
+            "@change": "updateSelectAll()",
+            # return None instead of False to skip the attribute.
+            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
+        },
+    )
     assigned_task_id = tables.Column(verbose_name=gettext_lazy("Task ID"), accessor="pk")
     connect_worker = tables.Column(verbose_name=gettext_lazy("Connect Worker"), accessor="opportunity_access__user")
     status = TaskStatusColumn(verbose_name=gettext_lazy("Status"), accessor="status")
@@ -1829,6 +1845,7 @@ class AssignedTaskListTable(OpportunityContextTable):
         model = AssignedTask
         fields = ()
         sequence = (
+            "select",
             "assigned_task_id",
             "connect_worker",
             "status",
