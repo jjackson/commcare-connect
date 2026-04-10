@@ -216,6 +216,7 @@ from commcare_connect.utils.tables import (
 )
 
 EXPORT_ROW_LIMIT = 10_000
+_NEXT_WORKER_TASKS = "worker_tasks"
 
 
 def get_opportunity_or_404(pk, org_slug):
@@ -2116,7 +2117,7 @@ def _can_manage_tasks(request, opportunity):
 
 def _task_redirect_url(request, org_slug, opp_id):
     user_id = request.GET.get("user", "")
-    if request.GET.get("next") == "worker_tasks" and user_id:
+    if request.GET.get("next") == _NEXT_WORKER_TASKS and user_id:
         url = reverse("opportunity:user_tasks_list", args=(org_slug, opp_id))
         return f"{url}?{urlencode({'user': user_id})}"
     return reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
@@ -2132,10 +2133,19 @@ class UserTasksView(WorkerPageView):
         context["can_manage_tasks"] = can_manage_tasks
         if can_manage_tasks:
             context["create_task_form"] = CreateTaskForm(opportunity=self.opportunity, access=self.opportunity_access)
-            url = reverse("opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id))
+            create_url = reverse(
+                "opportunity:create_task", args=(self.request.org.slug, self.opportunity.opportunity_id)
+            )
             context[
                 "create_task_url"
-            ] = f"{url}?{urlencode({'next': 'worker_tasks', 'user': self.opportunity_access.user.user_id})}"
+            ] = f"{create_url}?{urlencode({'next': 'worker_tasks', 'user': self.opportunity_access.user.user_id})}"
+
+            delete_url = reverse(
+                "opportunity:delete_tasks", args=(self.request.org.slug, self.opportunity.opportunity_id)
+            )
+            context[
+                "delete_tasks_url"
+            ] = f"{delete_url}?{urlencode({'next': 'worker_tasks', 'user': self.opportunity_access.user.user_id})}"
         return context
 
 
@@ -2513,6 +2523,7 @@ def user_task_details(request, org_slug, opp_id, pk):
             completed_task=completed_task,
             images=images,
             hq_link=hq_link,
+            can_manage_tasks=_can_manage_tasks(request, request.opportunity),
         ),
     )
 
@@ -3390,7 +3401,7 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 
     def get_object(self, queryset=None):
         return get_object_or_404(
-            self.model,
+            self.model.objects.select_related("task_type"),
             pk=self.kwargs["pk"],
             opportunity_access__opportunity=self.get_opportunity(),
             status=AssignedTaskStatus.ASSIGNED,
@@ -3399,10 +3410,12 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["hx_post_url"] = self.request.path
+        task = self.object
+        context["task_type_name"] = task.task_type.name
+        context["current_due_date"] = task.due_date.isoformat()
         return context
 
     def form_valid(self, form):
-        response = HttpResponse(status=204)
         if form.has_changed():
             task = form.save(commit=False)
             reason = form.cleaned_data.get("reason", "")
@@ -3412,8 +3425,12 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
                 user_email=self.request.user.email,
             ):
                 task.save(update_fields=["due_date"])
-            response["HX-Trigger"] = "reloadTable"
-        return response
+            messages.success(self.request, _("Task updated successfully."))
+        redirect_url = self.request.headers.get(
+            "HX-Current-URL",
+            _task_redirect_url(self.request, self.kwargs["org_slug"], self.kwargs["opp_id"]),
+        )
+        return HttpResponse(headers={"HX-Redirect": redirect_url})
 
 
 @require_POST
@@ -3423,7 +3440,7 @@ class EditAssignedTask(ManagedOpportunityPMRequiredMixin, OrganizationUserMember
 def create_task(request, org_slug, opp_id):
     opportunity = request.opportunity
     access = None
-    if request.GET.get("next") == "worker_tasks":
+    if request.GET.get("next") == _NEXT_WORKER_TASKS:
         user_id = request.GET.get("user")
         if user_id:
             access = OpportunityAccess.objects.filter(opportunity=opportunity, user__user_id=user_id).first()
