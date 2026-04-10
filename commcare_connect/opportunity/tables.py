@@ -844,10 +844,70 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
 
 
 class WorkerVisitTable(tables.Table):
-    date_time = columns.DateTimeColumn(verbose_name="Date", accessor="visit_date", format="d M, Y H:i")
-    entity_name = columns.Column(verbose_name="Entity Name")
-    deliver_unit = columns.Column(verbose_name="Deliver Unit", accessor="deliver_unit__name")
-    payment_unit = columns.Column(verbose_name="Payment Unit", accessor="completed_work__payment_unit__name")
+    date_time = DMYTColumn(verbose_name=gettext_lazy("Date"), accessor="visit_date")
+    entity_name = columns.Column(verbose_name=gettext_lazy("Entity Name"))
+    deliver_unit = columns.Column(verbose_name=gettext_lazy("Deliver Unit"), accessor="deliver_unit__name")
+    payment_unit = columns.Column(
+        verbose_name=gettext_lazy("Payment Unit"), accessor="completed_work__payment_unit__name"
+    )
+    last_activity = DMYTColumn(verbose_name=gettext_lazy("Last Activity"), accessor="status_modified_date")
+    status = columns.Column(verbose_name=gettext_lazy("Status"), accessor="status")
+
+    class Meta:
+        model = UserVisit
+        sequence = (
+            "date_time",
+            "entity_name",
+            "deliver_unit",
+            "payment_unit",
+            "last_activity",
+            "status",
+        )
+        fields = []
+        empty_text = gettext_lazy("No Visits for this filter.")
+        attrs = {
+            "x-data": "{selectedRow: null}",
+            "@change": "updateSelectAll()",
+        }
+        row_attrs = {
+            "hx-get": lambda record, table: reverse(
+                "opportunity:user_visit_details",
+                args=[table.organization.slug, record.opportunity.opportunity_id, record.user_visit_id],
+            ),
+            "hx-trigger": "click",
+            "hx-indicator": "#visit-loading-indicator",
+            "hx-target": "#visit-details",
+            "hx-params": "none",
+            "hx-swap": "innerHTML",
+            "@click": lambda record: f"selectedRow = {record.id}",
+            ":class": lambda record: f"selectedRow == {record.id} && 'active'",
+            "data-visit-id": lambda record: record.pk,
+            "data-visit-status": lambda record: record.status,
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.organization = kwargs.pop("organization", None)
+        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
+        super().__init__(*args, **kwargs)
+        self.use_view_url = True
+
+    def render_status(self, record):
+        status = record.status
+        if status == VisitValidationStatus.rejected:
+            badge_classes = "bg-red-100 text-red-800"
+        elif status == VisitValidationStatus.approved:
+            badge_classes = "bg-green-100 text-green-800"
+        else:
+            badge_classes = "bg-gray-100 text-gray-800"
+        return format_html(
+            '<span class="inline-flex w-[80px] items-center justify-center px-3 py-1 rounded text-xs font-medium {}">'
+            "{}</span>",
+            badge_classes,
+            record.get_status_display(),
+        )
+
+
+class UserVisitVerificationTable(WorkerVisitTable):
     flags = columns.TemplateColumn(
         verbose_name="Flags",
         orderable=False,
@@ -875,12 +935,12 @@ class WorkerVisitTable(tables.Table):
             </div>
             """,
     )
-    last_activity = columns.DateColumn(verbose_name="Last Activity", accessor="status_modified_date", format="d M, Y")
     icons = columns.Column(verbose_name="", empty_values=("",), orderable=False)
+    select = select_column(th_extra={"class": "checkbox ga-all-visit-checkbox"})
 
-    class Meta:
-        model = UserVisit
+    class Meta(WorkerVisitTable.Meta):
         sequence = (
+            "select",
             "date_time",
             "entity_name",
             "deliver_unit",
@@ -889,33 +949,11 @@ class WorkerVisitTable(tables.Table):
             "last_activity",
             "icons",
         )
-        fields = []
-        empty_text = "No Visits for this filter."
-        attrs = {
-            "x-data": "{selectedRow: null}",
-            "@change": "updateSelectAll()",
-        }
-        row_attrs = {
-            "hx-get": lambda record, table: reverse(
-                "opportunity:user_visit_details",
-                args=[table.organization.slug, record.opportunity.opportunity_id, record.user_visit_id],
-            ),
-            "hx-trigger": "click",
-            "hx-indicator": "#visit-loading-indicator",
-            "hx-target": "#visit-details",
-            "hx-params": "none",
-            "hx-swap": "innerHTML",
-            "@click": lambda record: f"selectedRow = {record.id}",
-            ":class": lambda record: f"selectedRow == {record.id} && 'active'",
-            "data-visit-id": lambda record: record.pk,
-            "data-visit-status": lambda record: record.status,
-        }
+        exclude = ("status",)
 
     def __init__(self, *args, **kwargs):
-        self.organization = kwargs.pop("organization", None)
-        self.is_opportunity_pm = kwargs.pop("is_opportunity_pm", False)
         super().__init__(*args, **kwargs)
-        self.use_view_url = True
+        self.columns["select"].column.visible = not self.is_opportunity_pm
 
     def get_icons(self, statuses):
         status_meta = {
@@ -978,37 +1016,6 @@ class WorkerVisitTable(tables.Table):
                 status.append(record.status)
 
         return self.get_icons(status)
-
-
-class UserVisitVerificationTable(WorkerVisitTable):
-    select = tables.CheckBoxColumn(
-        accessor="pk",
-        attrs={
-            "th__input": {
-                "@click": "toggleSelectAll()",
-                "x-model": "selectAll",
-                "name": "select_all",
-                "type": "checkbox",
-                "class": "checkbox ga-all-visit-checkbox",
-            },
-            "td__input": {
-                "x-model": "selected",
-                "@click.stop": "",  # used to stop click propagation
-                "name": "row_select",
-                "type": "checkbox",
-                "class": "checkbox",
-                "value": lambda record: record.pk,
-                "id": lambda record: f"row_checkbox_{record.pk}",
-            },
-        },
-    )
-
-    class Meta(WorkerVisitTable.Meta):
-        sequence = ("select",) + WorkerVisitTable.Meta.sequence
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.columns["select"].column.visible = not self.is_opportunity_pm
 
 
 class UserInfoColumn(tables.Column):
