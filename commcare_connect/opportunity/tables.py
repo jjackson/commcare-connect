@@ -1861,6 +1861,12 @@ class AssignedTaskListTable(OpportunityContextTable):
 class WorkerCompletedTaskTable(tables.Table):
     use_view_url = True
 
+    select = select_column(
+        td_extra={
+            "@change": "updateSelectAll()",
+            "disabled": lambda record: True if record.status == AssignedTaskStatus.COMPLETED else None,
+        },
+    )
     task_type = tables.Column(verbose_name=_("Task Type"), accessor="task", orderable=False)
     assigned_by = tables.Column(
         verbose_name=_("Assigned By"),
@@ -1875,7 +1881,7 @@ class WorkerCompletedTaskTable(tables.Table):
     class Meta:
         model = AssignedTask
         fields = ()
-        sequence = ("task_type", "assigned_by", "assigned_date", "due_date", "status")
+        sequence = ("select", "task_type", "assigned_by", "assigned_date", "due_date", "status")
         order_by = ("-assigned_date",)
         empty_text = gettext_lazy("No tasks have been assigned to this worker yet.")
         attrs = {"class": "w-full", "x-data": "{selectedRow: null}"}
@@ -1899,7 +1905,10 @@ class WorkerCompletedTaskTable(tables.Table):
 
     def __init__(self, *args, **kwargs):
         self.organization = kwargs.pop("organization", None)
+        self.can_manage_tasks = kwargs.pop("can_manage_tasks", False)
         super().__init__(*args, **kwargs)
+        if not self.can_manage_tasks:
+            self.columns.hide("select")
 
     def render_task_type(self, value):
         return format_html("{} ({})", value.name, value.slug)

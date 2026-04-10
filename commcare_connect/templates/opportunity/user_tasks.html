@@ -5,7 +5,11 @@
 
 {% block content %}
 {% include 'components/breadcrumbs.html' with path=path %}
-<div class="w-full space-y-4">
+<div class="w-full space-y-4"
+     x-data="{
+       showCreateTaskModal: false,
+       ...selectableTable()
+     }">
   {% include "components/worker_page/worker_profile_kpi.html" %}
   {% include 'components/worker_page/visit_task_tabs.html' %}
   <div class="w-full grid grid-cols-10 gap-2">
@@ -13,6 +17,39 @@
       <div
         hx-get="{% url 'opportunity:user_tasks_table' request.org.slug opportunity.opportunity_id %}{% querystring %}"
         hx-trigger="load" hx-swap="outerHTML"></div>
+      {% if can_manage_tasks %}
+      <div class="flex gap-4 items-center justify-start mt-4">
+        <form x-ref="deleteTasksForm"
+          hx-post="{% url 'opportunity:delete_tasks' org_slug=request.org.slug opp_id=opportunity.opportunity_id %}?next=worker_tasks&user={{ opportunity_access.user.user_id }}"
+          hx-trigger="submit" class="hidden">
+          {% csrf_token %}
+          <template x-for="id in selected">
+            <input type="hidden" name="task_ids" :value="id">
+          </template>
+        </form>
+        <button type="button" class="button button-md primary-dark" @click="showCreateTaskModal = true">
+          <i class="fa-solid fa-plus mr-2"></i>
+          {% trans "Create Task" %}
+        </button>
+        <button type="button" class="button button-md bg-red-600 hover:bg-red-700 text-white"
+          @click="$store.confirmModal.show({
+            title: '{% trans "Delete Tasks" %}',
+            message: '{% trans "Are you sure you want to delete these tasks? This action can not be undone." %}',
+            confirmBtnText: '{% trans "Delete" %}',
+            confirmBtnRed: true,
+            formRef: $refs.deleteTasksForm,
+          })"
+          :disabled="selected.length === 0">
+          <i class="fa-solid fa-trash mr-2"></i>
+          <span x-text="selected.length === 0
+            ? '{% trans "Delete Tasks" %}'
+            : selected.length === 1
+              ? '{% trans "Delete 1 Task" %}'
+              : '{% trans "Delete" %} ' + selected.length + ' {% trans "Tasks" %}'">
+          </span>
+        </button>
+      </div>
+      {% endif %}
     </div>
 
     <div class="col-span-4 relative" hx-indicator="#task-loading-indicator">
@@ -37,5 +74,14 @@
       </div>
     </div>
   </div>
+
+  {% if can_manage_tasks %}
+  {% include 'tasks/new_task_modal.html' with modal_name="showCreateTaskModal" form=create_task_form %}
+  {% include 'components/confirm_modal.html' %}
+  {% endif %}
 </div>
+{% endblock %}
+
+{% block inline_javascript %}
+{% include "components/tables/selectable_table.html" %}
 {% endblock %}
