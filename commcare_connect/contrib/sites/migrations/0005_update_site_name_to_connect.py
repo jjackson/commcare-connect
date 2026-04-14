@@ -22,6 +22,6 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             update_site_name_forward,
             update_site_name_backward,
-            {"run_on_secondary": False},
+            hints={"run_on_secondary": False},
         )
     ]
