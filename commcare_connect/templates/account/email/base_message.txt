@@ -1,7 +1,0 @@
-{% load i18n %}{% autoescape off %}{% blocktrans %}Hello from Connect!{% endblocktrans %}
-
-{% block content %}{% endblock %}
-
-{% blocktrans with site_domain=current_site.domain %}Thank you for using Connect!
-{{ site_domain }}{% endblocktrans %}
-{% endautoescape %}
