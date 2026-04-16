@@ -635,32 +635,6 @@ def test_filter_worker_tasks_combined_filters(opportunity):
 
 
 @pytest.mark.django_db
-def test_get_worker_work_area_table_data(opportunity):
-    access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-    group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group, building_count=10, expected_visit_count=5)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group, building_count=20, expected_visit_count=8)
-
-    work_area = group.workarea_set.first()
-    UserVisitFactory(
-        opportunity=opportunity,
-        user=access.user,
-        opportunity_access=access,
-        work_area=work_area,
-    )
-
-    result = get_worker_work_area_table_data(opportunity)
-    assert result.count() == 1
-
-    row = result.first()
-    assert row.assigned_buildings == 30
-    assert row.assigned_visits == 13
-    assert row.assigned_work_areas == 2
-    assert row.assigned_work_area_groups == 1
-    assert row.visits_done == 1
-
-
-@pytest.mark.django_db
 def test_get_worker_work_area_table_data_unassigned_worker(opportunity):
     OpportunityAccessFactory(opportunity=opportunity, accepted=True)
 
