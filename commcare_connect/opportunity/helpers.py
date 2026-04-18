@@ -633,6 +633,31 @@ def get_worker_tasks_base_queryset(opportunity):
     )
 
 
+def get_worker_work_area_table_data(opportunity):
+    visits_done_subquery = (
+        UserVisit.objects.filter(
+            opportunity=opportunity,
+            opportunity_access=OuterRef("pk"),
+            work_area__isnull=False,
+        )
+        .values("opportunity_access")
+        .annotate(total=Count("id"))
+        .values("total")[:1]
+    )
+
+    return (
+        OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True)
+        .select_related("user")
+        .annotate(
+            assigned_buildings=Coalesce(Sum("workareagroup__workarea__building_count"), Value(0)),
+            assigned_visits=Coalesce(Sum("workareagroup__workarea__expected_visit_count"), Value(0)),
+            assigned_work_areas=Count("workareagroup__workarea"),
+            assigned_work_area_groups=Count("workareagroup", distinct=True),
+            visits_done=Coalesce(Subquery(visits_done_subquery), Value(0), output_field=IntegerField()),
+        )
+    )
+
+
 def get_opportunity_delivery_progress(opp_id):
     today = now().replace(hour=0, minute=0, second=0, microsecond=0)
     three_days_ago = today - timedelta(days=3)
