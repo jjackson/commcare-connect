@@ -12,7 +12,7 @@ from commcare_connect.organization.views import organization_create
 from . import views
 
 urlpatterns = [
-    path("", TemplateView.as_view(template_name="pages/home.html"), name="home"),
+    path("", include("commcare_connect.prelogin.urls")),
     path("about/", TemplateView.as_view(template_name="pages/about.html"), name="about"),
     path(".well-known/assetlinks.json", views.assetlinks_json, name="assetlinks_json"),
     # Django Admin, use {% url 'admin:index' %}
