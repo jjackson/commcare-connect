@@ -233,3 +233,25 @@ class TestWorkAreaGrouper:
         assert group.building_count == 500
         work_area.refresh_from_db()
         assert work_area.work_area_group == group
+
+    def test_cluster_respects_max_work_areas(self, opportunity):
+        """4 adjacent WAs (200 buildings total) with max_work_areas=2 should split into 2 groups
+        of 2 WAs each. The building cap (default 300) does not trip — only the count cap does."""
+        work_areas = self.create_adjacent_work_areas(opportunity, ward="ward-1")
+        # create_adjacent_work_areas sets building_count=50 per WA; total = 200, well under 300.
+
+        grouper = WorkAreaGrouper(
+            opportunity_id=opportunity.id,
+            max_buildings=300,
+            max_work_areas=2,
+        )
+        grouper.cluster_work_areas()
+
+        groups = WorkAreaGroup.objects.filter(opportunity=opportunity)
+        assert groups.count() == 2
+        for group in groups:
+            assert group.workarea_set.count() <= 2
+
+        for work_area in work_areas:
+            work_area.refresh_from_db()
+            assert work_area.work_area_group is not None

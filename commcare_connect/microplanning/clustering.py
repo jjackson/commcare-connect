@@ -54,6 +54,9 @@ class WorkAreaGrouper:
         opportunity_id:  The ID of the opportunity whose work areas should be grouped
         max_buildings:   Maximum total building count allowed per work area group.
                          Default is 300.
+        max_work_areas:  Maximum number of work areas allowed per work area group.
+                         Default is 60. Either cap (max_buildings or max_work_areas)
+                         stops cluster growth — whichever trips first.
         buffer_distance: Distance in meters to consider work areas as adjacent even if
                          they don't share a boundary. Default is 100 meters. This helps
                          connect work areas that are close but separated by small gaps.
@@ -69,10 +72,12 @@ class WorkAreaGrouper:
         self,
         opportunity_id: int,
         max_buildings: int = 300,
+        max_work_areas: int = 60,
         buffer_distance: int = 100,
     ):
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
+        self.max_work_areas = max_work_areas
         self.buffer_distance = buffer_distance
         self.transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
 
@@ -90,11 +95,13 @@ class WorkAreaGrouper:
             wards[wa_data.ward].append(wa_id)
 
         logger.info(
-            "Opportunity %s: clustering %d work areas across %d wards (max_buildings=%d, buffer_distance=%d)",
+            "Opportunity %s: clustering %d work areas across %d wards "
+            "(max_buildings=%d, max_work_areas=%d, buffer_distance=%d)",
             self.opportunity_id,
             len(work_areas),
             len(wards),
             self.max_buildings,
+            self.max_work_areas,
             self.buffer_distance,
         )
 
@@ -223,7 +230,7 @@ class WorkAreaGrouper:
 
             building_count = work_areas[current].building_count
 
-            if total_buildings + building_count > self.max_buildings:
+            if total_buildings + building_count > self.max_buildings or len(cluster) + 1 > self.max_work_areas:
                 seen.discard(current)
                 continue
 
