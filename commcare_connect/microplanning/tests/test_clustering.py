@@ -250,7 +250,7 @@ class TestWorkAreaGrouper:
         groups = WorkAreaGroup.objects.filter(opportunity=opportunity)
         assert groups.count() == 2
         for group in groups:
-            assert group.workarea_set.count() <= 2
+            assert group.workarea_set.count() == 2
 
         for work_area in work_areas:
             work_area.refresh_from_db()

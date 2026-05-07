@@ -230,7 +230,7 @@ class WorkAreaGrouper:
 
             building_count = work_areas[current].building_count
 
-            if total_buildings + building_count > self.max_buildings or len(cluster) + 1 > self.max_work_areas:
+            if total_buildings + building_count > self.max_buildings or len(cluster) >= self.max_work_areas:
                 seen.discard(current)
                 continue
 
