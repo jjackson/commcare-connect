@@ -61,4 +61,5 @@ urlpatterns = [
         views.save_assignment,
         name="save_assignment",
     ),
+    path("<slug:opp_id>/exclude_work_areas/", views.exclude_work_areas, name="exclude_work_areas"),
 ]
