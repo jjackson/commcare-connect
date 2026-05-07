@@ -379,8 +379,10 @@ def _download_attachments(api_key, domain: str, xform_id: str, attachments: dict
             blob_meta, created = BlobMeta.objects.get_or_create(
                 name=name,
                 parent_id=xform_id,
-                content_length=blob["length"],
-                content_type=blob["content_type"],
+                defaults={
+                    "content_length": blob["length"],
+                    "content_type": blob["content_type"],
+                },
             )
             if not created:
                 # attachment already exists
