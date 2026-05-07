@@ -1153,9 +1153,12 @@ def test_work_area_update_unresolvable_id(
 @pytest.mark.django_db
 def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_connect_link, api_client, opportunity):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    work_area_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+    work_area_group = WorkAreaGroupFactory(opportunity=opportunity)
     work_area = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=work_area_group, status=WorkAreaStatus.NOT_STARTED
+        opportunity=opportunity,
+        work_area_group=work_area_group,
+        opportunity_access=access,
+        status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
     today = datetime.date.today()
@@ -1193,9 +1196,12 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
 @pytest.mark.django_db(transaction=True)
 def test_work_area_update_attachment_download_queued(mobile_user_with_connect_link, api_client, opportunity):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    work_area_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+    work_area_group = WorkAreaGroupFactory(opportunity=opportunity)
     work_area = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=work_area_group, status=WorkAreaStatus.NOT_STARTED
+        opportunity=opportunity,
+        work_area_group=work_area_group,
+        opportunity_access=access,
+        status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
     stub = WorkAreaUpdateStubFactory(work_area_id=work_area.case_id, status="request_for_inaccessible")
@@ -1229,9 +1235,12 @@ def test_work_area_update_invalid_reason(
     opportunity,
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    work_area_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+    work_area_group = WorkAreaGroupFactory(opportunity=opportunity)
     work_area = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=work_area_group, status=WorkAreaStatus.NOT_STARTED
+        opportunity=opportunity,
+        work_area_group=work_area_group,
+        opportunity_access=access,
+        status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
     stub = WorkAreaUpdateStubFactory(work_area_id=work_area.case_id, status="request_for_inaccessible", **stub_kwargs)
@@ -1270,9 +1279,12 @@ def test_work_area_update_invalid_date_of_visit(
     opportunity,
 ):
     access = OpportunityAccess.objects.get(user=mobile_user_with_connect_link, opportunity=opportunity)
-    work_area_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+    work_area_group = WorkAreaGroupFactory(opportunity=opportunity)
     work_area = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=work_area_group, status=WorkAreaStatus.NOT_STARTED
+        opportunity=opportunity,
+        work_area_group=work_area_group,
+        opportunity_access=access,
+        status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
     stub = WorkAreaUpdateStubFactory(work_area_id=work_area.case_id, status="request_for_inaccessible", **stub_kwargs)

@@ -944,7 +944,7 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
         assert "inaccessibilityReviewed" in hx_trigger
         assert hx_trigger["inaccessibilityReviewed"]["status"] == expected_status
 
-        event = work_area.expected_visit_count_work_area_group_status_opportunity_access_events.last()
+        event = work_area.expected_visit_count_work_area_group_status_opportunity_access_excluded_reason_events.last()
         assert event.pgh_context.metadata["username"] == org_user_admin.username
         assert event.pgh_context.metadata["user_email"] == org_user_admin.email
 
