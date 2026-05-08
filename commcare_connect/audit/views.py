@@ -4,6 +4,7 @@ from django.db.models.functions import RowNumber
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils.translation import gettext as _
 from django_tables2 import RequestConfig
 
 from commcare_connect.audit.models import AuditReport
@@ -46,12 +47,12 @@ def audit_report_list(request, org_slug, opportunity_id):
     RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(table)
 
     path = [
-        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
         {
             "title": opportunity.name,
             "url": reverse("opportunity:detail", args=(org_slug, opportunity.opportunity_id)),
         },
-        {"title": "Audits"},
+        {"title": _("Audits")},
     ]
 
     return render(
