@@ -6,6 +6,7 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django_tables2 import RequestConfig
 
@@ -115,13 +116,13 @@ def audit_report_detail(request, org_slug, opportunity_id, audit_report_id):
     RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(no_action_table)
 
     path = [
-        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
         {
             "title": opportunity.name,
             "url": reverse("opportunity:detail", args=(org_slug, opportunity.opportunity_id)),
         },
         {
-            "title": "Audits",
+            "title": _("Audits"),
             "url": reverse(
                 "opportunity:audit:audit_report_list",
                 kwargs={"org_slug": org_slug, "opportunity_id": opportunity.opportunity_id},
