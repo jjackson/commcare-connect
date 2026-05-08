@@ -1,11 +1,12 @@
 <!DOCTYPE html>
+{% load static %}
+{# Imported from dimagi-internal/connect-prelogin. Three import-time edits #}
+{# (search "import-time edit"): .mockup-bar strip, login link template var, #}
+{# asset paths wrapped in static template tags. #}
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<!-- Imported from dimagi-internal/connect-prelogin. Three import-time edits (search "import-time edit"): base href, mockup-bar strip, login link placeholder. -->
-<!-- import-time edit: base href so upstream's relative images/* + gifs/* resolve to /static/prelogin/. -->
-<base href="/static/prelogin/">
 <title>Connect by Dimagi, Mockup</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -59,7 +60,7 @@
   a:hover { color: var(--indigo); }
   img { max-width: 100%; display: block; }
 
-  /* import-time edit: .mockup-bar CSS removed; preview-only banner not shown in deploy. */
+  {# import-time edit: .mockup-bar CSS removed (preview-only banner) #}
 
   /* Header, flat solid nav, dark navy on light body */
   .site-header {
@@ -339,7 +340,7 @@
     width: clamp(120px, 14vw, 180px);
     aspect-ratio: 1 / 1;
     border-radius: 50%;
-    background-image: url('images/Program%20Field%20Photos/KMC/kmc-3.jpg'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
+    background-image: url('{% static 'prelogin/images/Program%20Field%20Photos/KMC/kmc-3.jpg' %}'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
     background-size: cover, cover;
     background-position: center, center;
     background-repeat: no-repeat;
@@ -787,16 +788,16 @@
     backdrop-filter: blur(4px);
   }
   /* Program card illustrations (SVG, distinct per program) */
-  .ph-chc        { background: #d7d9f6 url('images/Program%20Area%20Graphics/child-health-campaigns.svg')      center/contain no-repeat; }
-  .ph-kmc        { background: #f5dedf url('images/Program%20Area%20Graphics/kangaroo-mother-care.svg')        center/contain no-repeat; }
-  .ph-ecd        { background: #e1dbee url('images/Program%20Area%20Graphics/early-childhood-development.svg') center/contain no-repeat; }
-  .ph-readers    { background: #ebdce6 url('images/Program%20Area%20Graphics/reading-glasses.svg')             center/contain no-repeat; }
-  .ph-mbw        { background: #DFE2F6 url('images/Program%20Area%20Graphics/mother-baby-wellness.svg')        center/contain no-repeat; }
-  .ph-chlorine   { background: #CCECEE url('images/Program%20Area%20Graphics/chlorine-dispenser.svg')          center/contain no-repeat; }
-  .ph-mental     { background: #FCEFCC url('images/Program%20Area%20Graphics/mental-health.svg')               center/contain no-repeat; }
-  .ph-nutrition  { background: #D9ECD4 url('images/Program%20Area%20Graphics/therapeutic-food.svg')            center/contain no-repeat; }
-  .ph-survey     { background: #e9ecef url('images/Program%20Area%20Graphics/survey-data-collection.svg')      center/contain no-repeat; }
-  .ph-environment{ background: #DCE6F0 url('images/Program%20Area%20Graphics/rooftop-sampling.svg')            center/contain no-repeat; }
+  .ph-chc        { background: #d7d9f6 url('{% static 'prelogin/images/Program%20Area%20Graphics/child-health-campaigns.svg' %}')      center/contain no-repeat; }
+  .ph-kmc        { background: #f5dedf url('{% static 'prelogin/images/Program%20Area%20Graphics/kangaroo-mother-care.svg' %}')        center/contain no-repeat; }
+  .ph-ecd        { background: #e1dbee url('{% static 'prelogin/images/Program%20Area%20Graphics/early-childhood-development.svg' %}') center/contain no-repeat; }
+  .ph-readers    { background: #ebdce6 url('{% static 'prelogin/images/Program%20Area%20Graphics/reading-glasses.svg' %}')             center/contain no-repeat; }
+  .ph-mbw        { background: #DFE2F6 url('{% static 'prelogin/images/Program%20Area%20Graphics/mother-baby-wellness.svg' %}')        center/contain no-repeat; }
+  .ph-chlorine   { background: #CCECEE url('{% static 'prelogin/images/Program%20Area%20Graphics/chlorine-dispenser.svg' %}')          center/contain no-repeat; }
+  .ph-mental     { background: #FCEFCC url('{% static 'prelogin/images/Program%20Area%20Graphics/mental-health.svg' %}')               center/contain no-repeat; }
+  .ph-nutrition  { background: #D9ECD4 url('{% static 'prelogin/images/Program%20Area%20Graphics/therapeutic-food.svg' %}')            center/contain no-repeat; }
+  .ph-survey     { background: #e9ecef url('{% static 'prelogin/images/Program%20Area%20Graphics/survey-data-collection.svg' %}')      center/contain no-repeat; }
+  .ph-environment{ background: #DCE6F0 url('{% static 'prelogin/images/Program%20Area%20Graphics/rooftop-sampling.svg' %}')            center/contain no-repeat; }
   /* Suppress placeholder overlays + photo labels on program-card illustrations */
   .all-programs-grid .photo-block::before,
   .all-programs-grid .photo-block::after { display: none; }
@@ -2409,7 +2410,7 @@
     aspect-ratio: 1 / 1;
     border-radius: 50%;
     /* Layered: actual image (if present) over a gradient placeholder */
-    background-image: url('images/Program%20Field%20Photos/CHC/chc-1.jpg'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
+    background-image: url('{% static 'prelogin/images/Program%20Field%20Photos/CHC/chc-1.jpg' %}'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
     background-size: cover, cover;
     background-position: center, center;
     background-repeat: no-repeat;
@@ -2418,7 +2419,7 @@
   }
   /* Join the Network hero photo (the two ladies in striped shirts) */
   .chc-hero-photo .photo-circle.photo-join {
-    background-image: url('images/Program%20Field%20Photos/join-hero.jpg'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
+    background-image: url('{% static 'prelogin/images/Program%20Field%20Photos/join-hero.jpg' %}'), linear-gradient(135deg, #5D70D2 0%, #16006D 60%, #FC5F36 100%);
     background-size: 165%, cover;
     background-position: 42% 18%, center;
   }
@@ -2760,7 +2761,7 @@
   }
   .explore-panel span { position: relative; z-index: 1; max-width: 22ch; }
   .explore-panel.indigo {
-    background-image: url('images/Program%20Field%20Photos/CHC/chc-1.jpg'), linear-gradient(135deg, var(--indigo-deep) 0%, var(--indigo) 100%);
+    background-image: url('{% static 'prelogin/images/Program%20Field%20Photos/CHC/chc-1.jpg' %}'), linear-gradient(135deg, var(--indigo-deep) 0%, var(--indigo) 100%);
     background-size: cover;
     background-position: center 35%;
     background-repeat: no-repeat;
@@ -2789,7 +2790,7 @@
     color: #4F4100;
   }
   .explore-panel.ink    {
-    background-image: url('images/Program%20Field%20Photos/join-hero.jpg'), linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
+    background-image: url('{% static 'prelogin/images/Program%20Field%20Photos/join-hero.jpg' %}'), linear-gradient(135deg, var(--ink) 0%, var(--ink-2) 100%);
     background-size: 165%, cover;
     background-position: 40% 22%, center;
     background-repeat: no-repeat;
@@ -3133,7 +3134,7 @@
   </symbol>
 </svg>
 
-<!-- import-time edit: .mockup-bar element removed. -->
+{# import-time edit: .mockup-bar element removed #}
 
 <header class="site-header">
   <div class="header-inner">
@@ -3145,7 +3146,7 @@
       <a href="#/insights" data-route="/insights">Insights</a>
       <a href="#/join" data-route="/join">Connect Network</a>
       <a href="https://connect.dimagi.com/accounts/signup/" class="cta cta-ghost" target="_blank" rel="noopener">Sign Up</a>
-      <a href="__APP_LOGIN_URL__" class="cta">Login</a><!-- import-time edit: login link href will be substituted by the Django view -->
+      <a href="{{ app_login_url }}" class="cta">Login</a>{# import-time edit: login href templated #}
     </nav>
   </div>
 </header>
@@ -4664,7 +4665,7 @@
 
       <div class="step-detail active" data-step="learn">
         <div class="step-media">
-          <img src="gifs/learn.gif" alt="Frontline Worker training on a phone" loading="lazy" />
+          <img src="{% static 'prelogin/gifs/learn.gif' %}" alt="Frontline Worker training on a phone" loading="lazy" />
         </div>
         <div class="left">
           <h3>Frontline Workers are trained to <em>safely &amp; confidently provide services</em>.</h3>
@@ -4691,7 +4692,7 @@
 
       <div class="step-detail" data-step="deliver">
         <div class="step-media">
-          <img src="gifs/deliver.gif" alt="Frontline Worker delivering services" loading="lazy" />
+          <img src="{% static 'prelogin/gifs/deliver.gif' %}" alt="Frontline Worker delivering services" loading="lazy" />
         </div>
         <div class="left">
           <h3>Frontline Workers deliver services, <em>supported by Connect</em>.</h3>
@@ -4743,7 +4744,7 @@
 
       <div class="step-detail" data-step="pay">
         <div class="step-media">
-          <img src="gifs/pay.gif" alt="Frontline Worker receiving mobile-money payment" loading="lazy" />
+          <img src="{% static 'prelogin/gifs/pay.gif' %}" alt="Frontline Worker receiving mobile-money payment" loading="lazy" />
         </div>
         <div class="left">
           <h3>Frontline Workers are <em>paid</em> for services that are verified.</h3>
