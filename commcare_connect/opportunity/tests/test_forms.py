@@ -477,6 +477,9 @@ class TestOpportunityInitUpdateForm:
         assert learn_app.description == "updated learn description"
         assert learn_app.passing_score == 91
 
+
+@pytest.mark.django_db
+class TestOpportunityInitForm:
     @pytest.mark.parametrize("flag_active_for_org", [True, False])
     def test_init_form_sets_automatic_verification_from_workspace_flag(self, opportunity, flag_active_for_org):
         cache.clear()
