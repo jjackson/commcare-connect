@@ -1391,7 +1391,7 @@ class WorkerTasksTable(GroupedByWorkerMixin, OrgContextTable):
             "task_status",
         )
         row_attrs = {"class": "group"}
-        empty_text = gettext_lazy("No workers have accepted this opportunity yet.")
+        empty_text = gettext_lazy("No tasks assigned for this opportunity.")
 
     def __init__(self, *args, **kwargs):
         self.opp_id = kwargs.pop("opp_id")
