@@ -2015,7 +2015,7 @@ class EditTaskTypeForm(forms.ModelForm):
         if self.cleaned_data["is_archived"]:
             if not instance.archived:
                 instance.archived = now()
-                instance.is_active = False
+            instance.is_active = False
         else:
             instance.archived = None
             instance.is_active = True
