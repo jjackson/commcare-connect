@@ -772,8 +772,15 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
         raise Http404
 
     work_area.status = new_status
-    with pghistory.context(username=request.user.username, user_email=request.user.email):
-        work_area.save(update_fields=["status"])
+    try:
+        with transaction.atomic():
+            with pghistory.context(username=request.user.username, user_email=request.user.email):
+                work_area.save(update_fields=["status"])
+            if work_area.opportunity_access_id:
+                create_or_update_case_by_work_area(work_area)
+    except CommCareHQAPIException as e:
+        logger.info(f"Failed to sync work area {work_area.id} to HQ after review action. Error: {e}")
+        return HttpResponse(status=500, content=_("Failed to sync work area status. Please try again."))
 
     if action == InaccessibilityReviewAction.DENY:
         transaction.on_commit(

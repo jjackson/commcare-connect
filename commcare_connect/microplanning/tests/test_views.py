@@ -933,6 +933,7 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
 
         with (
             patch("commcare_connect.microplanning.views.send_push_notification_task") as mock_notif,
+            patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area"),
             django_capture_on_commit_callbacks(execute=True),
         ):
             response = client.post(url, {"action": action})
@@ -959,6 +960,19 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
         url = self.action_url(organization.slug, work_area.opportunity.opportunity_id, work_area.id)
         response = client.post(url, {"action": "invalid_action"})
         assert response.status_code == 400
+
+    def test_action_hq_sync_failure_does_not_commit_status(self, client, org_user_admin, pending_wa, organization):
+        work_area, _ = pending_wa
+        client.force_login(org_user_admin)
+        url = self.action_url(organization.slug, work_area.opportunity.opportunity_id, work_area.id)
+        with patch(
+            "commcare_connect.microplanning.views.create_or_update_case_by_work_area",
+            side_effect=CommCareHQAPIException("HQ unavailable"),
+        ):
+            response = client.post(url, {"action": "approve"})
+        assert response.status_code == 500
+        work_area.refresh_from_db()
+        assert work_area.status == WorkAreaStatus.REQUEST_FOR_INACCESSIBLE
 
     @pytest.mark.parametrize(
         "status",
