@@ -1012,7 +1012,7 @@ class TestFetchAttachmentView:
 
         url = reverse(
             "opportunity:fetch_attachment",
-            args=(organization.slug, opportunity.opportunity_id, blob_meta.blob_id),
+            args=(organization.slug, opportunity.id, blob_meta.blob_id),
         )
         client.force_login(org_user_member)
 
@@ -1030,7 +1030,7 @@ class TestFetchAttachmentView:
         my_opportunity = OpportunityFactory(organization=organization)
         url = reverse(
             "opportunity:fetch_attachment",
-            args=(organization.slug, my_opportunity.opportunity_id, blob_meta.blob_id),
+            args=(organization.slug, my_opportunity.id, blob_meta.blob_id),
         )
         client.force_login(org_user_member)
 

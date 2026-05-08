@@ -846,18 +846,19 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
         )
 
     @pytest.fixture
-    def pending_wa(self, opportunity, org_user_admin):
-        access = OpportunityAccessFactory(user=org_user_admin, opportunity=opportunity, accepted=True)
+    def pending_wa(self, opportunity, org_user_admin, mobile_user):
+        admin_access = OpportunityAccessFactory(user=org_user_admin, opportunity=opportunity, accepted=True)
+        field_worker_access = OpportunityAccessFactory(user=mobile_user, opportunity=opportunity, accepted=True)
         group = WorkAreaGroupFactory(opportunity=opportunity)
         work_area = WorkAreaFactory(
             opportunity=opportunity,
             work_area_group=group,
-            opportunity_access=access,
+            opportunity_access=admin_access,
             status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
         )
         inacc_request = WorkAreaInaccessibilityRequestFactory(
             work_area=work_area,
-            opportunity_access=access,
+            opportunity_access=field_worker_access,
         )
         return work_area, inacc_request
 
@@ -951,6 +952,9 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
 
         if expect_notify:
             mock_notif.delay.assert_called_once()
+            notified_user_ids = mock_notif.delay.call_args[0][0]
+            assert notified_user_ids == [inacc_request.opportunity_access.user_id]
+            assert inacc_request.opportunity_access.user_id != org_user_admin.id
         else:
             mock_notif.delay.assert_not_called()
 
