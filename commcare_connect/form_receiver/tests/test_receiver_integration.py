@@ -405,6 +405,108 @@ def test_auto_approve_flagged_visits(user_with_connectid_link: User, api_client:
     assert visit.status == VisitValidationStatus.pending
 
 
+def test_automatic_verification_rejects_flagged_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    opportunity.automatic_verification = True
+    opportunity.save()
+    oauth_application = opportunity.hq_server.oauth_application
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+    make_request(api_client, form_json, user_with_connectid_link, oauth_application=oauth_application)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.rejected
+
+
+def test_automatic_verification_off_leaves_flagged_visit_pending(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    assert opportunity.automatic_verification is False
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    oauth_application = opportunity.hq_server.oauth_application
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+    make_request(api_client, form_json, user_with_connectid_link, oauth_application=oauth_application)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert visit.flagged
+    assert visit.status == VisitValidationStatus.pending
+
+
+def test_automatic_verification_does_not_reject_clean_visit(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+    form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
+    opportunity.automatic_verification = True
+    opportunity.auto_approve_visits = True
+    opportunity.save()
+    oauth_application = opportunity.hq_server.oauth_application
+    make_request(api_client, form_json, user_with_connectid_link, oauth_application=oauth_application)
+    visit = UserVisit.objects.get(user=user_with_connectid_link)
+    assert not visit.flagged
+    assert visit.status == VisitValidationStatus.approved
+
+
+def _trigger_over_limit_visit(opportunity, user, api_client):
+    form_json = _create_opp_and_form_json(opportunity, user=user, daily_max_per_user=0)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+    oauth_application = opportunity.hq_server.oauth_application
+    make_request(api_client, form_json, user, oauth_application=oauth_application)
+    return UserVisit.objects.get(user=user)
+
+
+def _trigger_duplicate_visit(opportunity, user, api_client):
+    form_json = _create_opp_and_form_json(opportunity, user=user)
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+    oauth_application = opportunity.hq_server.oauth_application
+    make_request(api_client, form_json, user, oauth_application=oauth_application)
+    duplicate_json = deepcopy(form_json)
+    duplicate_json["id"] = str(uuid4())
+    make_request(api_client, duplicate_json, user, oauth_application=oauth_application)
+    return UserVisit.objects.get(xform_id=duplicate_json["id"])
+
+
+def _trigger_trial_visit(opportunity, user, api_client):
+    opportunity.start_date = datetime.date.today() + datetime.timedelta(days=10)
+    opportunity.save()
+    form_json = _create_opp_and_form_json(
+        opportunity,
+        user=user,
+        end_date=datetime.date.today() + datetime.timedelta(days=100),
+    )
+    deliver_unit = opportunity.deliver_app.deliver_units.first()
+    DeliverUnitFlagRulesFactory(deliver_unit=deliver_unit, opportunity=opportunity, duration=1)
+    oauth_application = opportunity.hq_server.oauth_application
+    make_request(api_client, form_json, user, oauth_application=oauth_application)
+    return UserVisit.objects.get(user=user)
+
+
+@pytest.mark.parametrize(
+    "trigger_visit, expected_status",
+    [
+        (_trigger_over_limit_visit, VisitValidationStatus.over_limit),
+        (_trigger_duplicate_visit, VisitValidationStatus.duplicate),
+        (_trigger_trial_visit, VisitValidationStatus.trial),
+    ],
+    ids=["over_limit", "duplicate", "trial"],
+)
+def test_automatic_verification_preserves_existing_status(
+    user_with_connectid_link: User,
+    api_client: APIClient,
+    opportunity: Opportunity,
+    trigger_visit,
+    expected_status,
+):
+    opportunity.automatic_verification = True
+    opportunity.save()
+    visit = trigger_visit(opportunity, user_with_connectid_link, api_client)
+    assert visit.status == expected_status
+
+
 def test_auto_approve_payments_flagged_visit(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
