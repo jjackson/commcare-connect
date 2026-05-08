@@ -9,9 +9,13 @@ class TestPreloginHome:
 
     def test_login_url_defaults_to_accounts_login(self, client):
         resp = client.get(reverse("prelogin:home"))
-        assert resp.context["app_login_url"] == "/accounts/login/"
+        assert b'href="/accounts/login/" class="cta">Login</a>' in resp.content
 
     def test_login_url_respects_setting_override(self, client, settings):
         settings.PRELOGIN_APP_LOGIN_URL = "/custom/login/"
         resp = client.get(reverse("prelogin:home"))
-        assert resp.context["app_login_url"] == "/custom/login/"
+        assert b'href="/custom/login/" class="cta">Login</a>' in resp.content
+
+    def test_no_unsubstituted_placeholder(self, client):
+        resp = client.get(reverse("prelogin:home"))
+        assert b"__APP_LOGIN_URL__" not in resp.content
