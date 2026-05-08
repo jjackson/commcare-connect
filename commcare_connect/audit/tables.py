@@ -107,6 +107,10 @@ class ActionColumn(columns.Column):
             verbose_name="",
             orderable=False,
             empty_values=(),
+            attrs={
+                "th": {"class": "w-32"},
+                "td": {"class": "w-32 text-right"},
+            },
         )
 
     def render(self, record, table):
