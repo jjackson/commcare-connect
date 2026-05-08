@@ -489,6 +489,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.flag_reason = {"flags": flags}
 
         if (
+            opportunity.automatic_verification
+            and user_visit.status == VisitValidationStatus.pending
+            and user_visit.flagged
+        ):
+            user_visit.status = VisitValidationStatus.rejected
+        if (
             opportunity.auto_approve_visits
             and user_visit.status == VisitValidationStatus.pending
             and not user_visit.flagged
