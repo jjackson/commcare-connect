@@ -268,7 +268,7 @@ class TaskType(models.Model):
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
     archived = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     duration = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
