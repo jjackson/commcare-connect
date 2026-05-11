@@ -18,7 +18,7 @@ from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from waffle import switch_is_active
 
-from commcare_connect.flags.flag_names import AUTOMATIC_VERIFICATION
+from commcare_connect.flags.flag_names import AUTOMATIC_VISIT_VERIFICATION
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.opportunity.app_xml import get_task_units_for_app
@@ -585,8 +585,8 @@ class OpportunityInitForm(forms.ModelForm):
         else:
             opportunity.organization = organization
 
-        if not opportunity.pk and is_flag_active(AUTOMATIC_VERIFICATION, opportunity.organization):
-            opportunity.automatic_verification = True
+        if not opportunity.pk and is_flag_active(AUTOMATIC_VISIT_VERIFICATION, opportunity.organization):
+            opportunity.automatic_visit_verification = True
 
         opportunity.api_key, _ = HQApiKey.objects.get_or_create(
             id=self.cleaned_data["api_key"],

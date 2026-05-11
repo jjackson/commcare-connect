@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
 
 from commcare_connect.commcarehq.models import HQServer
-from commcare_connect.flags.flag_names import AUTOMATIC_VERIFICATION
+from commcare_connect.flags.flag_names import AUTOMATIC_VISIT_VERIFICATION
 from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.opportunity.models import (
     CommCareApp,
@@ -267,7 +267,7 @@ class ManagedOpportunityCreateSerializer(serializers.Serializer):
             api_key=learn_api_key,
             hq_server=learn_data["hq_server"],
             active=False,
-            automatic_verification=is_flag_active(AUTOMATIC_VERIFICATION, organization),
+            automatic_visit_verification=is_flag_active(AUTOMATIC_VISIT_VERIFICATION, organization),
             created_by=user.email,
             modified_by=user.email,
         )

@@ -110,7 +110,7 @@ class Opportunity(BaseModel):
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     auto_approve_visits = models.BooleanField(default=True)
     auto_approve_payments = models.BooleanField(default=True)
-    automatic_verification = models.BooleanField(default=False)
+    automatic_visit_verification = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)

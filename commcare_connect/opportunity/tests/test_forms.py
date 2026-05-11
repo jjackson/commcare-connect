@@ -8,7 +8,7 @@ from django.core.cache import cache
 from django.utils.timezone import now
 from waffle.testutils import override_switch
 
-from commcare_connect.flags.flag_names import AUTOMATIC_VERIFICATION
+from commcare_connect.flags.flag_names import AUTOMATIC_VISIT_VERIFICATION
 from commcare_connect.flags.models import Flag
 from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.app_xml import TaskUnit
@@ -481,9 +481,9 @@ class TestOpportunityInitUpdateForm:
 @pytest.mark.django_db
 class TestOpportunityInitForm:
     @pytest.mark.parametrize("flag_active_for_org", [True, False])
-    def test_init_form_sets_automatic_verification_from_workspace_flag(self, opportunity, flag_active_for_org):
+    def test_init_form_sets_automatic_visit_verification_from_workspace_flag(self, opportunity, flag_active_for_org):
         cache.clear()
-        flag, _ = Flag.objects.get_or_create(name=AUTOMATIC_VERIFICATION)
+        flag, _ = Flag.objects.get_or_create(name=AUTOMATIC_VISIT_VERIFICATION)
         if flag_active_for_org:
             flag.organizations.add(opportunity.organization)
 
@@ -514,7 +514,7 @@ class TestOpportunityInitForm:
         new_opportunity = form.save()
         new_opportunity.refresh_from_db()
         assert new_opportunity.pk != opportunity.pk
-        assert new_opportunity.automatic_verification is flag_active_for_org
+        assert new_opportunity.automatic_visit_verification is flag_active_for_org
 
 
 class TestAddBudgetNewUsersForm:
