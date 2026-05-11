@@ -487,17 +487,27 @@ class AssignedTask(XFormBaseModel):
         if not tasks:
             return 0
 
-        hq_updates: dict[tuple[int, str], tuple["OpportunityAccess", str]] = {}
+        hq_updates: dict[tuple[int, str], "OpportunityAccess"] = {}
         for task in tasks:
-            case_property = task.task_type.case_property
-            if case_property:
-                key = (task.opportunity_access_id, case_property)
-                hq_updates.setdefault(key, (task.opportunity_access, case_property))
+            if prop := task.task_type.case_property:
+                hq_updates.setdefault((task.opportunity_access_id, prop), task.opportunity_access)
 
         with transaction.atomic():
             deleted_count, _ = cls.objects.filter(pk__in=[t.pk for t in tasks]).delete()
             if hq_updates:
-                bulk_update_usercases([(access, {"properties": {prop: ""}}) for access, prop in hq_updates.values()])
+                still_assigned = set(
+                    cls.objects.filter(
+                        opportunity_access_id__in={access_id for access_id, _ in hq_updates},
+                        status=AssignedTaskStatus.ASSIGNED,
+                        task_type__case_property__in={p for _, p in hq_updates},
+                    ).values_list("opportunity_access_id", "task_type__case_property")
+                )
+                to_reset = [
+                    (hq_updates[access_id, prop], {"properties": {prop: ""}})
+                    for access_id, prop in hq_updates.keys() - still_assigned
+                ]
+                if to_reset:
+                    bulk_update_usercases(to_reset)
 
         return deleted_count
 

@@ -357,6 +357,29 @@ class TestAssignedTaskDeleteAndResetHQ:
         assert AssignedTask.objects.filter(pk=completed.pk).exists()
         mock_update.assert_not_called()
 
+    def test_skips_hq_when_other_assigned_task_remains(self):
+        access = OpportunityAccessFactory()
+        task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
+        task_to_delete = AssignedTaskFactory(
+            task_type=task_type,
+            opportunity_access=access,
+            status=AssignedTaskStatus.ASSIGNED,
+            due_date=date.today() + timedelta(days=7),
+        )
+        AssignedTaskFactory(
+            task_type=task_type,
+            opportunity_access=access,
+            status=AssignedTaskStatus.ASSIGNED,
+            due_date=date.today() + timedelta(days=7),
+        )
+
+        with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
+            deleted = AssignedTask.delete_and_reset_hq([task_to_delete.pk], access.opportunity)
+
+        assert deleted == 1
+        assert not AssignedTask.objects.filter(pk=task_to_delete.pk).exists()
+        mock_update.assert_not_called()
+
     def test_deduplicates_hq_calls(self):
         access = OpportunityAccessFactory()
         task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
