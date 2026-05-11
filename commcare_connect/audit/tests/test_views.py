@@ -23,7 +23,7 @@ def test_list_view_shows_reports(client, program_manager_org_user_admin, audit_o
 
     url = reverse(
         "opportunity:audit:audit_report_list",
-        kwargs={"org_slug": audit_opp.organization.slug, "opportunity_id": audit_opp.opportunity_id},
+        kwargs={"org_slug": audit_opp.organization.slug, "opp_id": audit_opp.opportunity_id},
     )
     response = client.get(url)
     assert response.status_code == 200
@@ -43,7 +43,7 @@ def test_list_view_header_counts(client, program_manager_org_user_admin, audit_o
 
     url = reverse(
         "opportunity:audit:audit_report_list",
-        kwargs={"org_slug": audit_opp.organization.slug, "opportunity_id": audit_opp.opportunity_id},
+        kwargs={"org_slug": audit_opp.organization.slug, "opp_id": audit_opp.opportunity_id},
     )
     response = client.get(url)
     assert response.status_code == 200
@@ -62,7 +62,7 @@ def test_list_view_404_when_flag_disabled(client, program_manager_org_user_admin
 
     url = reverse(
         "opportunity:audit:audit_report_list",
-        kwargs={"org_slug": audit_opp.organization.slug, "opportunity_id": audit_opp.opportunity_id},
+        kwargs={"org_slug": audit_opp.organization.slug, "opp_id": audit_opp.opportunity_id},
     )
     response = client.get(url)
     assert response.status_code == 404
