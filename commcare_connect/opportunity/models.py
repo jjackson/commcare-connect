@@ -474,7 +474,7 @@ class AssignedTask(XFormBaseModel):
 
     @classmethod
     def delete_and_reset_hq(cls, task_ids: list[int], opportunity: "Opportunity") -> int:
-        from commcare_connect.commcarehq.api import bulk_update_usercases
+        from commcare_connect.commcarehq.api import HQ_CASE_BULK_CHUNK_SIZE, bulk_update_usercases
 
         tasks = list(
             cls.objects.filter(
@@ -506,6 +506,11 @@ class AssignedTask(XFormBaseModel):
                     (hq_updates[access_id, prop], {"properties": {prop: ""}})
                     for access_id, prop in hq_updates.keys() - still_assigned
                 ]
+                if len(to_reset) > HQ_CASE_BULK_CHUNK_SIZE:
+                    raise ValueError(
+                        f"Too many HQ case property resets ({len(to_reset)}); "
+                        "split the delete into smaller batches."
+                    )
                 if to_reset:
                     bulk_update_usercases(to_reset)
 
