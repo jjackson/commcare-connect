@@ -2,7 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
 from django.http import Http404
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import render
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django_tables2 import RequestConfig
@@ -11,27 +11,26 @@ from commcare_connect.audit.models import AuditReport
 from commcare_connect.audit.tables import AuditReportTable
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
-from commcare_connect.opportunity.models import Opportunity
-from commcare_connect.organization.decorators import org_program_manager_required
+from commcare_connect.organization.decorators import opportunity_required, org_program_manager_required
 
 DEFAULT_PAGE_SIZE = 25
 
 
-def _require_flagged_opportunity(org_slug, opportunity_id):
-    opportunity = get_object_or_404(Opportunity, opportunity_id=opportunity_id, organization__slug=org_slug)
+def _require_feature_flag(opportunity):
     try:
         flag = Flag.objects.get(name=WEEKLY_PERFORMANCE_REPORT)
     except Flag.DoesNotExist:
         raise Http404("Weekly performance report is not enabled.")
     if not flag.opportunities.filter(pk=opportunity.pk).exists():
         raise Http404("Weekly performance report is not enabled for this opportunity.")
-    return opportunity
 
 
 @login_required
 @org_program_manager_required
-def audit_report_list(request, org_slug, opportunity_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+@opportunity_required
+def audit_report_list(request, org_slug, opp_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     # Annotate each row with its chronological position
     queryset = (
         AuditReport.objects.filter(opportunity=opportunity)
@@ -69,6 +68,7 @@ def audit_report_list(request, org_slug, opportunity_id):
     )
 
 
-def audit_report_detail(request, org_slug, opportunity_id, audit_report_id):
+@opportunity_required
+def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     # Stub — real implementation in Task 11.
     raise Http404()
