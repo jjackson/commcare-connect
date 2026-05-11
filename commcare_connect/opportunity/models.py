@@ -472,6 +472,35 @@ class AssignedTask(XFormBaseModel):
             transaction.on_commit(lambda: send_task_assignment_notification.delay(assigned_task.pk))
         return assigned_task
 
+    @classmethod
+    def delete_and_reset_hq(cls, task_ids: list[int], opportunity: "Opportunity") -> int:
+        from commcare_connect.commcarehq.api import update_usercase
+
+        tasks = list(
+            cls.objects.filter(
+                pk__in=task_ids,
+                opportunity_access__opportunity=opportunity,
+            )
+            .exclude(status=AssignedTaskStatus.COMPLETED)
+            .select_related("task_type", "opportunity_access")
+        )
+        if not tasks:
+            return 0
+
+        hq_updates: dict[tuple[int, str], tuple["OpportunityAccess", str]] = {}
+        for task in tasks:
+            case_property = task.task_type.case_property
+            if case_property:
+                key = (task.opportunity_access_id, case_property)
+                hq_updates.setdefault(key, (task.opportunity_access, case_property))
+
+        with transaction.atomic():
+            deleted_count, _ = cls.objects.filter(pk__in=[t.pk for t in tasks]).delete()
+            for access, prop in hq_updates.values():
+                update_usercase(access, data={"properties": {prop: ""}})
+
+        return deleted_count
+
 
 class Assessment(XFormBaseModel):
     user = models.ForeignKey(
