@@ -280,9 +280,7 @@ def process_work_area_update(user: User, opportunity: Opportunity, blocks: list[
         except WorkArea.DoesNotExist:
             raise ProcessingError("Work area not found")
 
-        # TODO: CCCT-2277 moves the assignment directly to `WorkArea`, so this check should be updated
-        # depending on which PR gets merged first.
-        if not work_area.work_area_group or work_area.work_area_group.opportunity_access_id != access.id:
+        if work_area.opportunity_access_id != access.id:
             raise ProcessingError("User is not assigned to this work area")
 
         requested_status = block.get("status", "").upper()
@@ -500,7 +498,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.save()
 
         if work_area:
-            work_area.update_status()
+            with pghistory.context(username=user.username, user_email=user.email):
+                work_area.update_status()
 
         if not access.last_active or access.last_active < user_visit.visit_date:
             access.last_active = user_visit.visit_date
