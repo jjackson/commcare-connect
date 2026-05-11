@@ -1,4 +1,3 @@
-AUTOMATIC_VISIT_VERIFICATION = "automatic_visit_verification"
 MICROPLANNING = "microplanning"
 OPEN_CHAT_STUDIO_WIDGET = "open_chat_studio_widget"
 SESSION_TRACKING = "session_tracking"
