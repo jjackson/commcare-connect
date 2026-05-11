@@ -18,7 +18,7 @@ from commcare_connect.flags.models import Flag
 from commcare_connect.microplanning import views as microplanning_views
 from commcare_connect.microplanning.filters import WorkAreaMapFilterSet
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
-from commcare_connect.microplanning.tasks import HQ_BULK_CHUNK_SIZE, WorkAreaCSVExporter, exclude_work_areas_task
+from commcare_connect.microplanning.tasks import WorkAreaCSVExporter
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.microplanning.views import UserVisitVectorLayer
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
@@ -168,9 +168,12 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
     @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
     def test_successful_field_updates(self, mock_sync, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity)
-        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10)
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, opportunity_access=access)
 
-        initial_event_count = work_area.expected_visit_count_work_area_group_excluded_reason_events.count()
+        initial_event_count = (
+            work_area.expected_visit_count_work_area_group_status_opportunity_access_excluded_reason_events.count()
+        )
         assert work_area.work_area_group is None
         new_expected_visit_count = 25
         client.force_login(org_user_admin)
@@ -194,7 +197,7 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
         assert work_area.expected_visit_count == new_expected_visit_count
         assert work_area.work_area_group == group
 
-        events = work_area.expected_visit_count_work_area_group_excluded_reason_events
+        events = work_area.expected_visit_count_work_area_group_status_opportunity_access_excluded_reason_events
         assert events.count() == initial_event_count + 1
         event = events.last()
         assert event.pgh_context.metadata["reason"] == "Boundary adjusted"
@@ -205,7 +208,9 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
     def test_no_history_created_when_nothing_changes(self, mock_sync, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity)
         work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
-        initial_event_count = work_area.expected_visit_count_work_area_group_excluded_reason_events.count()
+        initial_event_count = (
+            work_area.expected_visit_count_work_area_group_status_opportunity_access_excluded_reason_events.count()
+        )
 
         client.force_login(org_user_admin)
         response = client.post(
@@ -219,7 +224,10 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
 
         work_area.refresh_from_db()
         assert response.status_code == 204
-        assert work_area.expected_visit_count_work_area_group_excluded_reason_events.count() == initial_event_count
+        assert (
+            work_area.expected_visit_count_work_area_group_status_opportunity_access_excluded_reason_events.count()
+            == initial_event_count
+        )
         assert mock_sync.call_count == 0  # No sync since nothing changed
         assert work_area.work_area_group == group
         assert work_area.expected_visit_count == 10
@@ -242,7 +250,10 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
     @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
     def test_hq_sync_failure_returns_form_error(self, mock_sync, client, org_user_admin, opportunity):
         group = WorkAreaGroupFactory(opportunity=opportunity)
-        work_area = WorkAreaFactory(opportunity=opportunity, expected_visit_count=10, work_area_group=group)
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(
+            opportunity=opportunity, expected_visit_count=10, work_area_group=group, opportunity_access=access
+        )
         mock_sync.side_effect = CommCareHQAPIException("sync failed")
 
         client.force_login(org_user_admin)
@@ -311,9 +322,8 @@ class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
 
     def test_assignee_filter_forwarded(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
         wa_assigned = WorkAreaFactory(
-            opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.NOT_STARTED
+            opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED
         )
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
 
@@ -334,8 +344,8 @@ class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
 
     def test_annotations_present(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        WorkAreaFactory(opportunity=opportunity, work_area_group=group)
+        group = WorkAreaGroupFactory(opportunity=opportunity)
+        WorkAreaFactory(opportunity=opportunity, work_area_group=group, opportunity_access=access)
 
         qs = self._get_tile_queryset(client, org_user_admin, opportunity)
         row = qs.first()
@@ -349,12 +359,17 @@ class TestWorkAreaMapFilterSet:
     @pytest.fixture
     def work_areas(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
+        group = WorkAreaGroupFactory(opportunity=opportunity)
 
         wa_not_started = WorkAreaFactory(
-            opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.NOT_STARTED
+            opportunity=opportunity,
+            work_area_group=group,
+            opportunity_access=access,
+            status=WorkAreaStatus.NOT_STARTED,
         )
-        wa_visited = WorkAreaFactory(opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.VISITED)
+        wa_visited = WorkAreaFactory(
+            opportunity=opportunity, work_area_group=group, opportunity_access=access, status=WorkAreaStatus.VISITED
+        )
         wa_unassigned = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
         return SimpleNamespace(
             access=access,
@@ -440,9 +455,8 @@ class TestUserVisitVectorLayer:
     @pytest.fixture
     def visit_data(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        work_area = WorkAreaFactory(opportunity=opportunity, work_area_group=group)
-        return SimpleNamespace(access=access, group=group, work_area=work_area)
+        work_area = WorkAreaFactory(opportunity=opportunity, opportunity_access=access)
+        return SimpleNamespace(access=access, work_area=work_area)
 
     def test_queryset_includes_visits_with_location(self, opportunity, visit_data):
         visit = UserVisitFactory(
@@ -483,6 +497,7 @@ class TestUserVisitVectorLayer:
 
         assert round(visit["location_point"].x, 1) == 77.1
         assert round(visit["location_point"].y, 1) == 28.6
+        assert visit["work_area_id"] == visit_data.work_area.id
 
     def test_queryset_only_includes_visits_for_opportunity(self, opportunity, visit_data):
         other_opp = OpportunityFactory()
@@ -503,8 +518,7 @@ class TestUserVisitVectorLayer:
 
     def test_filter_by_assignee(self, opportunity, visit_data):
         other_access = OpportunityAccessFactory(opportunity=opportunity)
-        other_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=other_access)
-        other_wa = WorkAreaFactory(opportunity=opportunity, work_area_group=other_group)
+        other_wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=other_access)
         UserVisitFactory(
             opportunity=opportunity,
             user=visit_data.access.user,
@@ -548,9 +562,8 @@ class TestUserVisitVectorLayer:
         visit_data.work_area.status = WorkAreaStatus.VISITED
         visit_data.work_area.save()
         other_access = OpportunityAccessFactory(opportunity=opportunity)
-        other_group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=other_access)
         other_wa = WorkAreaFactory(
-            opportunity=opportunity, work_area_group=other_group, status=WorkAreaStatus.NOT_STARTED
+            opportunity=opportunity, opportunity_access=other_access, status=WorkAreaStatus.NOT_STARTED
         )
         UserVisitFactory(
             opportunity=opportunity,
@@ -677,9 +690,8 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
 
     def test_assignee_filter(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        wa = WorkAreaFactory(opportunity=opportunity, work_area_group=group)
-        WorkAreaFactory(opportunity=opportunity)  # unassigned, no group
+        wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=access)
+        WorkAreaFactory(opportunity=opportunity)  # unassigned
         client.force_login(org_user_admin)
 
         rows = self._parse_csv(client.get(self.url(opportunity) + f"?assignee={access.user.id}"))
@@ -739,191 +751,186 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert row_dict["Work Area Group Name"] == "Rev Group"
 
 
+@pytest.mark.django_db(transaction=True)
+class TestSaveAssignmentNotification(BaseMicroplanningFlagTest):
+    @pytest.fixture(autouse=True)
+    def setup_microplanning_flag(self, managed_opportunity, request):
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(managed_opportunity)
+        flag.flush()
+
+    def _url(self, program_manager_org, managed_opportunity):
+        return reverse(
+            "microplanning:save_assignment",
+            kwargs={"org_slug": program_manager_org.slug, "opp_id": managed_opportunity.opportunity_id},
+        )
+
+    @patch("commcare_connect.microplanning.views.bulk_create_or_update_cases_by_work_areas")
+    def test_schedules_one_notification_per_assignee(
+        self, mock_hq_sync, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        access_a = OpportunityAccessFactory(opportunity=managed_opportunity)
+        access_b = OpportunityAccessFactory(opportunity=managed_opportunity)
+        wa1 = WorkAreaFactory(opportunity=managed_opportunity)
+        wa2 = WorkAreaFactory(opportunity=managed_opportunity)
+        wa3 = WorkAreaFactory(opportunity=managed_opportunity)
+        wa4 = WorkAreaFactory(opportunity=managed_opportunity)
+        client.force_login(program_manager_org_user_admin)
+
+        payload = {
+            "assignments": [
+                {"assignee_id": access_a.pk, "work_area_ids": [wa1.id, wa2.id]},
+                {"assignee_id": access_a.pk, "work_area_ids": [wa3.id]},
+                {"assignee_id": access_b.pk, "work_area_ids": [wa4.id]},
+            ]
+        }
+        with mock.patch(
+            "commcare_connect.microplanning.views.send_work_area_assignment_notification.delay"
+        ) as delay_patch:
+            response = client.post(
+                self._url(program_manager_org, managed_opportunity),
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+
+        assert response.status_code == 200
+        called_ids = sorted(call.args[0] for call in delay_patch.call_args_list)
+        assert called_ids == sorted([access_a.pk, access_b.pk])
+
+    def test_ignores_assignees_from_other_opportunity(
+        self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity
+    ):
+        other_access = OpportunityAccessFactory(opportunity=OpportunityFactory())
+        client.force_login(program_manager_org_user_admin)
+
+        with mock.patch(
+            "commcare_connect.microplanning.views.send_work_area_assignment_notification.delay"
+        ) as delay_patch:
+            response = client.post(
+                self._url(program_manager_org, managed_opportunity),
+                data=json.dumps({"assignments": [{"assignee_id": other_access.pk, "work_area_ids": [1]}]}),
+                content_type="application/json",
+            )
+
+        assert response.status_code == 400
+        delay_patch.assert_not_called()
+
+
 @pytest.mark.django_db
-class TestExcludeWorkAreasTask:
-    """Unit tests for `exclude_work_areas_task` — invokes the task directly.
+class TestSaveAssignment:
+    @pytest.fixture(autouse=True)
+    def setup_flag(self, managed_opportunity):
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(managed_opportunity)
+        flag.flush()
 
-    The task returns nothing; behavior is verified via DB state and mock interactions.
-    """
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_happy_path_excludes_not_started_areas(self, mock_bulk_hq, org_user_admin, opportunity):
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        work_areas = WorkAreaFactory.create_batch(
-            2, opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED, work_area_group=group
+    def url(self, org_slug, opp_id):
+        return reverse(
+            "microplanning:save_assignment",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
         )
 
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id for wa in work_areas],
-            user_id=org_user_admin.id,
-            exclusion_reason="Flooding",
+    def _post(self, client, org_slug, opp_id, assignments):
+        return client.post(
+            self.url(org_slug, opp_id),
+            data=json.dumps({"assignments": assignments}),
+            content_type="application/json",
         )
 
-        for wa in work_areas:
+    @patch("commcare_connect.microplanning.views.bulk_create_or_update_cases_by_work_areas")
+    def test_assigns_work_areas_and_syncs_to_hq(
+        self,
+        mock_hq_sync,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        wa1 = WorkAreaFactory(opportunity=managed_opportunity)
+        wa2 = WorkAreaFactory(opportunity=managed_opportunity)
+        client.force_login(program_manager_org_user_admin)
+
+        response = self._post(
+            client,
+            program_manager_org.slug,
+            managed_opportunity.opportunity_id,
+            [{"assignee_id": access.id, "work_area_ids": [wa1.id, wa2.id]}],
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+        mock_hq_sync.assert_called_once()
+        synced_ids = {wa.id for wa in mock_hq_sync.call_args[0][0]}
+        assert synced_ids == {wa1.id, wa2.id}
+        for wa in [wa1, wa2]:
             wa.refresh_from_db()
-            assert wa.status == WorkAreaStatus.EXCLUDED
-            assert wa.work_area_group is None
-            assert wa.excluded_by == org_user_admin
-            assert wa.excluded_reason == "Flooding"
+            assert wa.opportunity_access_id == access.id
 
-        assert mock_bulk_hq.call_count == 1
+    @patch("commcare_connect.microplanning.views.bulk_create_or_update_cases_by_work_areas")
+    def test_hq_failure_rolls_back_db(
+        self,
+        mock_hq_sync,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        """If HQ sync fails, the DB assignment must not be committed."""
+        mock_hq_sync.side_effect = CommCareHQAPIException("HQ unavailable")
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        wa = WorkAreaFactory(opportunity=managed_opportunity)
+        client.force_login(program_manager_org_user_admin)
 
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_mixed_batch_only_not_started_is_excluded(self, mock_bulk_hq, org_user_admin, opportunity):
-        wa_valid = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
-        wa_inaccessible = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.INACCESSIBLE)
-        wa_excluded = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.EXCLUDED)
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa_valid.id, wa_inaccessible.id, wa_excluded.id],
-            user_id=org_user_admin.id,
-            exclusion_reason="Test",
+        response = self._post(
+            client,
+            program_manager_org.slug,
+            managed_opportunity.opportunity_id,
+            [{"assignee_id": access.id, "work_area_ids": [wa.id]}],
         )
 
-        wa_valid.refresh_from_db()
-        wa_inaccessible.refresh_from_db()
-        wa_excluded.refresh_from_db()
-
-        assert wa_valid.status == WorkAreaStatus.EXCLUDED
-        assert wa_inaccessible.status == WorkAreaStatus.INACCESSIBLE  # unchanged
-        assert wa_excluded.status == WorkAreaStatus.EXCLUDED  # unchanged
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_hq_batch_failure_skips_local_exclusion_for_whole_chunk(self, mock_bulk_hq, org_user_admin, opportunity):
-        """When the HQ bulk call fails, no work area in that chunk is excluded."""
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        work_areas = WorkAreaFactory.create_batch(
-            2, opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED, work_area_group=group
-        )
-        mock_bulk_hq.side_effect = CommCareHQAPIException("HQ down")
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id for wa in work_areas],
-            user_id=org_user_admin.id,
-            exclusion_reason="Test",
-        )
-
-        for wa in work_areas:
-            wa.refresh_from_db()
-            assert wa.status == WorkAreaStatus.NOT_STARTED
-            assert wa.work_area_group == group
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_no_case_id_excludes_locally_without_hq_call(self, mock_bulk_hq, org_user_admin, opportunity):
-        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED, case_id=None)
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id],
-            user_id=org_user_admin.id,
-            exclusion_reason="No case",
-        )
-
-        mock_bulk_hq.assert_not_called()
+        assert response.status_code == 502
         wa.refresh_from_db()
-        assert wa.status == WorkAreaStatus.EXCLUDED
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_work_area_from_other_opportunity_is_ignored(self, mock_bulk_hq, org_user_admin, opportunity):
-        other_wa = WorkAreaFactory(status=WorkAreaStatus.NOT_STARTED)  # different opportunity
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[other_wa.id],
-            user_id=org_user_admin.id,
-            exclusion_reason="Test",
-        )
-
-        other_wa.refresh_from_db()
-        assert other_wa.status == WorkAreaStatus.NOT_STARTED  # unchanged
-        mock_bulk_hq.assert_not_called()
+        assert wa.opportunity_access_id is None
 
     @pytest.mark.parametrize(
-        "status",
+        "payload, expected_status",
         [
-            WorkAreaStatus.VISITED,
-            WorkAreaStatus.NOT_VISITED,
-            WorkAreaStatus.UNASSIGNED,
-            WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
-            WorkAreaStatus.EXPECTED_VISIT_REACHED,
+            ([], 400),
+            ([{"assignee_id": 99999, "work_area_ids": [1]}], 400),
         ],
+        ids=["empty_assignments", "invalid_assignee"],
     )
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_work_started_statuses_are_not_excluded(self, mock_bulk_hq, org_user_admin, opportunity, status):
-        wa = WorkAreaFactory(opportunity=opportunity, status=status)
+    def test_invalid_payload(
+        self,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+        payload,
+        expected_status,
+    ):
+        client.force_login(program_manager_org_user_admin)
+        response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, payload)
+        assert response.status_code == expected_status
 
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id],
-            user_id=org_user_admin.id,
-            exclusion_reason="Test",
+    def test_non_program_manager_cannot_assign(self, client, organization, org_user_admin, managed_opportunity):
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        wa = WorkAreaFactory(opportunity=managed_opportunity)
+        client.force_login(org_user_admin)
+
+        response = self._post(
+            client,
+            organization.slug,
+            managed_opportunity.opportunity_id,
+            [{"assignee_id": access.id, "work_area_ids": [wa.id]}],
         )
-
-        wa.refresh_from_db()
-        assert wa.status == status  # unchanged
-        mock_bulk_hq.assert_not_called()
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_work_areas_over_chunk_size_are_split_into_batches(self, mock_bulk_hq, org_user_admin, opportunity):
-        """125 work areas → 3 HQ calls (50, 50, 25); all excluded on success."""
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        count = HQ_BULK_CHUNK_SIZE * 2 + 25
-        work_areas = WorkAreaFactory.create_batch(
-            count, opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED, work_area_group=group
-        )
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id for wa in work_areas],
-            user_id=org_user_admin.id,
-            exclusion_reason="Flooding",
-        )
-
-        assert mock_bulk_hq.call_count == 3
-        chunk_sizes = [len(call.args[2]) for call in mock_bulk_hq.call_args_list]
-        assert chunk_sizes == [HQ_BULK_CHUNK_SIZE, HQ_BULK_CHUNK_SIZE, 25]
-
-        for wa in work_areas:
-            wa.refresh_from_db()
-            assert wa.status == WorkAreaStatus.EXCLUDED
-
-    @patch("commcare_connect.microplanning.tasks.bulk_update_cases")
-    def test_one_failed_chunk_does_not_block_other_chunks(self, mock_bulk_hq, org_user_admin, opportunity):
-        """Chunk 2 fails; chunks 1 and 3 still excluded."""
-        access = OpportunityAccessFactory(opportunity=opportunity)
-        group = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access)
-        count = HQ_BULK_CHUNK_SIZE * 3
-        work_areas = WorkAreaFactory.create_batch(
-            count, opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED, work_area_group=group
-        )
-
-        mock_bulk_hq.side_effect = [None, CommCareHQAPIException("HQ down"), None]
-
-        exclude_work_areas_task(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id for wa in work_areas],
-            user_id=org_user_admin.id,
-            exclusion_reason="Test",
-        )
-
-        for wa in work_areas:
-            wa.refresh_from_db()
-
-        excluded = [wa for wa in work_areas if wa.status == WorkAreaStatus.EXCLUDED]
-        not_started = [wa for wa in work_areas if wa.status == WorkAreaStatus.NOT_STARTED]
-        assert len(excluded) == 2 * HQ_BULK_CHUNK_SIZE
-        assert len(not_started) == HQ_BULK_CHUNK_SIZE
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
 class TestExcludeWorkAreasView:
-    """Thin tests for the view: validation + task enqueueing."""
+    """Thin tests for the view: validation + synchronous exclusion."""
 
     def url(self, opportunity):
         return reverse(
@@ -931,10 +938,11 @@ class TestExcludeWorkAreasView:
             kwargs={"org_slug": opportunity.organization.slug, "opp_id": opportunity.opportunity_id},
         )
 
-    @patch("commcare_connect.microplanning.views.exclude_work_areas_task")
-    def test_valid_request_enqueues_task_and_returns_progress_template(
-        self, mock_task, client, org_user_admin, opportunity
-    ):
+    @patch(
+        "commcare_connect.microplanning.views.exclude_work_areas_for_opportunity",
+        return_value={"excluded": 1, "skipped": 0, "failed": 0},
+    )
+    def test_valid_request_calls_exclude_and_returns_200(self, mock_exclude, client, org_user_admin, opportunity):
         wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
 
         client.force_login(org_user_admin)
@@ -944,17 +952,15 @@ class TestExcludeWorkAreasView:
         )
 
         assert response.status_code == 200
-        assert b"exclude-progress" in response.content
-        mock_task.delay.assert_called_once_with(
-            opp_id=opportunity.id,
-            work_area_ids=[wa.id],
-            user_id=org_user_admin.id,
-            exclusion_reason="Flooding",
-        )
-
-        # task not actually run — DB unchanged
-        wa.refresh_from_db()
-        assert wa.status == WorkAreaStatus.NOT_STARTED
+        assert "HX-Trigger" in response.headers
+        trigger = json.loads(response.headers["HX-Trigger"])
+        assert "work_areas_excluded" in trigger
+        mock_exclude.assert_called_once()
+        kwargs = mock_exclude.call_args.kwargs
+        assert kwargs["opportunity"].pk == opportunity.pk
+        assert kwargs["work_area_ids"] == [wa.id]
+        assert kwargs["user"].pk == org_user_admin.pk
+        assert kwargs["exclusion_reason"] == "Flooding"
 
     @pytest.mark.parametrize(
         "post_data",
@@ -965,13 +971,13 @@ class TestExcludeWorkAreasView:
         ],
         ids=["missing", "blank", "too_long"],
     )
-    @patch("commcare_connect.microplanning.views.exclude_work_areas_task")
-    def test_invalid_exclusion_reason_returns_400(self, mock_task, client, org_user_admin, opportunity, post_data):
+    @patch("commcare_connect.microplanning.views.exclude_work_areas_for_opportunity")
+    def test_invalid_exclusion_reason_returns_400(self, mock_exclude, client, org_user_admin, opportunity, post_data):
         client.force_login(org_user_admin)
         response = client.post(self.url(opportunity), post_data)
         assert response.status_code == 400
-        assert "exclusion_reason" in response.json()["error"]
-        mock_task.delay.assert_not_called()
+        assert "Exclusion reason" in response.json()["error"]
+        mock_exclude.assert_not_called()
 
     @pytest.mark.parametrize(
         "post_data",
@@ -981,15 +987,15 @@ class TestExcludeWorkAreasView:
         ],
         ids=["missing", "non_integer"],
     )
-    @patch("commcare_connect.microplanning.views.exclude_work_areas_task")
-    def test_invalid_work_area_ids_returns_400(self, mock_task, client, org_user_admin, opportunity, post_data):
+    @patch("commcare_connect.microplanning.views.exclude_work_areas_for_opportunity")
+    def test_invalid_work_area_ids_returns_400(self, mock_exclude, client, org_user_admin, opportunity, post_data):
         client.force_login(org_user_admin)
         response = client.post(self.url(opportunity), post_data)
         assert response.status_code == 400
-        mock_task.delay.assert_not_called()
+        mock_exclude.assert_not_called()
 
-    @patch("commcare_connect.microplanning.views.exclude_work_areas_task")
-    def test_too_many_work_area_ids_returns_400(self, mock_task, client, org_user_admin, opportunity):
+    @patch("commcare_connect.microplanning.views.exclude_work_areas_for_opportunity")
+    def test_too_many_work_area_ids_returns_400(self, mock_exclude, client, org_user_admin, opportunity):
         from commcare_connect.microplanning.views import MAX_EXCLUDE_WORK_AREAS
 
         client.force_login(org_user_admin)
@@ -1002,4 +1008,4 @@ class TestExcludeWorkAreasView:
         )
         assert response.status_code == 400
         assert str(MAX_EXCLUDE_WORK_AREAS) in response.json()["error"]
-        mock_task.delay.assert_not_called()
+        mock_exclude.assert_not_called()

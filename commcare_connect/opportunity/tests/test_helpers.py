@@ -166,6 +166,61 @@ def test_get_worker_table_data_all_fields(opportunity):
 
 
 @pytest.mark.django_db
+def test_get_worker_table_data_search(opportunity):
+    """Search matches name (via linked user) and phone_number (including not_found invites)."""
+    # Accepted worker with known name
+    alpha_access = OpportunityAccessFactory(opportunity=opportunity)
+    alpha_access.user.name = "Alpha Worker"
+    alpha_access.user.phone_number = "+10000000001"
+    alpha_access.user.save()
+    alpha_invite = UserInviteFactory(
+        opportunity=opportunity,
+        opportunity_access=alpha_access,
+        phone_number=alpha_access.user.phone_number,
+        status=UserInviteStatus.accepted,
+    )
+
+    # Another accepted worker — should be filtered out by a name search for "Alpha"
+    beta_access = OpportunityAccessFactory(opportunity=opportunity)
+    beta_access.user.name = "Beta Worker"
+    beta_access.user.phone_number = "+10000000002"
+    beta_access.user.save()
+    beta_invite = UserInviteFactory(
+        opportunity=opportunity,
+        opportunity_access=beta_access,
+        phone_number=beta_access.user.phone_number,
+        status=UserInviteStatus.accepted,
+    )
+
+    # Pre-accept / not_found invite — no linked user, findable only by phone
+    not_found_invite = UserInviteFactory(
+        opportunity=opportunity,
+        opportunity_access=None,
+        phone_number="+10000009999",
+        status=UserInviteStatus.not_found,
+    )
+
+    # Empty search: returns everything (including not_found)
+    all_ids = set(get_worker_table_data(opportunity).values_list("id", flat=True))
+    assert all_ids == {alpha_invite.id, beta_invite.id, not_found_invite.id}
+
+    # Name search: matches Alpha only (case-insensitive substring)
+    name_ids = set(get_worker_table_data(opportunity, search_term="alpha").values_list("id", flat=True))
+    assert name_ids == {alpha_invite.id}
+
+    # Phone search on linked-user phone
+    phone_ids = set(get_worker_table_data(opportunity, search_term="0000002").values_list("id", flat=True))
+    assert phone_ids == {beta_invite.id}
+
+    # Phone search finds the not_found invite (no linked user, matches on UserInvite.phone_number)
+    not_found_ids = set(get_worker_table_data(opportunity, search_term="0009999").values_list("id", flat=True))
+    assert not_found_ids == {not_found_invite.id}
+
+    # No match: empty result
+    assert not get_worker_table_data(opportunity, search_term="zzzzzzz").exists()
+
+
+@pytest.mark.django_db
 def test_get_worker_learn_table_data_all_fields(
     opportunity,
 ):
@@ -599,7 +654,7 @@ def test_filter_worker_tasks_by_date_assigned_range(opportunity):
 
     AssignedTaskFactory(opportunity_access=access, task_type=task_type)
 
-    result = _filter_worker_tasks(opportunity, {"date_assigned_after": date.today() - timedelta(days=7)})
+    result = _filter_worker_tasks(opportunity, {"date_assigned_from": date.today() - timedelta(days=7)})
     assert len(result) == 1
 
 
@@ -611,7 +666,7 @@ def test_filter_worker_tasks_by_due_date_range(opportunity):
     AssignedTaskFactory(opportunity_access=access, task_type=task_type, due_date=date.today() + timedelta(days=1))
     AssignedTaskFactory(opportunity_access=access, task_type=task_type, due_date=date.today() + timedelta(days=30))
 
-    result = _filter_worker_tasks(opportunity, {"due_date_before": date.today() + timedelta(days=7)})
+    result = _filter_worker_tasks(opportunity, {"due_date_to": date.today() + timedelta(days=7)})
     assert len(result) == 1
 
 
@@ -669,23 +724,67 @@ def test_get_worker_work_area_table_data_multiple_workers_and_groups(opportunity
     access1 = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     access2 = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
 
-    group1a = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access1)
-    group1b = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access1)
+    group1a = WorkAreaGroupFactory(opportunity=opportunity)
+    group1b = WorkAreaGroupFactory(opportunity=opportunity)
     area1a = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=group1a, building_count=10, expected_visit_count=5
+        opportunity=opportunity,
+        work_area_group=group1a,
+        opportunity_access=access1,
+        building_count=10,
+        expected_visit_count=5,
     )
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group1a, building_count=15, expected_visit_count=3)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group1b, building_count=20, expected_visit_count=7)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group1b, building_count=25, expected_visit_count=4)
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group1a,
+        opportunity_access=access1,
+        building_count=15,
+        expected_visit_count=3,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group1b,
+        opportunity_access=access1,
+        building_count=20,
+        expected_visit_count=7,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group1b,
+        opportunity_access=access1,
+        building_count=25,
+        expected_visit_count=4,
+    )
 
-    group2a = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access2)
-    group2b = WorkAreaGroupFactory(opportunity=opportunity, opportunity_access=access2)
+    group2a = WorkAreaGroupFactory(opportunity=opportunity)
+    group2b = WorkAreaGroupFactory(opportunity=opportunity)
     area2a = WorkAreaFactory(
-        opportunity=opportunity, work_area_group=group2a, building_count=30, expected_visit_count=10
+        opportunity=opportunity,
+        work_area_group=group2a,
+        opportunity_access=access2,
+        building_count=30,
+        expected_visit_count=10,
     )
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group2a, building_count=5, expected_visit_count=2)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group2b, building_count=8, expected_visit_count=6)
-    WorkAreaFactory(opportunity=opportunity, work_area_group=group2b, building_count=12, expected_visit_count=1)
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group2a,
+        opportunity_access=access2,
+        building_count=5,
+        expected_visit_count=2,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group2b,
+        opportunity_access=access2,
+        building_count=8,
+        expected_visit_count=6,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group2b,
+        opportunity_access=access2,
+        building_count=12,
+        expected_visit_count=1,
+    )
 
     UserVisitFactory(opportunity=opportunity, user=access1.user, opportunity_access=access1, work_area=area1a)
     UserVisitFactory(opportunity=opportunity, user=access1.user, opportunity_access=access1, work_area=area1a)

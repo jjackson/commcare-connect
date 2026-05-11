@@ -29,12 +29,16 @@ from django.views.generic.edit import UpdateView
 from vectortiles import VectorLayer
 from vectortiles.views import MVTView
 
-from commcare_connect.commcarehq.api import create_or_update_case_by_work_area
+from commcare_connect.commcarehq.api import (
+    bulk_create_or_update_cases_by_work_areas,
+    create_or_update_case_by_work_area,
+)
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
-from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
+from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
+from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import OpportunityAccess, UserVisit
 from commcare_connect.organization.decorators import (
@@ -51,16 +55,15 @@ from .tasks import (
     WorkAreaCSVExporter,
     WorkAreaCSVImporter,
     cluster_work_areas_task,
-    exclude_work_areas_task,
     get_cluster_area_cache_lock_key,
     get_import_area_cache_key,
     import_work_areas_task,
+    send_work_area_assignment_notification,
 )
 
 logger = logging.getLogger(__name__)
 
 WORKAREA_MIN_ZOOM = 6
-MAX_EXCLUDE_WORK_AREAS = 200
 
 
 @require_GET
@@ -296,7 +299,7 @@ class WorkAreaVectorLayer(VectorLayer):
         qs = WorkArea.objects.filter(opportunity=self.opportunity).annotate(
             group_id=F("work_area_group__id"),
             group_name=F("work_area_group__name"),
-            assignee_name=F("work_area_group__opportunity_access__user__name"),
+            assignee_name=F("opportunity_access__user__name"),
         )
         return WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
 
@@ -316,7 +319,7 @@ class WorkAreaTileView(MVTView):
 
 class UserVisitVectorLayer(VectorLayer):
     id = "user-visits"
-    tile_fields = ()
+    tile_fields = ("work_area_id",)
     geom_field = "location_point"
     min_zoom = WORKAREA_MIN_ZOOM
 
@@ -350,7 +353,7 @@ class UserVisitVectorLayer(VectorLayer):
                     output_field=PointField(srid=4326),
                 )
             )
-            .values("location_point")
+            .values("location_point", "work_area_id")
         )
 
 
@@ -476,62 +479,40 @@ def clustering_status(request, org_slug, opp_id):
 def exclude_work_areas(request, org_slug, opp_id):
     exclusion_reason = request.POST.get("exclusion_reason", "").strip()
     if not exclusion_reason:
-        return JsonResponse({"error": "exclusion_reason is required"}, status=400)
+        return JsonResponse({"error": _("Exclusion reason is required")}, status=400)
     if len(exclusion_reason) > 500:
-        return JsonResponse({"error": "exclusion_reason must be at most 500 characters"}, status=400)
+        return JsonResponse({"error": _("Exclusion reason must be at most 500 characters")}, status=400)
 
     raw_ids = request.POST.getlist("work_area_ids[]")
     if not raw_ids:
-        return JsonResponse({"error": "work_area_ids[] is required"}, status=400)
+        return JsonResponse({"error": _("Work Area IDs is required")}, status=400)
     if len(raw_ids) > MAX_EXCLUDE_WORK_AREAS:
         return JsonResponse(
-            {"error": f"work_area_ids[] must contain at most {MAX_EXCLUDE_WORK_AREAS} items"},
+            {"error": _("Work Area IDs must contain at most %(max)d items") % {"max": MAX_EXCLUDE_WORK_AREAS}},
             status=400,
         )
 
     try:
         work_area_ids = [int(i) for i in raw_ids]
     except (ValueError, TypeError):
-        return JsonResponse({"error": "work_area_ids[] must be integers"}, status=400)
+        return JsonResponse({"error": _("Work Area IDs must be integers")}, status=400)
 
-    task = exclude_work_areas_task.delay(
-        opp_id=request.opportunity.id,
+    exclude_work_areas_for_opportunity(
+        opportunity=request.opportunity,
         work_area_ids=work_area_ids,
-        user_id=request.user.id,
+        user=request.user,
         exclusion_reason=exclusion_reason,
     )
-    return render(
-        request,
-        "microplanning/exclude_work_area_progress.html",
-        context={"exclude_task_id": task.id},
+    excluded_ids = list(
+        WorkArea.objects.filter(
+            id__in=work_area_ids,
+            opportunity=request.opportunity,
+            status=WorkAreaStatus.EXCLUDED,
+        ).values_list("id", flat=True)
     )
-
-
-@org_admin_required
-@opportunity_required
-def exclude_status(request, org_slug, opp_id):
-    task_id = request.GET.get("exclude_task_id")
-    if not task_id:
-        return HttpResponse(status=HTTPStatus.NO_CONTENT)
-
-    try:
-        uuid.UUID(task_id)
-    except (ValueError, TypeError):
-        return HttpResponse(status=HTTPStatus.NO_CONTENT)
-
-    task = AsyncResult(task_id)
-    status = task.state
-
-    if status == CELERY_TASK_SUCCESS:
-        result = task.result or {}
-        excluded = result.get("excluded", [])
-        response = HttpResponse('<div id="exclude-progress"></div>')
-        response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": excluded}})
-        return response
-    elif status == CELERY_TASK_FAILURE:
-        return render(request, "microplanning/exclude_work_area_progress.html", context={"error": True})
-    else:
-        return HttpResponse(status=HTTPStatus.NO_CONTENT)
+    response = HttpResponse('<div id="exclude-progress"></div>')
+    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": excluded_ids}})
+    return response
 
 
 @require_GET
@@ -571,11 +552,7 @@ class ModifyWorkAreaUpdateView(UpdateView):
         try:
             with transaction.atomic(), pghistory.context(reason=reason):
                 work_area.save(update_fields=["expected_visit_count", "work_area_group"])
-                if (
-                    form.has_changed()
-                    and work_area.work_area_group
-                    and work_area.work_area_group.opportunity_access_id
-                ):
+                if form.has_changed() and work_area.opportunity_access_id:
                     # let exception bubble up if case update fails, to avoid saving work area without case sync
                     create_or_update_case_by_work_area(work_area)
         except CommCareHQAPIException as e:
@@ -622,7 +599,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
     work_areas = list(
         WorkArea.objects.filter(
             opportunity=request.opportunity,
-            work_area_group__opportunity_access_id=assignee_id,
+            opportunity_access_id=assignee_id,
         ).values("id", "building_count", "expected_visit_count")
     )
     return JsonResponse({"work_areas": work_areas})
@@ -639,7 +616,7 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
 
     qs = WorkArea.objects.filter(
         opportunity=request.opportunity,
-        work_area_group__opportunity_access_id=assignee_id,
+        opportunity_access_id=assignee_id,
     )
     stats = qs.aggregate(
         buildings=Sum("building_count"),
@@ -659,5 +636,70 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
 @opportunity_required
 @require_flag_for_opp(MICROPLANNING)
 def save_assignment(request, org_slug, opp_id):
-    """Stub endpoint for saving work area assignments. Accepts the payload but does not persist changes yet."""
+    try:
+        data = json.loads(request.body)
+        assignments = data["assignments"]
+        if not assignments:
+            raise ValueError
+        assignee_ids = {int(entry["assignee_id"]) for entry in assignments}
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"error": _("Invalid request body")}, status=400)
+
+    valid_accesses = {
+        access.id: access
+        for access in OpportunityAccess.objects.filter(
+            id__in=assignee_ids,
+            opportunity=request.opportunity,
+        ).select_related("user")
+    }
+
+    invalid_ids = assignee_ids - valid_accesses.keys()
+    if invalid_ids:
+        return JsonResponse({"error": _("Invalid assignee IDs: %(ids)s") % {"ids": sorted(invalid_ids)}}, status=400)
+
+    try:
+        all_wa_ids = [int(wa_id) for entry in assignments for wa_id in entry.get("work_area_ids", [])]
+    except (TypeError, ValueError):
+        return JsonResponse({"error": _("Work area IDs must be integers")}, status=400)
+    requested_wa_ids = set(all_wa_ids)
+    if len(all_wa_ids) != len(requested_wa_ids):
+        return JsonResponse({"error": _("Duplicate work area IDs in request")}, status=400)
+
+    work_area_to_access = {
+        int(wa_id): valid_accesses[int(entry["assignee_id"])]
+        for entry in assignments
+        for wa_id in entry.get("work_area_ids", [])
+    }
+
+    all_work_areas = list(
+        WorkArea.objects.filter(
+            id__in=requested_wa_ids,
+            opportunity=request.opportunity,
+        ).select_for_update()
+    )
+
+    found_ids = {wa.id for wa in all_work_areas}
+    invalid_wa_ids = requested_wa_ids - found_ids
+    if invalid_wa_ids:
+        return JsonResponse(
+            {"error": _("Invalid work area IDs: %(ids)s") % {"ids": sorted(invalid_wa_ids)}}, status=400
+        )
+
+    for work_area in all_work_areas:
+        work_area.opportunity_access = work_area_to_access[work_area.id]
+        if work_area.status == WorkAreaStatus.UNASSIGNED:
+            work_area.status = WorkAreaStatus.NOT_STARTED
+
+    WorkArea.objects.bulk_update(all_work_areas, ["opportunity_access", "status"])
+
+    try:
+        bulk_create_or_update_cases_by_work_areas(all_work_areas, request.opportunity)
+    except CommCareHQAPIException:
+        transaction.set_rollback(True)
+        return JsonResponse({"error": _("Failed to sync with CommCare HQ. Please try again.")}, status=502)
+
+    notified_access_ids = {access.id for access in work_area_to_access.values()}
+    for access_id in notified_access_ids:
+        transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
+
     return JsonResponse({"status": "ok"})
