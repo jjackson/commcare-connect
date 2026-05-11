@@ -88,7 +88,7 @@ class WorkArea(geo_models.Model):
         WorkAreaStatus.EXPECTED_VISIT_REACHED,
     }
 
-    def update_status(self):
+    def update_status(self, user):
         if self.status not in self.VISIT_TRACKABLE_STATUSES:
             return
 
@@ -103,4 +103,5 @@ class WorkArea(geo_models.Model):
 
         if new_status != self.status:
             self.status = new_status
-            self.save(update_fields=["status"])
+            with pghistory.context(username=user.username, user_email=user.email):
+                self.save(update_fields=["status"])

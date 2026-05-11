@@ -535,14 +535,10 @@ class ModifyWorkAreaUpdateView(UpdateView):
         work_area = form.save(commit=False)
         reason = form.cleaned_data.pop("reason", "")
         try:
-            with transaction.atomic(), pghistory.context(
-                reason=reason,
-                username=self.request.user.username,
-                user_email=self.request.user.email,
-            ):
+            with transaction.atomic(), pghistory.context(reason=reason):
                 work_area.save(update_fields=["expected_visit_count", "work_area_group"])
                 if "expected_visit_count" in form.changed_data:
-                    work_area.update_status()
+                    work_area.update_status(self.request.user)
                 if form.has_changed() and work_area.opportunity_access_id:
                     # let exception bubble up if case update fails, to avoid saving work area without case sync
                     create_or_update_case_by_work_area(work_area)

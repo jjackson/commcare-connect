@@ -498,8 +498,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         user_visit.save()
 
         if work_area:
-            with pghistory.context(username=user.username, user_email=user.email):
-                work_area.update_status()
+            work_area.update_status(user)
 
         if not access.last_active or access.last_active < user_visit.visit_date:
             access.last_active = user_visit.visit_date
