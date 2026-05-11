@@ -3574,17 +3574,13 @@ def delete_tasks(request, org_slug, opp_id):
     except (TypeError, ValueError):
         return HttpResponseBadRequest()
 
-    deleted_count, _info = (
-        AssignedTask.objects.filter(
-            pk__in=task_ids,
-            opportunity_access__opportunity=request.opportunity,
-        )
-        .exclude(status=AssignedTaskStatus.COMPLETED)
-        .delete()
-    )
-
-    if deleted_count:
-        messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
-
     redirect_url = _task_redirect_url(request, org_slug, opp_id)
+
+    try:
+        deleted_count = AssignedTask.delete_and_reset_hq(task_ids, request.opportunity)
+    except CommCareHQAPIException:
+        messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
+    else:
+        if deleted_count:
+            messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
     return HttpResponse(headers={"HX-Redirect": redirect_url})

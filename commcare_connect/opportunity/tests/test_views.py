@@ -2826,3 +2826,42 @@ class TestDeleteTasks:
         client.force_login(user)
         response = client.post(self._url(opp), data={"task_ids": [1]})
         assert response.status_code == HTTPStatus.NOT_FOUND
+
+    def test_delete_tasks_resets_hq_case_property(self, client, org_user_member, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app, case_property="needs_assessment")
+        task = AssignedTaskFactory(
+            opportunity_access=access,
+            task_type=task_type,
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+        client.force_login(org_user_member)
+
+        with mock.patch("commcare_connect.commcarehq.api.update_usercase") as mock_update:
+            response = client.post(self._url(opportunity), data={"task_ids": [task.pk]})
+
+        assert response.status_code == HTTPStatus.OK
+        assert not AssignedTask.objects.filter(pk=task.pk).exists()
+        mock_update.assert_called_once_with(access, data={"properties": {"needs_assessment": ""}})
+
+    def test_delete_tasks_hq_failure_shows_error_and_keeps_tasks(self, client, org_user_member, opportunity):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        task_type = TaskTypeFactory(app=opportunity.deliver_app, case_property="needs_assessment")
+        task = AssignedTaskFactory(
+            opportunity_access=access,
+            task_type=task_type,
+            status=AssignedTaskStatus.ASSIGNED,
+        )
+        client.force_login(org_user_member)
+
+        with mock.patch(
+            "commcare_connect.commcarehq.api.update_usercase",
+            side_effect=CommCareHQAPIException("boom"),
+        ):
+            response = client.post(self._url(opportunity), data={"task_ids": [task.pk]})
+
+        assert response.status_code == HTTPStatus.OK
+        assert "HX-Redirect" in response
+        assert AssignedTask.objects.filter(pk=task.pk).exists()
+        msgs = list(get_messages(response.wsgi_request))
+        assert any("could not update CommCare HQ" in str(m) for m in msgs)
