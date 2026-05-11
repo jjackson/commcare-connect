@@ -191,18 +191,25 @@ def bulk_update_cases(api_key: HQApiKey, domain: str, updates: list[dict[str, An
         raise CommCareHQAPIException(f"Failed to bulk-update {len(updates)} cases for {domain}. HQ Error: {e}") from e
 
 
-def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, Any]) -> CommCareCase:
-    domain = opportunity_access.opportunity.deliver_app.cc_domain
-    api_key = opportunity_access.opportunity.api_key
+def bulk_update_usercases(updates: list[tuple[OpportunityAccess, dict[str, Any]]]) -> None:
+    if not updates:
+        return
+
+    first_access = updates[0][0]
+    domain = first_access.opportunity.deliver_app.cc_domain
+    api_key = first_access.opportunity.api_key
     hq_server = api_key.hq_server
 
-    link = ConnectIDUserLink.objects.get(user=opportunity_access.user, domain=domain, hq_server=hq_server)
-    if link.hq_case_id is None:
-        usercase = get_usercase(opportunity_access)
-        link.hq_case_id = usercase.case_id
-        link.save()
+    cases_data = []
+    for access, data in updates:
+        link = ConnectIDUserLink.objects.get(user=access.user, domain=domain, hq_server=hq_server)
+        if link.hq_case_id is None:
+            usercase = get_usercase(access)
+            link.hq_case_id = usercase.case_id
+            link.save()
+        cases_data.append({"case_id": link.hq_case_id, **data})
 
-    return create_or_update_case(api_key, domain, data, case_id=link.hq_case_id)
+    bulk_update_cases(api_key, domain, cases_data)
 
 
 def get_usercase(opportunity_access: OpportunityAccess) -> CommCareCase:

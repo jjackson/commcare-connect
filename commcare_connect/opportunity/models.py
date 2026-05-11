@@ -455,7 +455,7 @@ class AssignedTask(XFormBaseModel):
 
     @classmethod
     def assign(cls, *, task_type, opportunity_access, due_date, assigned_by=None) -> "AssignedTask":
-        from commcare_connect.commcarehq.api import update_usercase
+        from commcare_connect.commcarehq.api import bulk_update_usercases
         from commcare_connect.opportunity.tasks import send_task_assignment_notification
 
         with transaction.atomic():
@@ -468,13 +468,13 @@ class AssignedTask(XFormBaseModel):
             )
             case_property = task_type.case_property
             if case_property:
-                update_usercase(opportunity_access, data={"properties": {case_property: "1"}})
+                bulk_update_usercases([(opportunity_access, {"properties": {case_property: "1"}})])
             transaction.on_commit(lambda: send_task_assignment_notification.delay(assigned_task.pk))
         return assigned_task
 
     @classmethod
     def delete_and_reset_hq(cls, task_ids: list[int], opportunity: "Opportunity") -> int:
-        from commcare_connect.commcarehq.api import update_usercase
+        from commcare_connect.commcarehq.api import bulk_update_usercases
 
         tasks = list(
             cls.objects.filter(
@@ -496,8 +496,8 @@ class AssignedTask(XFormBaseModel):
 
         with transaction.atomic():
             deleted_count, _ = cls.objects.filter(pk__in=[t.pk for t in tasks]).delete()
-            for access, prop in hq_updates.values():
-                update_usercase(access, data={"properties": {prop: ""}})
+            if hq_updates:
+                bulk_update_usercases([(access, {"properties": {prop: ""}}) for access, prop in hq_updates.values()])
 
         return deleted_count
 

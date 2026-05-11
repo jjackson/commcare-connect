@@ -2662,7 +2662,7 @@ class TestCreateTask:
         task = TaskTypeFactory(app=opportunity.deliver_app, case_property="some_prop")
         due_date = date.today() + timedelta(days=7)
 
-        with mock.patch("commcare_connect.commcarehq.api.update_usercase") as mock_update:
+        with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
             response = client.post(
                 self._url(opportunity),
                 data={"task": task.pk, "access": access.pk, "due_date": due_date.isoformat()},
@@ -2674,7 +2674,7 @@ class TestCreateTask:
         assert assigned.due_date == due_date
         assert assigned.status == AssignedTaskStatus.ASSIGNED
         assert assigned.assigned_by == org_user_member
-        mock_update.assert_called_once_with(access, data={"properties": {"some_prop": "1"}})
+        mock_update.assert_called_once_with([(access, {"properties": {"some_prop": "1"}})])
         msgs = list(get_messages(response.wsgi_request))
         assert any("successfully" in str(m) for m in msgs)
 
@@ -2684,7 +2684,7 @@ class TestCreateTask:
         due_date = date.today() + timedelta(days=7)
 
         with mock.patch(
-            "commcare_connect.commcarehq.api.update_usercase",
+            "commcare_connect.commcarehq.api.bulk_update_usercases",
             side_effect=CommCareHQAPIException("boom"),
         ):
             response = client.post(
@@ -2837,12 +2837,12 @@ class TestDeleteTasks:
         )
         client.force_login(org_user_member)
 
-        with mock.patch("commcare_connect.commcarehq.api.update_usercase") as mock_update:
+        with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
             response = client.post(self._url(opportunity), data={"task_ids": [task.pk]})
 
         assert response.status_code == HTTPStatus.OK
         assert not AssignedTask.objects.filter(pk=task.pk).exists()
-        mock_update.assert_called_once_with(access, data={"properties": {"needs_assessment": ""}})
+        mock_update.assert_called_once_with([(access, {"properties": {"needs_assessment": ""}})])
 
     def test_delete_tasks_hq_failure_shows_error_and_keeps_tasks(self, client, org_user_member, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
@@ -2855,7 +2855,7 @@ class TestDeleteTasks:
         client.force_login(org_user_member)
 
         with mock.patch(
-            "commcare_connect.commcarehq.api.update_usercase",
+            "commcare_connect.commcarehq.api.bulk_update_usercases",
             side_effect=CommCareHQAPIException("boom"),
         ):
             response = client.post(self._url(opportunity), data={"task_ids": [task.pk]})
