@@ -15,6 +15,7 @@ from commcare_connect.audit.indicators import (
     InaccessibleWARateEarlyWarning,
     InaccessibleWARateLastCompletedWAG,
     MUACPhotoCompliance,
+    VaccineRate,
     WACoverageToVisitRatio,
 )
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
@@ -548,5 +549,40 @@ class TestInaccessibleWARateLastCompletedWAG:
         for _ in range(5):
             wa = make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
             make_visit(access, work_area=wa, visit_date=OUT_OF_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+
+@pytest.mark.django_db
+class TestVaccineRate:
+    calc = VaccineRate()
+
+    def test_no_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "given, not_given, expected_value, in_range",
+        [
+            (7, 3, 0.7, True),  # 70% — above 58% threshold
+            (0, 10, 0.0, False),  # 0% — below threshold
+            (10, 0, 1.0, True),  # 100% — no upper bound
+        ],
+    )
+    def test_vaccine_rate_threshold(self, given, not_given, expected_value, in_range):
+        access = OpportunityAccessFactory()
+        for _ in range(given):
+            _visit_with_vaccine(access, given=True)
+        for _ in range(not_given):
+            _visit_with_vaccine(access, given=False)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == given + not_given
+        assert value == pytest.approx(expected_value)
+        assert self.calc._in_range(value) is in_range
+
+    def test_visits_after_period_end_excluded(self):
+        access = OpportunityAccessFactory()
+        _visit_with_vaccine(access, given=False, visit_date=AFTER_PERIOD)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0

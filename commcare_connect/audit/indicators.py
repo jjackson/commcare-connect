@@ -336,3 +336,28 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
         inaccessible_count = was.filter(status=WorkAreaStatus.INACCESSIBLE).count()
         return inaccessible_count / total, total
+
+
+@register_calculation
+class VaccineRate(AuditCalculation):
+    """Detect gaps in vaccine question completion.
+
+    Rate = visits where received_any_vaccine = yes / last 97 visits.
+    Flags if rate < 58% (anchored to Gombe baseline 66%, one-sided 95% CI).
+    """
+
+    name = "vaccine_rate"
+    label = "Vaccine Rate"
+    min_sample_size = 97
+    lower_bound = 0.58
+
+    def compute(self, opportunity_access, period_start, period_end):
+        recent = _last_n_visits(opportunity_access, self.min_sample_size, period_end)
+        result = UserVisit.objects.filter(id__in=recent).aggregate(
+            total=Count("id"),
+            vaccinated=Count("id", filter=Q(**{f"form_json__form__{_VACCINE_FIELD}": _VACCINE_YES_VALUE})),
+        )
+        total = result["total"]
+        if not total:
+            return None, 0
+        return result["vaccinated"] / total, total
