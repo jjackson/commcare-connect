@@ -29,15 +29,24 @@ from django.views.generic.edit import UpdateView
 from vectortiles import VectorLayer
 from vectortiles.views import MVTView
 
-from commcare_connect.commcarehq.api import create_or_update_case, create_or_update_case_by_work_area
+from commcare_connect.commcarehq.api import (
+    bulk_create_or_update_cases_by_work_areas,
+    create_or_update_case_by_work_area,
+)
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
-from commcare_connect.microplanning.const import WORK_AREA_STATUS_COLORS
+from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
-from commcare_connect.microplanning.forms import WorkAreaModelForm
+from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
+from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
-from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
-from commcare_connect.organization.decorators import opportunity_required, org_admin_required
+from commcare_connect.opportunity.models import OpportunityAccess, UserVisit, VisitValidationStatus
+from commcare_connect.organization.decorators import (
+    opportunity_required,
+    org_admin_required,
+    org_program_manager_required,
+    request_user_is_program_manager,
+)
 from commcare_connect.utils.celery import CELERY_TASK_FAILURE, CELERY_TASK_SUCCESS
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 from commcare_connect.utils.file import get_file_extension
@@ -49,6 +58,7 @@ from .tasks import (
     get_cluster_area_cache_lock_key,
     get_import_area_cache_key,
     import_work_areas_task,
+    send_work_area_assignment_notification,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,29 +113,40 @@ def microplanning_home(request, *args, **kwargs):
         for status in WorkAreaStatus
     }
 
+    is_program_manager = request_user_is_program_manager(request)
+    assignment_mode = is_program_manager and bool(request.GET.get("assignment_mode"))
+
     filterset = WorkAreaMapFilterSet(
         data=request.GET,
         opportunity=opportunity,
     )
+
+    context = {
+        "show_area_btn": show_area_btn,
+        "show_workarea_groups_btn": show_workarea_groups_btn,
+        "mapbox_api_key": settings.MAPBOX_TOKEN,
+        "task_id": request.GET.get("task_id"),
+        "opportunity": opportunity,
+        "metrics": get_metrics_for_microplanning(opportunity),
+        "tiles_url": tiles_url,
+        "visit_tiles_url": visit_tiles_url,
+        "groups_url": groups_url,
+        "status_meta": status_meta,
+        "workarea_min_zoom": WORKAREA_MIN_ZOOM,
+        "edit_work_area_url": edit_work_area_url,
+        "download_url": download_url,
+        "filter_form": filterset.form,
+        "is_program_manager": is_program_manager,
+        "assignment_mode": assignment_mode,
+    }
+
+    if assignment_mode:
+        context.update(_get_assignment_mode_context(request, opportunity))
+
     return render(
         request,
         template_name="microplanning/home.html",
-        context={
-            "show_area_btn": show_area_btn,
-            "show_workarea_groups_btn": show_workarea_groups_btn,
-            "mapbox_api_key": settings.MAPBOX_TOKEN,
-            "task_id": request.GET.get("task_id"),
-            "opportunity": opportunity,
-            "metrics": get_metrics_for_microplanning(opportunity),
-            "tiles_url": tiles_url,
-            "visit_tiles_url": visit_tiles_url,
-            "groups_url": groups_url,
-            "status_meta": status_meta,
-            "workarea_min_zoom": WORKAREA_MIN_ZOOM,
-            "edit_work_area_url": edit_work_area_url,
-            "download_url": download_url,
-            "filter_form": filterset.form,
-        },
+        context=context,
     )
 
 
@@ -215,6 +236,43 @@ def get_metrics_for_microplanning(opportunity):
         },
         {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
     ]
+
+
+def _get_assignment_mode_context(request, opportunity):
+    org_slug = request.org.slug
+    opp_id = opportunity.opportunity_id
+    return {
+        "assignment_form": AssignmentModeForm(opportunity=opportunity),
+        "assignees_json": list(
+            OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True, suspended=False)
+            .select_related("user")
+            .values("id", "user__name", "user_id")
+        ),
+        "group_work_areas_url": reverse(
+            "microplanning:get_work_areas_for_assignment",
+            args=[org_slug, opp_id, 0],
+        ).replace("/0/", "/__group_id__/"),
+        "flw_work_areas_url": reverse(
+            "microplanning:get_flw_work_areas_for_assignment",
+            args=[org_slug, opp_id, 0],
+        ).replace("/0/", "/__assignee_id__/"),
+        "flw_summary_url": reverse(
+            "microplanning:get_flw_summary_for_assignment",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
+        ),
+        "assignment_save_url": reverse(
+            "microplanning:save_assignment",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
+        ),
+        "user_visits_url": reverse(
+            "opportunity:user_visits_list",
+            args=[org_slug, opp_id],
+        ),
+        "worker_list_url": reverse(
+            "opportunity:worker_list",
+            args=[org_slug, opp_id],
+        ),
+    }
 
 
 @method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
@@ -314,7 +372,7 @@ class WorkAreaVectorLayer(VectorLayer):
         qs = WorkArea.objects.filter(opportunity=self.opportunity).annotate(
             group_id=F("work_area_group__id"),
             group_name=F("work_area_group__name"),
-            assignee_name=F("work_area_group__opportunity_access__user__name"),
+            assignee_name=F("opportunity_access__user__name"),
         )
         return WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
 
@@ -334,7 +392,7 @@ class WorkAreaTileView(MVTView):
 
 class UserVisitVectorLayer(VectorLayer):
     id = "user-visits"
-    tile_fields = ()
+    tile_fields = ("work_area_id",)
     geom_field = "location_point"
     min_zoom = WORKAREA_MIN_ZOOM
 
@@ -368,7 +426,7 @@ class UserVisitVectorLayer(VectorLayer):
                     output_field=PointField(srid=4326),
                 )
             )
-            .values("location_point")
+            .values("location_point", "work_area_id")
         )
 
 
@@ -494,81 +552,31 @@ def clustering_status(request, org_slug, opp_id):
 def exclude_work_areas(request, org_slug, opp_id):
     exclusion_reason = request.POST.get("exclusion_reason", "").strip()
     if not exclusion_reason:
-        return JsonResponse({"error": "exclusion_reason is required"}, status=400)
+        return JsonResponse({"error": _("Exclusion reason is required")}, status=400)
     if len(exclusion_reason) > 500:
-        return JsonResponse({"error": "exclusion_reason must be at most 500 characters"}, status=400)
+        return JsonResponse({"error": _("Exclusion reason must be at most 500 characters")}, status=400)
 
     raw_ids = request.POST.getlist("work_area_ids[]")
     if not raw_ids:
-        return JsonResponse({"error": "work_area_ids[] is required"}, status=400)
+        return JsonResponse({"error": _("Work Area IDs is required")}, status=400)
+    if len(raw_ids) > MAX_EXCLUDE_WORK_AREAS:
+        return JsonResponse(
+            {"error": _("Work Area IDs must contain at most %(max)d items") % {"max": MAX_EXCLUDE_WORK_AREAS}},
+            status=400,
+        )
 
     try:
         work_area_ids = [int(i) for i in raw_ids]
     except (ValueError, TypeError):
-        return JsonResponse({"error": "work_area_ids[] must be integers"}, status=400)
+        return JsonResponse({"error": _("Work Area IDs must be integers")}, status=400)
 
-    excluded = []
-    skipped = []
-    failed = []
-
-    work_areas_map = {
-        wa.id: wa
-        for wa in WorkArea.objects.filter(id__in=work_area_ids, opportunity=request.opportunity).select_related(
-            "work_area_group__opportunity_access__opportunity__api_key__hq_server",
-            "work_area_group__opportunity_access__opportunity__deliver_app",
-        )
-    }
-
-    for work_area_id in work_area_ids:
-        work_area = work_areas_map.get(work_area_id)
-        if work_area is None:
-            skipped.append({"id": work_area_id, "reason": "not_found"})
-            continue
-
-        if work_area.status == WorkAreaStatus.EXCLUDED:
-            skipped.append({"id": work_area_id, "reason": "already_excluded"})
-            continue
-
-        if work_area.status == WorkAreaStatus.INACCESSIBLE:
-            skipped.append({"id": work_area_id, "reason": "inaccessible"})
-            continue
-
-        if work_area.status != WorkAreaStatus.NOT_STARTED:
-            skipped.append({"id": work_area_id, "reason": "work_started"})
-            continue
-
-        # Read HQ credentials before nulling the group
-        api_key = None
-        domain = None
-        if work_area.work_area_group and work_area.work_area_group.opportunity_access:
-            opp_access = work_area.work_area_group.opportunity_access
-            if opp_access.opportunity.api_key and opp_access.opportunity.deliver_app:
-                api_key = opp_access.opportunity.api_key
-                domain = opp_access.opportunity.deliver_app.cc_domain
-
-        try:
-            with transaction.atomic(), pghistory.context(
-                reason=exclusion_reason,
-                username=request.user.username,
-                user_email=request.user.email,
-            ):
-                work_area.status = WorkAreaStatus.EXCLUDED
-                work_area.excluded_by = request.user
-                work_area.excluded_reason = exclusion_reason
-                work_area.work_area_group = None
-                work_area.save(update_fields=["status", "excluded_by", "excluded_reason", "work_area_group"])
-
-                if work_area.case_id and api_key and domain:
-                    create_or_update_case(api_key, domain, {"owner_id": ""}, case_id=str(work_area.case_id))
-
-        except CommCareHQAPIException as e:
-            logger.info(f"Failed to unassign HQ case for work area {work_area_id}: {e}")
-            failed.append({"id": work_area_id, "reason": "hq_sync_failed"})
-            continue
-
-        excluded.append(work_area_id)
-
-    return JsonResponse({"excluded": excluded, "skipped": skipped, "failed": failed})
+    res = exclude_work_areas_for_opportunity(
+        opportunity=request.opportunity,
+        work_area_ids=work_area_ids,
+        user=request.user,
+        exclusion_reason=exclusion_reason,
+    )
+    return JsonResponse(res)
 
 
 @require_GET
@@ -607,11 +615,9 @@ class ModifyWorkAreaUpdateView(UpdateView):
         try:
             with transaction.atomic(), pghistory.context(reason=reason):
                 work_area.save(update_fields=["expected_visit_count", "work_area_group"])
-                if (
-                    form.has_changed()
-                    and work_area.work_area_group
-                    and work_area.work_area_group.opportunity_access_id
-                ):
+                if "expected_visit_count" in form.changed_data:
+                    work_area.update_status(self.request.user)
+                if form.has_changed() and work_area.opportunity_access_id:
                     # let exception bubble up if case update fails, to avoid saving work area without case sync
                     create_or_update_case_by_work_area(work_area)
         except CommCareHQAPIException as e:
@@ -634,3 +640,131 @@ class ModifyWorkAreaUpdateView(UpdateView):
             }
         )
         return response
+
+
+@require_GET
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
+    work_areas = list(
+        WorkArea.objects.filter(
+            opportunity=request.opportunity,
+            work_area_group_id=group_id,
+        ).values("id", "building_count", "expected_visit_count")
+    )
+    return JsonResponse({"work_areas": work_areas})
+
+
+@require_GET
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
+    work_areas = list(
+        WorkArea.objects.filter(
+            opportunity=request.opportunity,
+            opportunity_access_id=assignee_id,
+        ).values("id", "building_count", "expected_visit_count")
+    )
+    return JsonResponse({"work_areas": work_areas})
+
+
+@require_GET
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def get_flw_summary_for_assignment(request, org_slug, opp_id):
+    assignee_id = request.GET.get("assignee_id")
+    if not assignee_id:
+        return JsonResponse({"error": "assignee_id required"}, status=400)
+
+    qs = WorkArea.objects.filter(
+        opportunity=request.opportunity,
+        opportunity_access_id=assignee_id,
+    )
+    stats = qs.aggregate(
+        buildings=Sum("building_count"),
+        visits=Sum("expected_visit_count"),
+    )
+    return JsonResponse(
+        {
+            "assigned_buildings": stats["buildings"] or 0,
+            "assigned_visits": stats["visits"] or 0,
+            "assigned_work_areas": qs.count(),
+        }
+    )
+
+
+@require_POST
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def save_assignment(request, org_slug, opp_id):
+    try:
+        data = json.loads(request.body)
+        assignments = data["assignments"]
+        if not assignments:
+            raise ValueError
+        assignee_ids = {int(entry["assignee_id"]) for entry in assignments}
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"error": _("Invalid request body")}, status=400)
+
+    valid_accesses = {
+        access.id: access
+        for access in OpportunityAccess.objects.filter(
+            id__in=assignee_ids,
+            opportunity=request.opportunity,
+        ).select_related("user")
+    }
+
+    invalid_ids = assignee_ids - valid_accesses.keys()
+    if invalid_ids:
+        return JsonResponse({"error": _("Invalid assignee IDs: %(ids)s") % {"ids": sorted(invalid_ids)}}, status=400)
+
+    try:
+        all_wa_ids = [int(wa_id) for entry in assignments for wa_id in entry.get("work_area_ids", [])]
+    except (TypeError, ValueError):
+        return JsonResponse({"error": _("Work area IDs must be integers")}, status=400)
+    requested_wa_ids = set(all_wa_ids)
+    if len(all_wa_ids) != len(requested_wa_ids):
+        return JsonResponse({"error": _("Duplicate work area IDs in request")}, status=400)
+
+    work_area_to_access = {
+        int(wa_id): valid_accesses[int(entry["assignee_id"])]
+        for entry in assignments
+        for wa_id in entry.get("work_area_ids", [])
+    }
+
+    all_work_areas = list(
+        WorkArea.objects.filter(
+            id__in=requested_wa_ids,
+            opportunity=request.opportunity,
+        ).select_for_update()
+    )
+
+    found_ids = {wa.id for wa in all_work_areas}
+    invalid_wa_ids = requested_wa_ids - found_ids
+    if invalid_wa_ids:
+        return JsonResponse(
+            {"error": _("Invalid work area IDs: %(ids)s") % {"ids": sorted(invalid_wa_ids)}}, status=400
+        )
+
+    for work_area in all_work_areas:
+        work_area.opportunity_access = work_area_to_access[work_area.id]
+        if work_area.status == WorkAreaStatus.UNASSIGNED:
+            work_area.status = WorkAreaStatus.NOT_STARTED
+
+    WorkArea.objects.bulk_update(all_work_areas, ["opportunity_access", "status"])
+
+    try:
+        bulk_create_or_update_cases_by_work_areas(all_work_areas, request.opportunity)
+    except CommCareHQAPIException:
+        transaction.set_rollback(True)
+        return JsonResponse({"error": _("Failed to sync with CommCare HQ. Please try again.")}, status=502)
+
+    notified_access_ids = {access.id for access in work_area_to_access.values()}
+    for access_id in notified_access_ids:
+        transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
+
+    return JsonResponse({"status": "ok"})

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pghistory
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, F, Q, Sum
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
@@ -110,6 +110,7 @@ class Opportunity(BaseModel):
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     auto_approve_visits = models.BooleanField(default=True)
     auto_approve_payments = models.BooleanField(default=True)
+    automatic_visit_verification = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
@@ -268,7 +269,7 @@ class TaskType(models.Model):
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
     archived = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     duration = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
@@ -452,6 +453,25 @@ class AssignedTask(XFormBaseModel):
                 fields=["xform_id", "task_type", "opportunity_access"], name="unique_xform_assigned_task"
             )
         ]
+
+    @classmethod
+    def assign(cls, *, task_type, opportunity_access, due_date, assigned_by=None) -> "AssignedTask":
+        from commcare_connect.commcarehq.api import update_usercase
+        from commcare_connect.opportunity.tasks import send_task_assignment_notification
+
+        with transaction.atomic():
+            assigned_task = cls.objects.create(
+                task_type=task_type,
+                opportunity_access=opportunity_access,
+                due_date=due_date,
+                status=AssignedTaskStatus.ASSIGNED,
+                assigned_by=assigned_by,
+            )
+            case_property = task_type.case_property
+            if case_property:
+                update_usercase(opportunity_access, data={"properties": {case_property: "1"}})
+            transaction.on_commit(lambda: send_task_assignment_notification.delay(assigned_task.pk))
+        return assigned_task
 
 
 class Assessment(XFormBaseModel):
