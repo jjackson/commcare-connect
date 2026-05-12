@@ -3144,7 +3144,10 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
             "name": _("Audit Opportunity"),
             "status": "",
             "value": "",
-            "url": "",
+            "url": reverse(
+                "opportunity:audit:audit_report_list",
+                kwargs={"org_slug": org_slug, "opportunity_id": opp_id},
+            ),
         },
     ]
 
