@@ -864,6 +864,12 @@ class VisitExportForm(forms.Form):
             self.fields["status"].choices = status_choices
 
             visit_count_url = f"{visit_count_url}?{urlencode({'review_export': 'true'})}"
+        elif self.opportunity.automatic_visit_verification:
+            self.fields["status"].choices = [
+                (value, label)
+                for value, label in self.fields["status"].choices
+                if value != VisitValidationStatus.pending.value
+            ]
 
         hx_attrs = {
             "hx-get": visit_count_url,

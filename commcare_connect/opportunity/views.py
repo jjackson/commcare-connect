@@ -2788,9 +2788,17 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
         context.update(self.get_filter_context())
         return context
 
+    def get_filter_kwargs(self):
+        kwargs = super().get_filter_kwargs()
+        kwargs["opportunity"] = self.get_opportunity()
+        return kwargs
+
     def get_table(self, opportunity, org_slug):
         data = get_annotated_opportunity_access_deliver_status(opportunity, self.get_filter_values())
-        table = WorkerDeliveryTable(data, org_slug=org_slug, opp_id=opportunity.opportunity_id)
+        table_kwargs = {"org_slug": org_slug, "opp_id": opportunity.opportunity_id}
+        if opportunity.automatic_visit_verification:
+            table_kwargs["exclude"] = ("pending",)
+        table = WorkerDeliveryTable(data, **table_kwargs)
         RequestConfig(self.request, paginate={"per_page": get_validated_page_size(self.request)}).configure(table)
         return table
 
