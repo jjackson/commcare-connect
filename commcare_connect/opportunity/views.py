@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -221,6 +222,8 @@ from commcare_connect.utils.tables import (
     get_duration_min,
     get_validated_page_size,
 )
+
+logger = logging.getLogger(__name__)
 
 EXPORT_ROW_LIMIT = 10_000
 _NEXT_WORKER_TASKS = "worker_tasks"
@@ -3579,8 +3582,10 @@ def delete_tasks(request, org_slug, opp_id):
     try:
         deleted_count = AssignedTask.delete_and_reset_hq(task_ids, request.opportunity)
     except CommCareHQAPIException:
+        logger.exception("Task deletion failed: could not update CommCare HQ for opportunity %s", opp_id)
         messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
     except ValueError:
+        logger.exception("Task deletion failed: too many tasks queued for opportunity %s", opp_id)
         messages.error(request, _("Too many tasks queued for deletion. Please select a smaller batch."))
     else:
         if deleted_count:
