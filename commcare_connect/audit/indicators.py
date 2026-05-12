@@ -36,19 +36,6 @@ MUAC_BIN_EDGES = [9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5, 19.
 AGE_HEAPING_VALUES = [12, 24, 36, 48]
 
 
-def _last_n_visits(opportunity_access, n, period_end, **filters):
-    """Return a queryset of the last n visit IDs (as of period_end) for use in id__in filters."""
-    return (
-        UserVisit.objects.filter(
-            opportunity_access=opportunity_access,
-            visit_date__date__lte=period_end,
-            **filters,
-        )
-        .order_by("-visit_date")
-        .values("id")[:n]
-    )
-
-
 def _q_link_present(form_field) -> Q:
     """Return a Q that matches when a form URL link field is non-null and non-empty."""
     path = f"form_json__form__{form_field}"
@@ -389,6 +376,7 @@ class VaccineCardPhotoCompliance(AuditCalculation):
 
 
 def _muac_build_bins(measurements: list[float]) -> list[int]:
+    # Count how many measurements fall into each MUAC range (bin).
     counts = []
     for i in range(len(MUAC_BIN_EDGES) - 1):
         lo, hi = MUAC_BIN_EDGES[i], MUAC_BIN_EDGES[i + 1]
@@ -397,6 +385,7 @@ def _muac_build_bins(measurements: list[float]) -> list[int]:
 
 
 def _muac_increasing_to_peak(bin_counts, non_zero_indices, peak_index, wiggle) -> bool:
+    # True if counts rise (at least somewhat steadily) as we approach the peak bin.
     if peak_index == 0 or peak_index not in non_zero_indices:
         return False
     peak_pos = non_zero_indices.index(peak_index)
@@ -416,6 +405,7 @@ def _muac_increasing_to_peak(bin_counts, non_zero_indices, peak_index, wiggle) -
 
 
 def _muac_decreasing_from_peak(bin_counts, non_zero_indices, peak_index, wiggle) -> bool:
+    # True if counts fall (without big jumps back up) after the peak bin.
     if peak_index == len(bin_counts) - 1 or peak_index not in non_zero_indices:
         return False
     peak_pos = non_zero_indices.index(peak_index)
@@ -434,6 +424,7 @@ def _muac_decreasing_from_peak(bin_counts, non_zero_indices, peak_index, wiggle)
 
 
 def _muac_no_skipped_bins(bin_counts, total_count) -> bool:
+    # True if there are no empty gaps between the significant (>2%) bins.
     if total_count <= 0:
         return True
     threshold = total_count * 0.02
@@ -444,6 +435,7 @@ def _muac_no_skipped_bins(bin_counts, total_count) -> bool:
 
 
 def _muac_no_plateau(bin_counts, max_count) -> bool:
+    # True if there's no flat "plateau" at the top — 3+ consecutive high bins at similar counts looks suspicious.
     total_count = sum(bin_counts)
     if total_count == 0 or max_count == 0:
         return True
@@ -474,7 +466,6 @@ def _muac_no_plateau(bin_counts, max_count) -> bool:
 @register_calculation
 class MUACDistributionPatternIndex(AuditCalculation):
     """Assess whether a FLW's MUAC distribution looks biologically realistic.
-
     Scores 6 boolean shape features of the histogram (0–6 total).
     Flags if fewer than 5 features pass. Requires ≥100 valid measurements.
     Features: increasing_to_peak, decreasing_from_peak, no_skipped_bins,
@@ -487,16 +478,12 @@ class MUACDistributionPatternIndex(AuditCalculation):
     lower_bound = 5
 
     def compute(self, opportunity_access, period_start, period_end):
-        recent = _last_n_visits(
-            opportunity_access,
-            100,
-            period_end,
-            **{f"form_json__form__{MUAC_MEASUREMENT_FIELD}__isnull": False},
-        )
         raw = list(
-            UserVisit.objects.filter(id__in=recent).values_list(
-                f"form_json__form__{MUAC_MEASUREMENT_FIELD}", flat=True
-            )
+            UserVisit.objects.filter(
+                opportunity_access=opportunity_access,
+                visit_date__date__range=(period_start, period_end),
+                **{f"form_json__form__{MUAC_MEASUREMENT_FIELD}__isnull": False},
+            ).values_list(f"form_json__form__{MUAC_MEASUREMENT_FIELD}", flat=True)
         )
 
         measurements = []
@@ -516,7 +503,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
         max_count = max(bin_counts)
         peak_index = next(i for i, c in enumerate(bin_counts) if c == max_count)
         non_zero = [i for i, c in enumerate(bin_counts) if c > 0]
-        wiggle = total * 0.02
+        wiggle = total * 0.02  # 2% of total measurements, used as a small noise tolerance in shape checks
 
         score = sum(
             [
