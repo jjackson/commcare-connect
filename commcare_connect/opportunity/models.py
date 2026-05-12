@@ -110,6 +110,7 @@ class Opportunity(BaseModel):
     country = models.ForeignKey(Country, on_delete=models.PROTECT, null=True)
     auto_approve_visits = models.BooleanField(default=True)
     auto_approve_payments = models.BooleanField(default=True)
+    automatic_visit_verification = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
@@ -268,7 +269,7 @@ class TaskType(models.Model):
     description = models.TextField()
     case_property = models.CharField(max_length=255, null=True, blank=True)
     archived = models.DateTimeField(null=True, blank=True)
-    is_active = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
     duration = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
