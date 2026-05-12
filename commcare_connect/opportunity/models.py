@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 from collections import Counter, defaultdict
 from decimal import Decimal
@@ -454,7 +456,7 @@ class AssignedTask(XFormBaseModel):
         ]
 
     @classmethod
-    def assign(cls, *, task_type, opportunity_access, due_date, assigned_by=None) -> "AssignedTask":
+    def assign(cls, *, task_type, opportunity_access, due_date, assigned_by=None) -> AssignedTask:
         from commcare_connect.commcarehq.api import bulk_update_usercases
         from commcare_connect.opportunity.tasks import send_task_assignment_notification
 
@@ -473,7 +475,7 @@ class AssignedTask(XFormBaseModel):
         return assigned_task
 
     @classmethod
-    def delete_and_reset_hq(cls, task_ids: list[int], opportunity: "Opportunity") -> int:
+    def delete_and_reset_hq(cls, task_ids: list[int], opportunity: Opportunity) -> int:
         from commcare_connect.commcarehq.api import HQ_CASE_BULK_CHUNK_SIZE, bulk_update_usercases
 
         tasks = list(
@@ -487,7 +489,7 @@ class AssignedTask(XFormBaseModel):
         if not tasks:
             return 0
 
-        hq_updates: dict[tuple[int, str], "OpportunityAccess"] = {}
+        hq_updates: dict[tuple[int, str], OpportunityAccess] = {}
         for task in tasks:
             if prop := task.task_type.case_property:
                 hq_updates.setdefault((task.opportunity_access_id, prop), task.opportunity_access)
