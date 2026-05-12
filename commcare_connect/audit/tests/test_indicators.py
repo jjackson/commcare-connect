@@ -15,6 +15,7 @@ from commcare_connect.audit.indicators import (
     InaccessibleWARateEarlyWarning,
     InaccessibleWARateLastCompletedWAG,
     MUACPhotoCompliance,
+    VaccineCardPhotoCompliance,
     VaccineRate,
     WACoverageToVisitRatio,
 )
@@ -584,5 +585,59 @@ class TestVaccineRate:
     def test_visits_after_period_end_excluded(self):
         access = OpportunityAccessFactory()
         _visit_with_vaccine(access, given=False, visit_date=AFTER_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+
+@pytest.mark.django_db
+class TestVaccineCardPhotoCompliance:
+    calc = VaccineCardPhotoCompliance()
+
+    def test_no_vaccinated_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_unvaccinated_visits_not_in_denominator(self):
+        access = OpportunityAccessFactory()
+        _visit_with_vaccine(access, given=False)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "with_photo, without_photo, expected_value, in_range",
+        [
+            (5, 0, 1.0, True),  # 100% compliance
+            (1, 4, 0.2, False),  # 20% compliance, below 38% threshold
+        ],
+    )
+    def test_compliance_threshold(self, with_photo, without_photo, expected_value, in_range):
+        access = OpportunityAccessFactory()
+        for _ in range(with_photo):
+            _visit_with_vaccine_card(access, has_photo=True)
+        for _ in range(without_photo):
+            _visit_with_vaccine_card(access, has_photo=False)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == with_photo + without_photo
+        assert value == pytest.approx(expected_value)
+        assert self.calc._in_range(value) is in_range
+
+    def test_empty_photo_link_not_counted(self):
+        access = OpportunityAccessFactory()
+        make_visit(
+            access,
+            form_json={
+                "form": {
+                    "pictures": {"received_any_vaccine": _VACCINE_YES_VALUE},
+                    "immunization_photo_group": {"photo_link_vaccine": ""},
+                }
+            },
+        )
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value == pytest.approx(0.0)
+
+    def test_visits_after_period_end_excluded(self):
+        access = OpportunityAccessFactory()
+        _visit_with_vaccine_card(access, has_photo=False, visit_date=AFTER_PERIOD)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0

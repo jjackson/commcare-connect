@@ -361,3 +361,34 @@ class VaccineRate(AuditCalculation):
         if not total:
             return None, 0
         return result["vaccinated"] / total, total
+
+
+@register_calculation
+class VaccineCardPhotoCompliance(AuditCalculation):
+    """Detect missing vaccine card photos for vaccinated children.
+
+    Denominator: last 97 visits where received_any_vaccine = yes.
+    Numerator: visits where photo_link_vaccine is non-empty.
+    Flags if compliance < 38% (anchored to Kano card availability 46%, one-sided 95% CI).
+    """
+
+    name = "vaccine_card_photo_compliance"
+    label = "Vaccine Card Photo Compliance"
+    min_sample_size = 97
+    lower_bound = 0.38
+
+    def compute(self, opportunity_access, period_start, period_end):
+        eligible = _last_n_visits(
+            opportunity_access,
+            97,
+            period_end,
+            **{f"form_json__form__{_VACCINE_FIELD}": _VACCINE_YES_VALUE},
+        )
+        result = UserVisit.objects.filter(id__in=eligible).aggregate(
+            total=Count("id"),
+            with_photo=Count("id", filter=_q_link_present(_VACCINE_CARD_LINK_FIELD)),
+        )
+        total = result["total"]
+        if not total:
+            return None, 0
+        return result["with_photo"] / total, total
