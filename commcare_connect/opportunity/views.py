@@ -1204,7 +1204,12 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
             "title": request.opportunity.name,
             "url": reverse("opportunity:detail", args=(org_slug, request.opportunity.opportunity_id)),
         },
-        {"title": "Verification Rules Configuration", "url": request.path},
+        {
+            "title": "Verification Rules Configuration"
+            if request.opportunity.automatic_visit_verification
+            else "Verification Flags Config",
+            "url": request.path,
+        },
     ]
     return render(
         request,
