@@ -1148,7 +1148,9 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
     if request.opportunity.managed and not request.is_opportunity_pm:
         return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=request.opportunity).first()
-    form = OpportunityVerificationFlagsConfigForm(instance=verification_flags, data=request.POST or None)
+    form = OpportunityVerificationFlagsConfigForm(
+        instance=verification_flags, data=request.POST or None, opportunity=request.opportunity
+    )
     deliver_unit_count = DeliverUnit.objects.filter(app=request.opportunity.deliver_app).count()
     DeliverUnitFlagsFormset = modelformset_factory(
         DeliverUnitFlagRules, DeliverUnitFlagsForm, extra=deliver_unit_count, max_num=deliver_unit_count
@@ -1202,7 +1204,7 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
             "title": request.opportunity.name,
             "url": reverse("opportunity:detail", args=(org_slug, request.opportunity.opportunity_id)),
         },
-        {"title": "Verification Flags Config", "url": request.path},
+        {"title": "Verification Rules Configuration", "url": request.path},
     ]
     return render(
         request,
