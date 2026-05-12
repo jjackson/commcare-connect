@@ -241,7 +241,7 @@ class TestAssignedTaskAssign:
                 assigned_by=assigner,
             )
 
-        mock_update.assert_called_once_with([(access, {"properties": {"needs_assessment": "1"}})])
+        mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": "1"}}})
         assert isinstance(assigned, AssignedTask)
         assert assigned.task_type == task_type
         assert assigned.opportunity_access == access
@@ -302,7 +302,7 @@ class TestAssignedTaskDeleteAndResetHQ:
 
         assert deleted == 1
         assert not AssignedTask.objects.filter(pk=task.pk).exists()
-        mock_update.assert_called_once_with([(access, {"properties": {"needs_assessment": ""}})])
+        mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": ""}}})
 
     @pytest.mark.parametrize("case_property", [None, ""])
     def test_skips_hq_when_no_case_property(self, case_property):
@@ -395,4 +395,4 @@ class TestAssignedTaskDeleteAndResetHQ:
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
             AssignedTask.delete_and_reset_hq([t.pk for t in tasks], access.opportunity)
 
-        mock_update.assert_called_once_with([(access, {"properties": {"needs_assessment": ""}})])
+        mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": ""}}})

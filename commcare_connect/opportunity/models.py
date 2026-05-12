@@ -468,7 +468,7 @@ class AssignedTask(XFormBaseModel):
             )
             case_property = task_type.case_property
             if case_property:
-                bulk_update_usercases([(opportunity_access, {"properties": {case_property: "1"}})])
+                bulk_update_usercases({opportunity_access: {"properties": {case_property: "1"}}})
             transaction.on_commit(lambda: send_task_assignment_notification.delay(assigned_task.pk))
         return assigned_task
 
@@ -502,10 +502,10 @@ class AssignedTask(XFormBaseModel):
                         task_type__case_property__in={p for _, p in hq_updates},
                     ).values_list("opportunity_access_id", "task_type__case_property")
                 )
-                to_reset = [
-                    (hq_updates[access_id, prop], {"properties": {prop: ""}})
+                to_reset = {
+                    hq_updates[access_id, prop]: {"properties": {prop: ""}}
                     for access_id, prop in hq_updates.keys() - still_assigned
-                ]
+                }
                 if len(to_reset) > HQ_CASE_BULK_CHUNK_SIZE:
                     raise ValueError(
                         f"Too many HQ case property resets ({len(to_reset)}); "

@@ -2674,7 +2674,7 @@ class TestCreateTask:
         assert assigned.due_date == due_date
         assert assigned.status == AssignedTaskStatus.ASSIGNED
         assert assigned.assigned_by == org_user_member
-        mock_update.assert_called_once_with([(access, {"properties": {"some_prop": "1"}})])
+        mock_update.assert_called_once_with({access: {"properties": {"some_prop": "1"}}})
         msgs = list(get_messages(response.wsgi_request))
         assert any("successfully" in str(m) for m in msgs)
 
@@ -2842,7 +2842,7 @@ class TestDeleteTasks:
 
         assert response.status_code == HTTPStatus.OK
         assert not AssignedTask.objects.filter(pk=task.pk).exists()
-        mock_update.assert_called_once_with([(access, {"properties": {"needs_assessment": ""}})])
+        mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": ""}}})
 
     def test_delete_tasks_hq_failure_shows_error_and_keeps_tasks(self, client, org_user_member, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)

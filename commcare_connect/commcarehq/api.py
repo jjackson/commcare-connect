@@ -171,21 +171,21 @@ def create_or_update_case(
     return CommCareCase(**data.get("case", {}))
 
 
-def bulk_update_usercases(updates: list[tuple[OpportunityAccess, dict[str, Any]]]) -> None:
+def bulk_update_usercases(updates: dict[OpportunityAccess, dict[str, Any]]) -> None:
     if not updates:
         return
 
-    first_access = updates[0][0]
+    first_access = next(iter(updates))
     domain = first_access.opportunity.deliver_app.cc_domain
     api_key = first_access.opportunity.api_key
     hq_server = api_key.hq_server
 
-    users = [access.user for access, _ in updates]
+    users = [access.user for access in updates]
     links = ConnectIDUserLink.objects.filter(user__in=users, domain=domain, hq_server=hq_server)
     links_by_user = {link.user_id: link for link in links}
 
     cases_data = []
-    for access, data in updates:
+    for access, data in updates.items():
         link = links_by_user[access.user_id]
         if link.hq_case_id is None:
             usercase = get_usercase(access)
