@@ -2307,8 +2307,28 @@ class VisitVerificationTableView(WorkerVisitTableView):
 
     def get_context_data(self, **kwargs):
         user_visit_counts = get_user_visit_counts(self.opportunity, self.filter_queryset)
+        opportunity = self.get_opportunity()
 
-        if self.request.is_opportunity_pm:
+        if opportunity.automatic_visit_verification:
+            if self.request.is_opportunity_pm:
+                tabs = [
+                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                ]
+            else:
+                tabs = [
+                    {
+                        "name": "approved",
+                        "label": "Approved",
+                        "count": user_visit_counts.get("approved", 0),
+                    },
+                    {
+                        "name": "rejected",
+                        "label": "Rejected",
+                        "count": user_visit_counts.get("rejected", 0),
+                    },
+                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                ]
+        elif self.request.is_opportunity_pm:
             tabs = [
                 {
                     "name": "pending_review",
@@ -2336,7 +2356,7 @@ class VisitVerificationTableView(WorkerVisitTableView):
                 }
             ]
 
-            if self.get_opportunity().managed:
+            if opportunity.managed:
                 dynamic_tabs = [
                     {
                         "name": "pending_review",

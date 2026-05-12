@@ -321,7 +321,8 @@
   x-data="{showRejectModal: false, showApproveModal: false}"
   id="visit-actions"
   hx-swap-oob="true">
-{% if request.is_opportunity_pm %}
+{% if user_visit.opportunity.automatic_visit_verification %}
+{% elif request.is_opportunity_pm %}
   {% if user_visit.review_created_on %}
   <div class="flex gap-4">
     <form hx-post="{% url "opportunity:user_visit_review" request.org.slug user_visit.opportunity.opportunity_id %}"
