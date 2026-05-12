@@ -504,6 +504,7 @@ def test_automatic_visit_verification_preserves_existing_status(
     opportunity.automatic_visit_verification = True
     opportunity.save()
     visit = trigger_visit(opportunity, user_with_connectid_link, api_client)
+    assert visit.flagged
     assert visit.status == expected_status
 
 
