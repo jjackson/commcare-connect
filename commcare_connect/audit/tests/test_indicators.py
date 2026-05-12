@@ -6,7 +6,13 @@ from datetime import timezone
 
 import pytest
 
-from commcare_connect.audit.indicators import _FEMALE_VALUE, _VACCINE_YES_VALUE, CampingRatio, GenderRatioDeviation
+from commcare_connect.audit.indicators import (
+    _FEMALE_VALUE,
+    _VACCINE_YES_VALUE,
+    CampingRatio,
+    GenderRatioDeviation,
+    MUACPhotoCompliance,
+)
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
 
@@ -205,3 +211,57 @@ class TestGenderRatioDeviation:
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 2
         assert value == pytest.approx(0.5)
+
+
+@pytest.mark.django_db
+class TestMUACPhotoCompliance:
+    calc = MUACPhotoCompliance()
+
+    def test_no_eligible_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_child_under_6_months_not_in_denominator(self):
+        access = OpportunityAccessFactory()
+        _visit_with_muac_photo(access, age_months=3)  # age <= 6, excluded
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_no_consent_not_in_denominator(self):
+        access = OpportunityAccessFactory()
+        make_visit(access, form_json={"form": {"additional_case_info": {"childs_age_in_month": 12}}})
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "with_photo, without_photo, expected_value, in_range",
+        [
+            (5, 0, 1.0, True),  # 100% compliance
+            (1, 4, 0.2, False),  # 20% compliance, below 72% threshold
+        ],
+    )
+    def test_compliance_threshold(self, with_photo, without_photo, expected_value, in_range):
+        access = OpportunityAccessFactory()
+        for _ in range(with_photo):
+            _visit_with_muac_photo(access, has_photo=True)
+        for _ in range(without_photo):
+            _visit_with_muac_photo(access, has_photo=False)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == with_photo + without_photo
+        assert value == pytest.approx(expected_value)
+        assert self.calc._in_range(value) is in_range
+
+    def test_empty_photo_link_not_counted(self):
+        access = OpportunityAccessFactory()
+        make_visit(
+            access,
+            form_json={
+                "form": {
+                    "additional_case_info": {"childs_age_in_month": 12},
+                    "muac_group": {"muac_consent_group": {"muac_consent": "yes"}, "muac_photo_link": ""},
+                }
+            },
+        )
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value == pytest.approx(0.0)

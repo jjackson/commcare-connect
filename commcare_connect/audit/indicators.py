@@ -179,3 +179,34 @@ class GenderRatioDeviation(AuditCalculation):
         if not total:
             return None, 0
         return result["female"] / total, total
+
+
+@register_calculation
+class MUACPhotoCompliance(AuditCalculation):
+    """Detect missing MUAC measurement photos for eligible children.
+    Denominator: last 70 visits where child is >6 months old and MUAC consent was given.
+    Numerator: visits where muac_photo_link is non-empty.
+    Flags if compliance < 72% (p=0.80, n=70, one-sided 95% CI lower bound).
+    """
+
+    name = "muac_photo_compliance"
+    label = "MUAC Photo Compliance"
+    min_sample_size = 70
+    lower_bound = 0.72
+
+    def compute(self, opportunity_access, period_start, period_end):
+        eligible = _last_n_visits(
+            opportunity_access,
+            self.min_sample_size,
+            period_end,
+            **{f"form_json__form__{_AGE_FIELD}__gt": 6},
+            **{f"form_json__form__{_MUAC_CONSENT_FIELD}": _MUAC_CONSENT_YES},
+        )
+        result = UserVisit.objects.filter(id__in=eligible).aggregate(
+            total=Count("id"),
+            with_photo=Count("id", filter=_q_link_present(_MUAC_PHOTO_LINK_FIELD)),
+        )
+        total = result["total"]
+        if not total:
+            return None, 0
+        return result["with_photo"] / total, total
