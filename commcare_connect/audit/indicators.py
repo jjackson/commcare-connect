@@ -210,3 +210,34 @@ class MUACPhotoCompliance(AuditCalculation):
         if not total:
             return None, 0
         return result["with_photo"] / total, total
+
+
+@register_calculation
+class AgeHeaping(AuditCalculation):
+    """Detect rounding/shortcut age entry at exact whole-year values.
+    Flags when visits with childs_age_in_month in (12, 24, 36, 48) exceed 19%
+    of the last 97 visits without a recorded DOB.
+    Threshold: p=0.134, n=97, one-sided 95% CI upper bound.
+    """
+
+    name = "age_heaping"
+    label = "Age Heaping"
+    min_sample_size = 97
+    upper_bound = 0.19
+
+    def compute(self, opportunity_access, period_start, period_end):
+        recent = _last_n_visits(
+            opportunity_access,
+            self.min_sample_size,
+            period_end,
+            **{f"form_json__form__{_AGE_FIELD}__isnull": False},
+            **{f"form_json__form__{_DOB_FIELD}__isnull": True},
+        )
+        result = UserVisit.objects.filter(id__in=recent).aggregate(
+            total=Count("id"),
+            heaped=Count("id", filter=Q(**{f"form_json__form__{_AGE_FIELD}__in": [12, 24, 36, 48]})),
+        )
+        total = result["total"]
+        if not total:
+            return None, 0
+        return result["heaped"] / total, total

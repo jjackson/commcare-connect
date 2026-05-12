@@ -9,6 +9,7 @@ import pytest
 from commcare_connect.audit.indicators import (
     _FEMALE_VALUE,
     _VACCINE_YES_VALUE,
+    AgeHeaping,
     CampingRatio,
     GenderRatioDeviation,
     MUACPhotoCompliance,
@@ -263,5 +264,51 @@ class TestMUACPhotoCompliance:
                 }
             },
         )
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value == pytest.approx(0.0)
+
+
+@pytest.mark.django_db
+class TestAgeHeaping:
+    calc = AgeHeaping()
+
+    def test_no_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "ages, expected_rate, in_range",
+        [
+            ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.0, True),  # no round years
+            ([12, 24, 36, 48, 1, 2, 3, 4, 5, 6], 0.4, False),  # 4/10 heaped, above 19%
+        ],
+    )
+    def test_heaping_rate(self, ages, expected_rate, in_range):
+        access = OpportunityAccessFactory()
+        for age in ages:
+            _visit_with_age(access, age)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == len(ages)
+        assert value == pytest.approx(expected_rate)
+        assert self.calc._in_range(value) is in_range
+
+    def test_visits_with_dob_excluded(self):
+        access = OpportunityAccessFactory()
+        _visit_with_age(access, 12, dob="2025-04-15")  # has DOB → excluded
+        _visit_with_age(access, 13)  # no DOB → included
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 1
+
+    def test_visits_after_period_end_excluded(self):
+        access = OpportunityAccessFactory()
+        _visit_with_age(access, 12, visit_date=AFTER_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_age_13_not_heaped(self):
+        access = OpportunityAccessFactory()
+        for _ in range(5):
+            _visit_with_age(access, 13)
         value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert value == pytest.approx(0.0)
