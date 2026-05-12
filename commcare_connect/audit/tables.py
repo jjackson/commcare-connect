@@ -92,7 +92,7 @@ class CalcColumn(columns.Column):
         r = record.results.get(self.calc_name, {})
         if not r.get("has_sufficient_data"):
             return format_html('<span class="text-gray-400">{}</span>', _("N/A"))
-        value = r.get("value")
+        value = r.get("value", "-")
         if not r.get("in_range"):
             return format_html('<span class="badge badge-md negative-dark">{}</span>', value)
         return value if value is not None else ""
