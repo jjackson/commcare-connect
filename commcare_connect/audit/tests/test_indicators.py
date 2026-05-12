@@ -7,8 +7,8 @@ from datetime import timezone
 import pytest
 
 from commcare_connect.audit.indicators import (
-    _FEMALE_VALUE,
-    _VACCINE_YES_VALUE,
+    FEMALE,
+    YES,
     AgeHeaping,
     CampingRatio,
     GenderRatioDeviation,
@@ -84,13 +84,13 @@ def _visit_with_muac_photo(access, has_photo=True, age_months=12, **kwargs):
 def _visit_with_vaccine(access, given=True, **kwargs):
     return make_visit(
         access,
-        form_json={"form": {"pictures": {"received_any_vaccine": _VACCINE_YES_VALUE if given else "no"}}},
+        form_json={"form": {"pictures": {"received_any_vaccine": YES if given else "no"}}},
         **kwargs,
     )
 
 
 def _visit_with_vaccine_card(access, has_photo=True, **kwargs):
-    form = {"pictures": {"received_any_vaccine": _VACCINE_YES_VALUE}}
+    form = {"pictures": {"received_any_vaccine": YES}}
     if has_photo:
         form["immunization_photo_group"] = {"photo_link_vaccine": "https://example.com/card.jpg"}
     return make_visit(access, form_json={"form": form}, **kwargs)
@@ -191,7 +191,7 @@ class TestGenderRatioDeviation:
     def test_ratio_threshold(self, female, male, expected_ratio, in_range):
         access = OpportunityAccessFactory()
         for _ in range(female):
-            _visit_with_gender(access, _FEMALE_VALUE)
+            _visit_with_gender(access, FEMALE)
         for _ in range(male):
             _visit_with_gender(access, "male_child")
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
@@ -201,21 +201,20 @@ class TestGenderRatioDeviation:
 
     def test_visits_after_period_end_excluded(self):
         access = OpportunityAccessFactory()
-        _visit_with_gender(access, _FEMALE_VALUE, visit_date=AFTER_PERIOD)
+        _visit_with_gender(access, FEMALE, visit_date=AFTER_PERIOD)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0
 
-    def test_visits_before_period_included_in_rolling_window(self):
-        """Rolling window goes back past period_start — pre-period visits count."""
+    def test_visits_before_period_excluded(self):
         access = OpportunityAccessFactory()
-        _visit_with_gender(access, _FEMALE_VALUE, visit_date=OUT_OF_PERIOD)
+        _visit_with_gender(access, FEMALE, visit_date=OUT_OF_PERIOD)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
-        assert sample == 1
+        assert sample == 0
 
     def test_denominator_is_all_visits_not_just_with_gender(self):
         access = OpportunityAccessFactory()
         make_visit(access)  # no gender field
-        _visit_with_gender(access, _FEMALE_VALUE)
+        _visit_with_gender(access, FEMALE)
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 2
         assert value == pytest.approx(0.5)
@@ -401,31 +400,36 @@ class TestInaccessibleWARateEarlyWarning:
     def test_fewer_than_5_terminal_was_returns_insufficient_data(self):
         access = OpportunityAccessFactory()
         wag = make_wag(access)
-        make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        wa1 = make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
         make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
         make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)  # non-terminal keeps WAG active
+        make_visit(access, work_area=wa1)  # visit needed so _find_active_wag can locate this WAG
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 2
         assert self.calc.run(access, PERIOD_START, PERIOD_END).has_sufficient_data is False
 
     @pytest.mark.parametrize(
-        "inaccessible, visited, not_visited, expected_value, in_range",
+        "inaccessible, reached, not_visited, expected_value, in_range",
         [
             (1, 5, 1, 1 / 7, True),  # ~14%, below 25% threshold
             (4, 1, 1, 4 / 6, False),  # ~67%, above 25% threshold
         ],
     )
-    def test_inaccessible_rate_threshold(self, inaccessible, visited, not_visited, expected_value, in_range):
+    def test_inaccessible_rate_threshold(self, inaccessible, reached, not_visited, expected_value, in_range):
         access = OpportunityAccessFactory()
         wag = make_wag(access)
+        first_wa = None
         for _ in range(inaccessible):
-            make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
-        for _ in range(visited):
-            make_wa(wag, access, status=WorkAreaStatus.VISITED)
+            wa = make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+            first_wa = first_wa or wa
+        for _ in range(reached):
+            wa = make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+            first_wa = first_wa or wa
         for _ in range(not_visited):
             make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)
+        make_visit(access, work_area=first_wa)  # visit needed so _find_active_wag can locate this WAG
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
-        assert sample == inaccessible + visited  # terminal count
+        assert sample == inaccessible + reached  # terminal count
         assert value == pytest.approx(expected_value)
         assert self.calc._in_range(value) is in_range
 
@@ -437,16 +441,18 @@ class TestInaccessibleWARateEarlyWarning:
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0
 
-    def test_most_advanced_wag_selected_as_active(self):
+    def test_most_recently_visited_wag_selected_as_active(self):
         access = OpportunityAccessFactory()
         wag_early = make_wag(access)
-        make_wa(wag_early, access, status=WorkAreaStatus.NOT_VISITED)
+        wa_early = make_wa(wag_early, access, status=WorkAreaStatus.NOT_VISITED)
+        make_visit(access, work_area=wa_early, visit_date=OUT_OF_PERIOD)
 
         wag_active = make_wag(access)
         for _ in range(5):
-            make_wa(wag_active, access, status=WorkAreaStatus.VISITED)
-        make_wa(wag_active, access, status=WorkAreaStatus.INACCESSIBLE)
+            make_wa(wag_active, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+        wa_inaccessible = make_wa(wag_active, access, status=WorkAreaStatus.INACCESSIBLE)
         make_wa(wag_active, access, status=WorkAreaStatus.NOT_VISITED)
+        make_visit(access, work_area=wa_inaccessible, visit_date=IN_PERIOD)
 
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 6
@@ -629,7 +635,7 @@ class TestVaccineCardPhotoCompliance:
             access,
             form_json={
                 "form": {
-                    "pictures": {"received_any_vaccine": _VACCINE_YES_VALUE},
+                    "pictures": {"received_any_vaccine": YES},
                     "immunization_photo_group": {"photo_link_vaccine": ""},
                 }
             },
