@@ -279,3 +279,31 @@ class WACoverageToVisitRatio(AuditCalculation):
         coverage_ratio = wa_stats["visited_count"] / total_eligible
         visit_ratio = actual_visits / expected_visits
         return coverage_ratio / visit_ratio, total_eligible
+
+
+@register_calculation
+class InaccessibleWARateEarlyWarning(AuditCalculation):
+    """Detect emerging overuse of Inaccessible state mid-WAG.
+    Evaluated against the FLW's current active WAG.
+    Requires ≥5 WAs with terminal status before evaluating.
+    """
+
+    name = "inaccessible_wa_rate_early_warning"
+    label = "Inaccessible WA Rate – Early Warning"
+    min_sample_size = 5
+    upper_bound = 0.25
+
+    def compute(self, opportunity_access, period_start, period_end):
+        active_wag = _find_active_wag(opportunity_access)
+        if active_wag is None:
+            return None, 0
+
+        was = WorkArea.objects.filter(work_area_group=active_wag, opportunity_access=opportunity_access)
+        total = was.count()
+        if total == 0:
+            return None, 0
+
+        terminal_count = was.filter(status__in=_TERMINAL_STATUSES).count()
+        inaccessible_count = was.filter(status=WorkAreaStatus.INACCESSIBLE).count()
+
+        return inaccessible_count / total, terminal_count

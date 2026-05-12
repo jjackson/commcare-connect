@@ -12,6 +12,7 @@ from commcare_connect.audit.indicators import (
     AgeHeaping,
     CampingRatio,
     GenderRatioDeviation,
+    InaccessibleWARateEarlyWarning,
     MUACPhotoCompliance,
     WACoverageToVisitRatio,
 )
@@ -382,3 +383,67 @@ class TestWACoverageToVisitRatio:
         make_visit(access)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0
+
+
+@pytest.mark.django_db
+class TestInaccessibleWARateEarlyWarning:
+    calc = InaccessibleWARateEarlyWarning()
+
+    def test_no_wag_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_fewer_than_5_terminal_was_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)  # non-terminal keeps WAG active
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 2
+        assert self.calc.run(access, PERIOD_START, PERIOD_END).has_sufficient_data is False
+
+    @pytest.mark.parametrize(
+        "inaccessible, visited, not_visited, expected_value, in_range",
+        [
+            (1, 5, 1, 1 / 7, True),  # ~14%, below 25% threshold
+            (4, 1, 1, 4 / 6, False),  # ~67%, above 25% threshold
+        ],
+    )
+    def test_inaccessible_rate_threshold(self, inaccessible, visited, not_visited, expected_value, in_range):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(inaccessible):
+            make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        for _ in range(visited):
+            make_wa(wag, access, status=WorkAreaStatus.VISITED)
+        for _ in range(not_visited):
+            make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == inaccessible + visited  # terminal count
+        assert value == pytest.approx(expected_value)
+        assert self.calc._in_range(value) is in_range
+
+    def test_fully_closed_wag_not_treated_as_active(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(6):
+            make_wa(wag, access, status=WorkAreaStatus.VISITED)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_most_advanced_wag_selected_as_active(self):
+        access = OpportunityAccessFactory()
+        wag_early = make_wag(access)
+        make_wa(wag_early, access, status=WorkAreaStatus.NOT_VISITED)
+
+        wag_active = make_wag(access)
+        for _ in range(5):
+            make_wa(wag_active, access, status=WorkAreaStatus.VISITED)
+        make_wa(wag_active, access, status=WorkAreaStatus.INACCESSIBLE)
+        make_wa(wag_active, access, status=WorkAreaStatus.NOT_VISITED)
+
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 6
+        assert value == pytest.approx(1 / 7)
