@@ -16,7 +16,7 @@
     </div>
 
     <form method="post"
-          hx-post="{% url 'opportunity:audit:audit_report_task_action' org_slug=opportunity.organization.slug opportunity_id=opportunity.opportunity_id audit_report_id=report.audit_report_id entry_id=entry.audit_report_entry_id %}"
+          hx-post="{% url 'opportunity:audit:audit_report_task_action' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id entry_id=entry.audit_report_entry_id %}"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
           hx-swap="none"
           hx-on:htmx:after-request="if (event.detail.successful) { document.getElementById('modal-root').innerHTML = ''; htmx.trigger(document.body, 'refreshDetail'); } else { error = event.detail.xhr.responseText || '{% trans "Something went wrong. Please try again." %}'; confirm = false; }">

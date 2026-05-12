@@ -119,7 +119,7 @@ class ActionColumn(columns.Column):
                 "opportunity:audit:audit_report_task_modal",
                 kwargs={
                     "org_slug": table.opportunity.organization.slug,
-                    "opportunity_id": table.opportunity.opportunity_id,
+                    "opp_id": table.opportunity.opportunity_id,
                     "audit_report_id": table.report.audit_report_id,
                     "entry_id": record.audit_report_entry_id,
                 },

@@ -97,7 +97,7 @@ def _detail_url(audit_opp, report):
         "opportunity:audit:audit_report_detail",
         kwargs={
             "org_slug": audit_opp.organization.slug,
-            "opportunity_id": audit_opp.opportunity_id,
+            "opp_id": audit_opp.opportunity_id,
             "audit_report_id": report.audit_report_id,
         },
     )
@@ -179,7 +179,7 @@ def test_task_modal_renders_task_types(client, program_manager_org_user_admin, a
         "opportunity:audit:audit_report_task_modal",
         kwargs={
             "org_slug": audit_opp.organization.slug,
-            "opportunity_id": audit_opp.opportunity_id,
+            "opp_id": audit_opp.opportunity_id,
             "audit_report_id": report.audit_report_id,
             "entry_id": entry.audit_report_entry_id,
         },
@@ -201,7 +201,7 @@ def _action_url(audit_opp, report, entry):
         "opportunity:audit:audit_report_task_action",
         kwargs={
             "org_slug": audit_opp.organization.slug,
-            "opportunity_id": audit_opp.opportunity_id,
+            "opp_id": audit_opp.opportunity_id,
             "audit_report_id": report.audit_report_id,
             "entry_id": entry.audit_report_entry_id,
         },
@@ -213,7 +213,7 @@ def _complete_url(audit_opp, report):
         "opportunity:audit:audit_report_complete",
         kwargs={
             "org_slug": audit_opp.organization.slug,
-            "opportunity_id": audit_opp.opportunity_id,
+            "opp_id": audit_opp.opportunity_id,
             "audit_report_id": report.audit_report_id,
         },
     )

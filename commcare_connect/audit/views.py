@@ -15,7 +15,7 @@ from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTable
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
-from commcare_connect.opportunity.models import AssignedTask, Opportunity, TaskType
+from commcare_connect.opportunity.models import AssignedTask, TaskType
 from commcare_connect.organization.decorators import opportunity_required, org_program_manager_required
 
 DEFAULT_PAGE_SIZE = 25
@@ -86,9 +86,11 @@ def _column_specs(entries):
     return ordered + leftovers
 
 
+@opportunity_required
 @org_program_manager_required
-def audit_report_detail(request, org_slug, opportunity_id, audit_report_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+def audit_report_detail(request, org_slug, opp_id, audit_report_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
     name_filter = request.GET.get("filter", "").strip()
@@ -125,7 +127,7 @@ def audit_report_detail(request, org_slug, opportunity_id, audit_report_id):
             "title": _("Audits"),
             "url": reverse(
                 "opportunity:audit:audit_report_list",
-                kwargs={"org_slug": org_slug, "opportunity_id": opportunity.opportunity_id},
+                kwargs={"org_slug": org_slug, "opp_id": opportunity.opportunity_id},
             ),
         },
         {"title": f"{report.period_start} – {report.period_end}"},
@@ -151,9 +153,11 @@ def audit_report_detail(request, org_slug, opportunity_id, audit_report_id):
     return render(request, template, context)
 
 
+@opportunity_required
 @org_program_manager_required
-def audit_report_task_modal(request, org_slug, opportunity_id, audit_report_id, entry_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+def audit_report_task_modal(request, org_slug, opp_id, audit_report_id, entry_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
     entry = get_object_or_404(AuditReportEntry, audit_report_entry_id=entry_id, audit_report=report)
 
@@ -173,10 +177,12 @@ def audit_report_task_modal(request, org_slug, opportunity_id, audit_report_id, 
     )
 
 
+@opportunity_required
 @org_program_manager_required
 @require_POST
-def audit_report_task_action(request, org_slug, opportunity_id, audit_report_id, entry_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+def audit_report_task_action(request, org_slug, opp_id, audit_report_id, entry_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
     entry = get_object_or_404(AuditReportEntry, audit_report_entry_id=entry_id, audit_report=report)
 
@@ -212,10 +218,12 @@ def audit_report_task_action(request, org_slug, opportunity_id, audit_report_id,
     return HttpResponse(status=200)
 
 
+@opportunity_required
 @org_program_manager_required
 @require_POST
-def audit_report_complete(request, org_slug, opportunity_id, audit_report_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+def audit_report_complete(request, org_slug, opp_id, audit_report_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
     unreviewed_flagged = report.entries.filter(flagged=True, reviewed=False).exists()
