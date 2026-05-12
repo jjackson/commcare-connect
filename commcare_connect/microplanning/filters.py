@@ -22,7 +22,7 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
 
     assignee = django_filters.ModelMultipleChoiceFilter(
         label=_("Assignee"),
-        field_name="work_area_group__opportunity_access__user",
+        field_name="opportunity_access__user",
         queryset=User.objects.none(),
         widget=forms.SelectMultiple(attrs={"data-tomselect": "1", "class": INPUT_CSS}),
     )
@@ -41,6 +41,11 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
         widget=forms.DateInput(attrs={"type": "date", "class": INPUT_CSS}),
     )
 
+    unassigned_only = django_filters.BooleanFilter(
+        label=_("Show Only Unassigned"),
+        method="filter_unassigned_only",
+    )
+
     class Meta:
         model = WorkArea
         fields = []
@@ -56,7 +61,7 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
             self.filters["assignee"].queryset = (
                 User.objects.filter(
                     opportunityaccess__opportunity=opportunity,
-                    opportunityaccess__workareagroup__isnull=False,
+                    opportunityaccess__workarea__isnull=False,
                 )
                 .distinct()
                 .order_by("name")
@@ -65,6 +70,11 @@ class WorkAreaMapFilterSet(django_filters.FilterSet):
         # Display "name (username)" instead of default __str__
         # which shows email or username (not useful for mobile workers)
         self.filters["assignee"].field.label_from_instance = lambda obj: obj.display_name_with_username()
+
+    def filter_unassigned_only(self, queryset, name, value):
+        if value:
+            return queryset.filter(opportunity_access__isnull=True)
+        return queryset
 
 
 class UserVisitMapFilterSet(django_filters.FilterSet):
@@ -99,7 +109,7 @@ class UserVisitMapFilterSet(django_filters.FilterSet):
             self.filters["assignee"].queryset = (
                 User.objects.filter(
                     opportunityaccess__opportunity=opportunity,
-                    opportunityaccess__workareagroup__isnull=False,
+                    opportunityaccess__workarea__isnull=False,
                 )
                 .distinct()
                 .order_by("name")
