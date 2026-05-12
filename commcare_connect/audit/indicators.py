@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from django.db.models import Count, Max, Q
 
+from commcare_connect.audit.calculations import AuditCalculation, register_calculation
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit
 
@@ -124,3 +125,32 @@ def _find_last_completed_wag(opportunity_access, period_start, period_end) -> Wo
         return None
 
     return WorkAreaGroup.objects.get(id=last["work_area__work_area_group_id"])
+
+
+@register_calculation
+class CampingRatio(AuditCalculation):
+    """Detect inflated visit reporting within a Work Area's building count.
+    Flags if any WA has >12 visits per building in the report week.
+    Returns count of camping WAs; upper_bound=0 means any camping WA flags the FLW.
+    """
+
+    name = "camping_ratio"
+    label = "Camping (Visit:Building Ratio)"
+    min_sample_size = 1
+    upper_bound = 0
+
+    def compute(self, opportunity_access, period_start, period_end):
+        wa_visit_counts = list(
+            UserVisit.objects.filter(
+                opportunity_access=opportunity_access,
+                visit_date__date__range=(period_start, period_end),
+                work_area__isnull=False,
+                work_area__building_count__gt=0,
+            )
+            .values("work_area_id", "work_area__building_count")
+            .annotate(visit_count=Count("id"))
+        )
+
+        total_evaluated = len(wa_visit_counts)
+        camping_count = sum(1 for row in wa_visit_counts if row["visit_count"] > 12 * row["work_area__building_count"])
+        return camping_count, total_evaluated

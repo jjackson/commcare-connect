@@ -4,9 +4,11 @@ import datetime
 import random
 from datetime import timezone
 
-from commcare_connect.audit.indicators import _VACCINE_YES_VALUE
+import pytest
+
+from commcare_connect.audit.indicators import _VACCINE_YES_VALUE, CampingRatio
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
-from commcare_connect.opportunity.tests.factories import UserVisitFactory
+from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
 
 PERIOD_START = datetime.date(2026, 4, 13)  # Monday
 PERIOD_END = datetime.date(2026, 4, 19)  # Sunday
@@ -92,3 +94,65 @@ def _realistic_muac_measurements() -> list[float]:
     """Bell-shaped MUAC distribution centred around 13.5 cm — passes all 6 features."""
     random.seed(42)
     return [max(9.5, min(21.4, round(random.gauss(13.5, 1.5), 1))) for _ in range(100)]
+
+
+@pytest.mark.django_db
+class TestCampingRatio:
+    calc = CampingRatio()
+
+    def test_no_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "n_visits, n_buildings, expected_camping_count",
+        [
+            (1, 10, 0),  # 1/10 = 0.1, below threshold
+            (13, 1, 1),  # 13/1 = 13 > 12, flagged
+            (12, 1, 0),  # 12/1 = 12, not > 12, boundary is exclusive
+        ],
+    )
+    def test_camping_threshold(self, n_visits, n_buildings, expected_camping_count):
+        access = OpportunityAccessFactory()
+        wa = WorkAreaFactory(opportunity=access.opportunity, building_count=n_buildings)
+        for _ in range(n_visits):
+            make_visit(access, work_area=wa)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 1
+        assert value == expected_camping_count
+
+    def test_wa_with_zero_building_count_excluded(self):
+        access = OpportunityAccessFactory()
+        wa = WorkAreaFactory(opportunity=access.opportunity, building_count=0)
+        make_visit(access, work_area=wa)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_visits_outside_period_not_counted(self):
+        access = OpportunityAccessFactory()
+        wa = WorkAreaFactory(opportunity=access.opportunity, building_count=1)
+        for _ in range(13):
+            make_visit(access, work_area=wa, visit_date=OUT_OF_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_only_camping_wa_flagged(self):
+        access = OpportunityAccessFactory()
+        wa_camping = WorkAreaFactory(opportunity=access.opportunity, building_count=1)
+        wa_ok = WorkAreaFactory(opportunity=access.opportunity, building_count=100)
+        for _ in range(13):
+            make_visit(access, work_area=wa_camping)
+        make_visit(access, work_area=wa_ok)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 2
+        assert value == 1
+
+    def test_run_marks_out_of_range_when_camping(self):
+        access = OpportunityAccessFactory()
+        wa = WorkAreaFactory(opportunity=access.opportunity, building_count=1)
+        for _ in range(13):
+            make_visit(access, work_area=wa)
+        result = self.calc.run(access, PERIOD_START, PERIOD_END)
+        assert result.has_sufficient_data is True
+        assert result.in_range is False
