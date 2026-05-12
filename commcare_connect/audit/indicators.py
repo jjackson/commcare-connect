@@ -392,3 +392,149 @@ class VaccineCardPhotoCompliance(AuditCalculation):
         if not total:
             return None, 0
         return result["with_photo"] / total, total
+
+
+# ── MUAC distribution helpers (ported from MLFeatureAggregationReport.py) ────
+
+
+def _muac_build_bins(measurements: list[float]) -> list[int]:
+    counts = []
+    for i in range(len(_MUAC_BIN_EDGES) - 1):
+        lo, hi = _MUAC_BIN_EDGES[i], _MUAC_BIN_EDGES[i + 1]
+        counts.append(sum(1 for m in measurements if lo <= m < hi))
+    return counts
+
+
+def _muac_increasing_to_peak(bin_counts, non_zero_indices, peak_index, wiggle) -> bool:
+    if peak_index == 0 or peak_index not in non_zero_indices:
+        return False
+    peak_pos = non_zero_indices.index(peak_index)
+    if peak_pos == 0:
+        return False
+
+    increasing_steps = big_decreases = 0
+    for i in range(peak_pos):
+        change = bin_counts[non_zero_indices[i + 1]] - bin_counts[non_zero_indices[i]]
+        if change > 0:
+            increasing_steps += 1
+        if change < -wiggle:
+            big_decreases += 1
+
+    adequate = any(bin_counts[i] >= bin_counts[peak_index] * 0.25 for i in range(peak_index))
+    return increasing_steps >= 1 and big_decreases == 0 and adequate
+
+
+def _muac_decreasing_from_peak(bin_counts, non_zero_indices, peak_index, wiggle) -> bool:
+    if peak_index == len(bin_counts) - 1 or peak_index not in non_zero_indices:
+        return False
+    peak_pos = non_zero_indices.index(peak_index)
+    if peak_pos == len(non_zero_indices) - 1:
+        return False
+
+    decreasing_steps = big_increases = 0
+    for i in range(peak_pos, len(non_zero_indices) - 1):
+        change = bin_counts[non_zero_indices[i + 1]] - bin_counts[non_zero_indices[i]]
+        if change < 0:
+            decreasing_steps += 1
+        if change > wiggle:
+            big_increases += 1
+
+    return decreasing_steps >= 1 and big_increases == 0
+
+
+def _muac_no_skipped_bins(bin_counts, total_count) -> bool:
+    if total_count <= 0:
+        return True
+    threshold = total_count * 0.02
+    sig = [i for i, c in enumerate(bin_counts) if c >= threshold]
+    if len(sig) <= 1:
+        return True
+    return all(c != 0 for c in bin_counts[sig[0] : sig[-1] + 1])  # noqa: E203
+
+
+def _muac_no_plateau(bin_counts, max_count) -> bool:
+    total_count = sum(bin_counts)
+    if total_count == 0 or max_count == 0:
+        return True
+
+    threshold = 0.5 * max_count
+    tolerance = total_count * 0.04
+    high_bins = [(i, c) for i, c in enumerate(bin_counts) if c >= threshold]
+
+    if len(high_bins) < 2:
+        return True
+
+    longest_plateau = 1
+    plateau_start = 0
+    for i in range(1, len(high_bins)):
+        if high_bins[i][0] == high_bins[i - 1][0] + 1:
+            segment = high_bins[plateau_start : i + 1]  # noqa: E203
+            segment_counts = [x[1] for x in segment]
+            if max(segment_counts) - min(segment_counts) <= tolerance:
+                longest_plateau = max(longest_plateau, len(segment))
+            else:
+                plateau_start = i - 1
+        else:
+            plateau_start = i - 1
+
+    return longest_plateau < 3  # 3+ consecutive similar high bins = suspicious
+
+
+@register_calculation
+class MUACDistributionPatternIndex(AuditCalculation):
+    """Assess whether a FLW's MUAC distribution looks biologically realistic.
+
+    Scores 6 boolean shape features of the histogram (0–6 total).
+    Flags if fewer than 5 features pass. Requires ≥100 valid measurements.
+    Features: increasing_to_peak, decreasing_from_peak, no_skipped_bins,
+    no_plateau, bins_sufficient (≥5), peak_reasonable (≤42% concentration).
+    """
+
+    name = "muac_distribution_pattern_index"
+    label = "MUAC Distribution Pattern Index (MDPI)"
+    min_sample_size = 100
+    lower_bound = 5
+
+    def compute(self, opportunity_access, period_start, period_end):
+        recent = _last_n_visits(
+            opportunity_access,
+            100,
+            period_end,
+            **{f"form_json__form__{_MUAC_MEASUREMENT_FIELD}__isnull": False},
+        )
+        raw = list(
+            UserVisit.objects.filter(id__in=recent).values_list(
+                f"form_json__form__{_MUAC_MEASUREMENT_FIELD}", flat=True
+            )
+        )
+
+        measurements = []
+        for v in raw:
+            try:
+                f = float(v)
+                if 9.5 <= f <= 21.5:
+                    measurements.append(f)
+            except (TypeError, ValueError):
+                pass
+
+        total = len(measurements)
+        if total < self.min_sample_size:
+            return None, total
+
+        bin_counts = _muac_build_bins(measurements)
+        max_count = max(bin_counts)
+        peak_index = next(i for i, c in enumerate(bin_counts) if c == max_count)
+        non_zero = [i for i, c in enumerate(bin_counts) if c > 0]
+        wiggle = total * 0.02
+
+        score = sum(
+            [
+                _muac_increasing_to_peak(bin_counts, non_zero, peak_index, wiggle),
+                _muac_decreasing_from_peak(bin_counts, non_zero, peak_index, wiggle),
+                _muac_no_skipped_bins(bin_counts, total),
+                _muac_no_plateau(bin_counts, max_count),
+                len(non_zero) >= 5,
+                max_count / total <= 0.42,
+            ]
+        )
+        return score, total

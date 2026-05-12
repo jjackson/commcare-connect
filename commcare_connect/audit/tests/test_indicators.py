@@ -14,6 +14,7 @@ from commcare_connect.audit.indicators import (
     GenderRatioDeviation,
     InaccessibleWARateEarlyWarning,
     InaccessibleWARateLastCompletedWAG,
+    MUACDistributionPatternIndex,
     MUACPhotoCompliance,
     VaccineCardPhotoCompliance,
     VaccineRate,
@@ -639,5 +640,62 @@ class TestVaccineCardPhotoCompliance:
     def test_visits_after_period_end_excluded(self):
         access = OpportunityAccessFactory()
         _visit_with_vaccine_card(access, has_photo=False, visit_date=AFTER_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+
+@pytest.mark.django_db
+class TestMUACDistributionPatternIndex:
+    calc = MUACDistributionPatternIndex()
+
+    def test_no_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_fewer_than_100_measurements_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        for m in [12.0, 13.0, 14.0]:
+            _visit_with_muac(access, m)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 3
+        assert self.calc.run(access, PERIOD_START, PERIOD_END).has_sufficient_data is False
+
+    def test_out_of_range_measurements_excluded(self):
+        access = OpportunityAccessFactory()
+        for m in [5.0, 25.0, 8.0]:
+            _visit_with_muac(access, m)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_realistic_distribution_passes_most_features(self):
+        access = OpportunityAccessFactory()
+        for m in _realistic_muac_measurements():
+            _visit_with_muac(access, m)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 100
+        assert value >= 5
+        assert self.calc._in_range(value)
+
+    def test_single_bin_distribution_fails_multiple_features(self):
+        access = OpportunityAccessFactory()
+        for _ in range(100):
+            _visit_with_muac(access, 13.0)
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value < 5
+        assert not self.calc._in_range(value)
+
+    def test_score_is_integer_between_0_and_6(self):
+        access = OpportunityAccessFactory()
+        for m in _realistic_muac_measurements():
+            _visit_with_muac(access, m)
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert isinstance(value, int)
+        assert 0 <= value <= 6
+
+    def test_visits_after_period_end_excluded(self):
+        access = OpportunityAccessFactory()
+        for m in _realistic_muac_measurements():
+            _visit_with_muac(access, m, visit_date=AFTER_PERIOD)
         _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 0
