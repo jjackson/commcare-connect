@@ -16,26 +16,26 @@ from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTabl
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
 from commcare_connect.opportunity.models import AssignedTask, Opportunity, TaskType
-from commcare_connect.organization.decorators import org_program_manager_required
+from commcare_connect.organization.decorators import opportunity_required, org_program_manager_required
 
 DEFAULT_PAGE_SIZE = 25
 DEFAULT_TASK_DUE_DAYS = 7
 
 
-def _require_flagged_opportunity(org_slug, opportunity_id):
-    opportunity = get_object_or_404(Opportunity, opportunity_id=opportunity_id, organization__slug=org_slug)
+def _require_feature_flag(opportunity):
     try:
         flag = Flag.objects.get(name=WEEKLY_PERFORMANCE_REPORT)
     except Flag.DoesNotExist:
         raise Http404("Weekly performance report is not enabled.")
     if not flag.opportunities.filter(pk=opportunity.pk).exists():
         raise Http404("Weekly performance report is not enabled for this opportunity.")
-    return opportunity
 
 
 @org_program_manager_required
-def audit_report_list(request, org_slug, opportunity_id):
-    opportunity = _require_flagged_opportunity(org_slug, opportunity_id)
+@opportunity_required
+def audit_report_list(request, org_slug, opp_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
     # Annotate each row with its chronological position
     queryset = (
         AuditReport.objects.filter(opportunity=opportunity)
@@ -51,12 +51,12 @@ def audit_report_list(request, org_slug, opportunity_id):
     RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(table)
 
     path = [
-        {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
+        {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
         {
             "title": opportunity.name,
             "url": reverse("opportunity:detail", args=(org_slug, opportunity.opportunity_id)),
         },
-        {"title": "Audits"},
+        {"title": _("Audits")},
     ]
 
     return render(

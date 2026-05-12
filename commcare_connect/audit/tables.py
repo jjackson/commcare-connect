@@ -47,7 +47,7 @@ class AuditReportTable(tables.Table):
             "opportunity:audit:audit_report_detail",
             kwargs={
                 "org_slug": self.opportunity.organization.slug,
-                "opportunity_id": self.opportunity.opportunity_id,
+                "opp_id": self.opportunity.opportunity_id,
                 "audit_report_id": record.audit_report_id,
             },
         )
@@ -70,7 +70,7 @@ class AuditReportTable(tables.Table):
             "opportunity:audit:audit_report_detail",
             kwargs={
                 "org_slug": self.opportunity.organization.slug,
-                "opportunity_id": self.opportunity.opportunity_id,
+                "opp_id": self.opportunity.opportunity_id,
                 "audit_report_id": record.audit_report_id,
             },
         )
