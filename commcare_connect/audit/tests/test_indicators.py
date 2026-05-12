@@ -13,10 +13,11 @@ from commcare_connect.audit.indicators import (
     CampingRatio,
     GenderRatioDeviation,
     InaccessibleWARateEarlyWarning,
+    InaccessibleWARateLastCompletedWAG,
     MUACPhotoCompliance,
     WACoverageToVisitRatio,
 )
-from commcare_connect.microplanning.models import WorkAreaStatus
+from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
 
@@ -447,3 +448,105 @@ class TestInaccessibleWARateEarlyWarning:
         value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert sample == 6
         assert value == pytest.approx(1 / 7)
+
+
+@pytest.mark.django_db
+class TestInaccessibleWARateLastCompletedWAG:
+    calc = InaccessibleWARateLastCompletedWAG()
+
+    def test_no_completed_wag_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)  # not terminal → not completed
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_all_visited_wag_not_treated_as_closed(self):
+        """VISITED means visits started but expected count not yet reached — not a closed WAG."""
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(6):
+            wa = make_wa(wag, access, status=WorkAreaStatus.VISITED)
+            make_visit(access, work_area=wa)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_active_wag_not_selected(self):
+        """A WAG with any non-closed WA is not completed."""
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "inaccessible, reached, expected_value, in_range",
+        [
+            (1, 6, 1 / 7, True),  # ~14%, below 15% threshold
+            (4, 2, 4 / 6, False),  # ~67%, above 15% threshold
+        ],
+    )
+    def test_inaccessible_rate_threshold(self, inaccessible, reached, expected_value, in_range):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(inaccessible):
+            make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        for _ in range(reached):
+            make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+        for wa in WorkArea.objects.filter(work_area_group=wag):
+            make_visit(access, work_area=wa)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == inaccessible + reached
+        assert value == pytest.approx(expected_value)
+        assert self.calc._in_range(value) is in_range
+
+    def test_excluded_was_not_counted_in_denominator(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE)
+        for _ in range(6):
+            make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+        make_wa(wag, access, status=WorkAreaStatus.EXCLUDED)
+        for wa in WorkArea.objects.filter(work_area_group=wag):
+            make_visit(access, work_area=wa)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 7  # 1 inaccessible + 6 reached; EXCLUDED not counted
+        assert value == pytest.approx(1 / 7)
+
+    def test_most_recently_completed_wag_selected(self):
+        """When two WAGs are closed, the one with the more recent visits is chosen."""
+        access = OpportunityAccessFactory()
+
+        wag_old = make_wag(access)
+        wa_old = make_wa(wag_old, access, status=WorkAreaStatus.INACCESSIBLE)
+        for _ in range(5):
+            make_wa(wag_old, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+        make_visit(access, work_area=wa_old, visit_date=OUT_OF_PERIOD)
+
+        wag_recent = make_wag(access)
+        for _ in range(6):
+            wa = make_wa(wag_recent, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+            make_visit(access, work_area=wa, visit_date=IN_PERIOD)
+
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 6
+        assert value == pytest.approx(0.0)  # wag_recent has no inaccessible WAs
+
+    def test_fewer_than_5_was_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(4):
+            wa = make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+            make_visit(access, work_area=wa)
+        assert self.calc.run(access, PERIOD_START, PERIOD_END).has_sufficient_data is False
+
+    def test_wag_closed_outside_period_returns_insufficient_data(self):
+        """A fully closed WAG whose last visit was before the reporting period must return N/A."""
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        for _ in range(5):
+            wa = make_wa(wag, access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+            make_visit(access, work_area=wa, visit_date=OUT_OF_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0

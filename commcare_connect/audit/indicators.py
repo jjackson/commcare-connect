@@ -307,3 +307,32 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
         inaccessible_count = was.filter(status=WorkAreaStatus.INACCESSIBLE).count()
 
         return inaccessible_count / total, terminal_count
+
+
+@register_calculation
+class InaccessibleWARateLastCompletedWAG(AuditCalculation):
+    """Detect systematic overuse of Inaccessible state in the most recently completed WAG.
+    Evaluated against the last completed WAG (all WAs terminal), identified by
+    the latest visit date across its WAs.
+    """
+
+    name = "inaccessible_wa_rate_last_completed_wag"
+    label = "Inaccessible WA Rate – Last Completed WAG"
+    min_sample_size = 5
+    upper_bound = 0.15
+
+    def compute(self, opportunity_access, period_start, period_end):
+        last_wag = _find_last_completed_wag(opportunity_access, period_start, period_end)
+        if last_wag is None:
+            return None, 0
+
+        was = WorkArea.objects.filter(
+            work_area_group=last_wag,
+            opportunity_access=opportunity_access,
+        ).exclude(status=WorkAreaStatus.EXCLUDED)
+        total = was.count()
+        if total == 0:
+            return None, 0
+
+        inaccessible_count = was.filter(status=WorkAreaStatus.INACCESSIBLE).count()
+        return inaccessible_count / total, total
