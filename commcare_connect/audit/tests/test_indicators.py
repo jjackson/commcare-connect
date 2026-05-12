@@ -6,7 +6,7 @@ from datetime import timezone
 
 import pytest
 
-from commcare_connect.audit.indicators import _VACCINE_YES_VALUE, CampingRatio
+from commcare_connect.audit.indicators import _FEMALE_VALUE, _VACCINE_YES_VALUE, CampingRatio, GenderRatioDeviation
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
 
@@ -156,3 +156,52 @@ class TestCampingRatio:
         result = self.calc.run(access, PERIOD_START, PERIOD_END)
         assert result.has_sufficient_data is True
         assert result.in_range is False
+
+
+@pytest.mark.django_db
+class TestGenderRatioDeviation:
+    calc = GenderRatioDeviation()
+
+    def test_no_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    @pytest.mark.parametrize(
+        "female, male, expected_ratio, in_range",
+        [
+            (5, 5, 0.5, True),  # 50/50 — within 0.4–0.6
+            (10, 0, 1.0, False),  # all female — above 0.6
+        ],
+    )
+    def test_ratio_threshold(self, female, male, expected_ratio, in_range):
+        access = OpportunityAccessFactory()
+        for _ in range(female):
+            _visit_with_gender(access, _FEMALE_VALUE)
+        for _ in range(male):
+            _visit_with_gender(access, "male_child")
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == female + male
+        assert value == pytest.approx(expected_ratio)
+        assert self.calc._in_range(value) is in_range
+
+    def test_visits_after_period_end_excluded(self):
+        access = OpportunityAccessFactory()
+        _visit_with_gender(access, _FEMALE_VALUE, visit_date=AFTER_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_visits_before_period_included_in_rolling_window(self):
+        """Rolling window goes back past period_start — pre-period visits count."""
+        access = OpportunityAccessFactory()
+        _visit_with_gender(access, _FEMALE_VALUE, visit_date=OUT_OF_PERIOD)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 1
+
+    def test_denominator_is_all_visits_not_just_with_gender(self):
+        access = OpportunityAccessFactory()
+        make_visit(access)  # no gender field
+        _visit_with_gender(access, _FEMALE_VALUE)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 2
+        assert value == pytest.approx(0.5)

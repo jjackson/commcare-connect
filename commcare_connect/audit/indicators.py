@@ -154,3 +154,28 @@ class CampingRatio(AuditCalculation):
         total_evaluated = len(wa_visit_counts)
         camping_count = sum(1 for row in wa_visit_counts if row["visit_count"] > 12 * row["work_area__building_count"])
         return camping_count, total_evaluated
+
+
+@register_calculation
+class GenderRatioDeviation(AuditCalculation):
+    """Detect gender imbalance suggesting selective visit recording.
+    Ratio = female visits / last 97 completed visits.
+    Flags if female ratio < 0.4 or > 0.6 (10% max deviation from 50/50 at 95% confidence).
+    """
+
+    name = "gender_ratio_deviation"
+    label = "Gender Ratio Deviation"
+    min_sample_size = 97
+    lower_bound = 0.4
+    upper_bound = 0.6
+
+    def compute(self, opportunity_access, period_start, period_end):
+        recent = _last_n_visits(opportunity_access, self.min_sample_size, period_end)
+        result = UserVisit.objects.filter(id__in=recent).aggregate(
+            total=Count("id"),
+            female=Count("id", filter=Q(**{f"form_json__form__{_GENDER_FIELD}": _FEMALE_VALUE})),
+        )
+        total = result["total"]
+        if not total:
+            return None, 0
+        return result["female"] / total, total
