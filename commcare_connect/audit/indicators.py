@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, Q, Sum
 
 from commcare_connect.audit.calculations import AuditCalculation, register_calculation
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
@@ -241,3 +241,41 @@ class AgeHeaping(AuditCalculation):
         if not total:
             return None, 0
         return result["heaped"] / total, total
+
+
+@register_calculation
+class WACoverageToVisitRatio(AuditCalculation):
+    """Detect imbalance between work area coverage progress and visit progress.
+
+    Ratio = (VISITED WAs / eligible WAs) / (actual visits / expected visits).
+    Eligible WAs exclude those marked EXCLUDED or INACCESSIBLE.
+    Uses cumulative totals from campaign start, not just the report week.
+    """
+
+    name = "wa_coverage_to_visit_ratio"
+    label = "WA Coverage to Visit Ratio"
+    min_sample_size = 1
+    lower_bound = 0.6
+    upper_bound = 1.4
+
+    def compute(self, opportunity_access, period_start, period_end):
+        _eligible = ~Q(status__in=[WorkAreaStatus.EXCLUDED, WorkAreaStatus.INACCESSIBLE])
+        wa_stats = WorkArea.objects.filter(opportunity_access=opportunity_access).aggregate(
+            total_eligible=Count("id", filter=_eligible),
+            visited_count=Count("id", filter=Q(status=WorkAreaStatus.VISITED)),
+            expected_visits=Sum("expected_visit_count", filter=_eligible),
+        )
+
+        total_eligible = wa_stats["total_eligible"] or 0
+        expected_visits = wa_stats["expected_visits"] or 0
+        actual_visits = UserVisit.objects.filter(
+            opportunity_access=opportunity_access,
+            visit_date__date__lte=period_end,
+        ).count()
+
+        if not (total_eligible and expected_visits and actual_visits):
+            return None, 0
+
+        coverage_ratio = wa_stats["visited_count"] / total_eligible
+        visit_ratio = actual_visits / expected_visits
+        return coverage_ratio / visit_ratio, total_eligible

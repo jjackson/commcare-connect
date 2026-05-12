@@ -13,7 +13,9 @@ from commcare_connect.audit.indicators import (
     CampingRatio,
     GenderRatioDeviation,
     MUACPhotoCompliance,
+    WACoverageToVisitRatio,
 )
+from commcare_connect.microplanning.models import WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, UserVisitFactory
 
@@ -312,3 +314,71 @@ class TestAgeHeaping:
             _visit_with_age(access, 13)
         value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
         assert value == pytest.approx(0.0)
+
+
+@pytest.mark.django_db
+class TestWACoverageToVisitRatio:
+    calc = WACoverageToVisitRatio()
+
+    def test_no_was_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_balanced_coverage_and_visits_in_range(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.VISITED, expected_visit_count=10)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED, expected_visit_count=10)
+        for _ in range(10):
+            make_visit(access)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 2
+        assert value == pytest.approx(1.0)
+        assert self.calc._in_range(value)
+
+    def test_high_coverage_low_visits_out_of_range(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.VISITED, expected_visit_count=100)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED, expected_visit_count=100)
+        make_visit(access)
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value > 1.4
+
+    def test_low_coverage_high_visits_out_of_range(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED, expected_visit_count=1)
+        for _ in range(10):
+            make_visit(access)
+        value, _ = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert value < 0.6
+
+    def test_excluded_and_inaccessible_was_not_counted_in_eligible(self):
+        """EXCLUDED/INACCESSIBLE WAs must not count in eligible denominator or expected visits."""
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.VISITED, expected_visit_count=10)
+        make_wa(wag, access, status=WorkAreaStatus.EXCLUDED, expected_visit_count=10)
+        make_wa(wag, access, status=WorkAreaStatus.INACCESSIBLE, expected_visit_count=10)
+        for _ in range(10):
+            make_visit(access)
+        value, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 1  # only the VISITED WA is eligible
+        assert value == pytest.approx(1.0)
+
+    def test_no_actual_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED, expected_visit_count=10)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
+
+    def test_no_expected_visits_returns_insufficient_data(self):
+        access = OpportunityAccessFactory()
+        wag = make_wag(access)
+        make_wa(wag, access, status=WorkAreaStatus.NOT_VISITED, expected_visit_count=0)
+        make_visit(access)
+        _, sample = self.calc.compute(access, PERIOD_START, PERIOD_END)
+        assert sample == 0
