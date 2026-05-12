@@ -3580,6 +3580,8 @@ def delete_tasks(request, org_slug, opp_id):
         deleted_count = AssignedTask.delete_and_reset_hq(task_ids, request.opportunity)
     except CommCareHQAPIException:
         messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
+    except ValueError:
+        messages.error(request, _("Too many tasks queued for deletion. Please select a smaller batch."))
     else:
         if deleted_count:
             messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})

@@ -180,9 +180,13 @@ def bulk_update_usercases(updates: list[tuple[OpportunityAccess, dict[str, Any]]
     api_key = first_access.opportunity.api_key
     hq_server = api_key.hq_server
 
+    users = [access.user for access, _ in updates]
+    links = ConnectIDUserLink.objects.filter(user__in=users, domain=domain, hq_server=hq_server)
+    links_by_user = {link.user_id: link for link in links}
+
     cases_data = []
     for access, data in updates:
-        link = ConnectIDUserLink.objects.get(user=access.user, domain=domain, hq_server=hq_server)
+        link = links_by_user[access.user_id]
         if link.hq_case_id is None:
             usercase = get_usercase(access)
             link.hq_case_id = usercase.case_id
