@@ -64,6 +64,7 @@ from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers.mobile import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
+from commcare_connect.opportunity.exceptions import ListTooLongError
 from commcare_connect.opportunity.filters import (
     AssignedTaskFilterSet,
     DeliverFilterSet,
@@ -3580,11 +3581,11 @@ def delete_tasks(request, org_slug, opp_id):
     redirect_url = _task_redirect_url(request, org_slug, opp_id)
 
     try:
-        deleted_count = AssignedTask.delete_and_reset_hq(task_ids, request.opportunity)
+        deleted_count = AssignedTask.bulk_delete(task_ids, request.opportunity)
     except CommCareHQAPIException:
         logger.exception("Task deletion failed: could not update CommCare HQ for opportunity %s", opp_id)
         messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
-    except ValueError:
+    except ListTooLongError:
         logger.exception("Task deletion failed: too many tasks queued for opportunity %s", opp_id)
         messages.error(request, _("Too many tasks queued for deletion. Please select a smaller batch."))
     else:

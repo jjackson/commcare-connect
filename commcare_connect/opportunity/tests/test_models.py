@@ -298,7 +298,7 @@ class TestAssignedTaskDeleteAndResetHQ:
         )
 
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
-            deleted = AssignedTask.delete_and_reset_hq([task.pk], access.opportunity)
+            deleted = AssignedTask.bulk_delete([task.pk], access.opportunity)
 
         assert deleted == 1
         assert not AssignedTask.objects.filter(pk=task.pk).exists()
@@ -316,7 +316,7 @@ class TestAssignedTaskDeleteAndResetHQ:
         )
 
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
-            deleted = AssignedTask.delete_and_reset_hq([task.pk], access.opportunity)
+            deleted = AssignedTask.bulk_delete([task.pk], access.opportunity)
 
         assert deleted == 1
         mock_update.assert_not_called()
@@ -336,7 +336,7 @@ class TestAssignedTaskDeleteAndResetHQ:
             side_effect=CommCareHQAPIException("boom"),
         ):
             with pytest.raises(CommCareHQAPIException):
-                AssignedTask.delete_and_reset_hq([task.pk], access.opportunity)
+                AssignedTask.bulk_delete([task.pk], access.opportunity)
 
         assert AssignedTask.objects.filter(pk=task.pk).exists()
 
@@ -351,7 +351,7 @@ class TestAssignedTaskDeleteAndResetHQ:
         )
 
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
-            deleted = AssignedTask.delete_and_reset_hq([completed.pk], access.opportunity)
+            deleted = AssignedTask.bulk_delete([completed.pk], access.opportunity)
 
         assert deleted == 0
         assert AssignedTask.objects.filter(pk=completed.pk).exists()
@@ -374,7 +374,7 @@ class TestAssignedTaskDeleteAndResetHQ:
         )
 
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
-            deleted = AssignedTask.delete_and_reset_hq([task_to_delete.pk], access.opportunity)
+            deleted = AssignedTask.bulk_delete([task_to_delete.pk], access.opportunity)
 
         assert deleted == 1
         assert not AssignedTask.objects.filter(pk=task_to_delete.pk).exists()
@@ -393,6 +393,6 @@ class TestAssignedTaskDeleteAndResetHQ:
         )
 
         with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
-            AssignedTask.delete_and_reset_hq([t.pk for t in tasks], access.opportunity)
+            AssignedTask.bulk_delete([t.pk for t in tasks], access.opportunity)
 
         mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": ""}}})

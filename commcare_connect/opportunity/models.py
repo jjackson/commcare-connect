@@ -17,6 +17,7 @@ from waffle import switch_is_active
 
 from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.flags.switch_names import UPDATES_TO_MARK_AS_PAID_WORKFLOW
+from commcare_connect.opportunity.exceptions import ListTooLongError
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User, UserCredential
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
@@ -475,7 +476,7 @@ class AssignedTask(XFormBaseModel):
         return assigned_task
 
     @classmethod
-    def delete_and_reset_hq(cls, task_ids: list[int], opportunity: Opportunity) -> int:
+    def bulk_delete(cls, task_ids: list[int], opportunity: Opportunity) -> int:
         from commcare_connect.commcarehq.api import HQ_CASE_BULK_CHUNK_SIZE, bulk_update_usercases
 
         tasks = list(
@@ -509,7 +510,7 @@ class AssignedTask(XFormBaseModel):
                     for access_id, prop in hq_updates.keys() - still_assigned
                 }
                 if len(to_reset) > HQ_CASE_BULK_CHUNK_SIZE:
-                    raise ValueError(
+                    raise ListTooLongError(
                         f"Too many HQ case property resets ({len(to_reset)}); "
                         "split the delete into smaller batches."
                     )

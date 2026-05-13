@@ -172,6 +172,11 @@ def create_or_update_case(
 
 
 def bulk_update_usercases(updates: dict[OpportunityAccess, dict[str, Any]]) -> None:
+    """Update usercase properties on CommCare HQ for multiple users in a single bulk request.
+
+    All entries in `updates` must belong to the same opportunity. The domain, API key, and
+    HQ server are derived from the first entry and applied to the entire batch.
+    """
     if not updates:
         return
 
