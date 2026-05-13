@@ -260,11 +260,13 @@ class TestWorkAreaGrouper:
     def test_cluster_no_bridging_across_wide_gap(self, opportunity):
         """Two pairs of edge-sharing WAs separated by a ~33m gap should produce 2 groups, not 1.
 
-        In EPSG:3857 (Web Mercator), 0.0003° longitude ≈ 33 m — wider than the default
+        Input coordinates are in EPSG:4326 (degrees); the clustering algorithm projects them
+        to EPSG:3857 (Web Mercator meters) for distance math. At the equator the conversion
+        is ~0.0003° longitude → ~33 m of projected distance — wider than the default
         buffer_distance (10 m) but narrower than the previous default (100 m). Pins the fix
         for CCCT-2392 Part 1: clusters must not bridge realistic inter-region gaps."""
-        size = 0.001  # ~111 m square in EPSG:3857
-        gap = 0.0003  # ~33 m gap in EPSG:3857 — between new (10 m) and old (100 m) defaults
+        size = 0.001  # 4326 degrees; projects to ~111 m squares in EPSG:3857
+        gap = 0.0003  # 4326 degrees; ~33 m gap in EPSG:3857 — between new (10 m) and old (100 m) defaults
 
         start_a = 77.0
         start_b = start_a + 2 * size + gap
@@ -308,7 +310,7 @@ class TestWorkAreaGrouper:
         With the blocker check: the line from A2's nearest point to B1's nearest point passes
         through X's polygon, so the A2↔B1 edge is filtered. BFS routes only through shared
         edges. Result: {A1, A2}, {X}, {B1, B2}."""
-        size = 0.00008  # ~8.9 m in EPSG:3857 — within default buffer_distance=10m
+        size = 0.00008  # 4326 degrees; ~8.9 m in EPSG:3857 — within default buffer_distance=10m
         layout = [
             ("a1", 0, 50),
             ("a2", 1, 50),
