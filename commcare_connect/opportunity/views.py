@@ -2414,11 +2414,26 @@ class VisitVerificationTableView(WorkerVisitTableView):
         context["persisted_filters"] = persisted_filters
         return context
 
+    def _allowed_filter_statuses(self):
+        opportunity = self.get_opportunity()
+        if opportunity.automatic_visit_verification:
+            if self.request.is_opportunity_pm:
+                return {"all"}
+            return {"approved", "rejected", "all"}
+        if self.request.is_opportunity_pm:
+            return {"pending_review", "disagree", "agree", "all"}
+        allowed = {"pending", "approved", "rejected", "all"}
+        if opportunity.managed:
+            allowed |= {"pending_review", "disagree", "agree"}
+        return allowed
+
     def get_queryset(self):
         self.exclude_columns = []
         self.filter_queryset = super().get_queryset()
 
-        self.filter_status = self.request.GET.get("filter_status")
+        requested_status = self.request.GET.get("filter_status")
+        allowed = self._allowed_filter_statuses()
+        self.filter_status = requested_status if requested_status in allowed else None
         queryset = self.filter_queryset
         if self.filter_status == "pending":
             queryset = queryset.filter(status__in=[VisitValidationStatus.pending, VisitValidationStatus.duplicate])

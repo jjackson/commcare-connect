@@ -246,3 +246,47 @@ class TestReviewVisitImportRequirePost:
         url = reverse("opportunity:review_visit_import", args=(organization.slug, opp.opportunity_id))
         response = client.get(url)
         assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
+
+
+@pytest.mark.django_db
+class TestVisitVerificationFilterStatusClamping:
+    def test_stale_filter_status_clamped_in_auto_verify_mode(self, client, organization, org_user_member, mobile_user):
+        """A bookmarked ?filter_status=pending must not surface pending visits when auto-verify is on."""
+        opp = mobile_user.opportunityaccess_set.first().opportunity
+        opp.automatic_visit_verification = True
+        opp.save()
+
+        access = mobile_user.opportunityaccess_set.first()
+        UserVisitFactory(
+            opportunity=opp, user=mobile_user, opportunity_access=access, status=VisitValidationStatus.pending
+        )
+        UserVisitFactory(
+            opportunity=opp, user=mobile_user, opportunity_access=access, status=VisitValidationStatus.approved
+        )
+
+        client.force_login(org_user_member)
+        url = reverse("opportunity:user_visit_verification_table", args=(organization.slug, opp.opportunity_id))
+        response = client.get(f"{url}?filter_status=pending&user={mobile_user.user_id}")
+        assert response.status_code == HTTPStatus.OK
+        # Returned queryset includes all visits (clamped to "all"), not the pending-only filter.
+        assert response.context["table"].rows.data.data.count() == 2
+
+    def test_allowed_filter_status_passes_through(self, client, organization, org_user_member, mobile_user):
+        opp = mobile_user.opportunityaccess_set.first().opportunity
+        opp.automatic_visit_verification = True
+        opp.save()
+
+        access = mobile_user.opportunityaccess_set.first()
+        UserVisitFactory(
+            opportunity=opp, user=mobile_user, opportunity_access=access, status=VisitValidationStatus.approved
+        )
+        UserVisitFactory(
+            opportunity=opp, user=mobile_user, opportunity_access=access, status=VisitValidationStatus.rejected
+        )
+
+        client.force_login(org_user_member)
+        url = reverse("opportunity:user_visit_verification_table", args=(organization.slug, opp.opportunity_id))
+        response = client.get(f"{url}?filter_status=approved&user={mobile_user.user_id}")
+        assert response.status_code == HTTPStatus.OK
+        # Only the approved visit remains
+        assert response.context["table"].rows.data.data.count() == 1
