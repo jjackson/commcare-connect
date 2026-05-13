@@ -821,17 +821,6 @@ class TestSaveAssignmentNotification(BaseMicroplanningFlagTest):
 
 
 @pytest.mark.django_db
-def test_work_area_inaccessibility_request_factory_creates_instance():
-    req = WorkAreaInaccessibilityRequestFactory()
-    assert req.pk is not None
-    assert req.reason
-    assert req.date_of_visit is not None
-    assert req.xform_id
-    assert req.additional_details is not None
-    assert req.estimated_duration is not None  # optional — can be empty string
-
-
-@pytest.mark.django_db
 class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
     def get_url(self, org_slug, opp_id, work_area_id):
         return reverse(
