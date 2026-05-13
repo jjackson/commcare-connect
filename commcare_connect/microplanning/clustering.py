@@ -202,7 +202,8 @@ class WorkAreaGrouper:
                 dist = geom.distance(candidate_geom)
 
                 is_shared_edge = not shared_edge.is_empty and get_dimensions(shared_edge) >= 1
-                if not is_shared_edge and dist > self.buffer_distance:
+                is_close_enough = 0 < dist <= self.buffer_distance
+                if not is_shared_edge and not is_close_enough:
                     continue
 
                 if not is_shared_edge and self._has_blocker(

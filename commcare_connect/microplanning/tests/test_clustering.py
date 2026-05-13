@@ -169,8 +169,9 @@ class TestWorkAreaGrouper:
         assert work_area.work_area_group is None
 
     def test_cluster_corner_sharing_work_areas(self, opportunity):
-        """Work areas sharing only a corner (point) should be grouped together
-        because their distance is 0, which is within the default buffer_distance."""
+        """Work areas sharing only a corner (point) must NOT be grouped together.
+        Diagonal-only neighbors aren't meaningfully contiguous — adjacency requires
+        a shared edge (dim >= 1) or strictly-positive distance within buffer_distance."""
         size = 0.01
         # Create two squares that touch only at a corner point
         wa1 = WorkAreaFactory(
@@ -206,11 +207,11 @@ class TestWorkAreaGrouper:
         grouper.cluster_work_areas()
 
         groups = WorkAreaGroup.objects.filter(opportunity=opportunity)
-        assert groups.count() == 1
+        assert groups.count() == 2
 
         wa1.refresh_from_db()
         wa2.refresh_from_db()
-        assert wa1.work_area_group == wa2.work_area_group
+        assert wa1.work_area_group != wa2.work_area_group
 
     def test_cluster_single_work_area_exceeding_max_buildings(self, opportunity):
         work_area = WorkAreaFactory(
