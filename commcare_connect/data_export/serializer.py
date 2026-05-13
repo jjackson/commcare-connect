@@ -3,6 +3,7 @@ from collections import OrderedDict
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
 from commcare_connect.opportunity.api.serializers.mobile import (
     CommCareAppSerializer,
@@ -386,3 +387,44 @@ class LLOEntityDataSerializer(serializers.ModelSerializer):
     class Meta:
         model = LLOEntity
         fields = ["id", "name", "short_name"]
+
+
+class AuditReportDataSerializer(serializers.ModelSerializer):
+    completed_by_username = serializers.CharField(source="completed_by.username", read_only=True, default=None)
+
+    class Meta:
+        model = AuditReport
+        fields = [
+            "id",
+            "audit_report_id",
+            "opportunity",
+            "period_start",
+            "period_end",
+            "status",
+            "completed_by_username",
+            "completed_date",
+            "date_created",
+            "date_modified",
+        ]
+
+
+class AuditReportEntryDataSerializer(serializers.ModelSerializer):
+    audit_report_uuid = serializers.UUIDField(source="audit_report.audit_report_id", read_only=True)
+    username = serializers.CharField(source="opportunity_access.user.username", read_only=True)
+
+    class Meta:
+        model = AuditReportEntry
+        fields = [
+            "id",
+            "audit_report_entry_id",
+            "audit_report",
+            "audit_report_uuid",
+            "opportunity_access",
+            "username",
+            "results",
+            "flagged",
+            "reviewed",
+            "review_action",
+            "date_created",
+            "date_modified",
+        ]

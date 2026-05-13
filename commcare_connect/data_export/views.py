@@ -1,4 +1,5 @@
 import csv
+import uuid
 from collections import defaultdict
 
 from django.core.files.storage import storages
@@ -6,7 +7,7 @@ from django.db.models import Count, F, Q
 from django.http import FileResponse, JsonResponse, StreamingHttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from oauth2_provider.contrib.rest_framework.permissions import TokenHasScope
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import NotFound
 from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -14,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.versioning import AcceptHeaderVersioning
 from rest_framework.views import APIView
 
+from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.data_export.const import (
     APP_TYPE_BOTH,
     APP_TYPE_DELIVER,
@@ -26,6 +28,8 @@ from commcare_connect.data_export.pagination import IdKeysetPagination
 from commcare_connect.data_export.serializer import (
     AssessmentDataSerializer,
     AssignedTaskDataSerializer,
+    AuditReportDataSerializer,
+    AuditReportEntryDataSerializer,
     CompletedModuleDataSerializer,
     CompletedWorkDataSerializer,
     InvoiceDataSerializer,
@@ -518,6 +522,31 @@ class TaskTypeDataView(OpportunityDataExportView, BaseDataExportListViewV2):
 
     def get_queryset(self, *args, **kwargs):
         return TaskType.objects.filter(opportunity=self.opportunity)
+
+
+class AuditReportDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = AuditReportDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        return AuditReport.objects.filter(opportunity=self.opportunity).select_related("completed_by")
+
+
+class AuditReportEntryDataView(OpportunityDataExportView, BaseDataExportListViewV2):
+    serializer_class = AuditReportEntryDataSerializer
+
+    def get_queryset(self, *args, **kwargs):
+        qs = AuditReportEntry.objects.filter(
+            audit_report__opportunity=self.opportunity,
+        ).select_related("audit_report", "opportunity_access__user")
+
+        audit_report_id = self.request.query_params.get("audit_report_id")
+        if audit_report_id:
+            try:
+                parsed_uuid = uuid.UUID(audit_report_id)
+            except ValueError:
+                raise serializers.ValidationError({"audit_report_id": "Must be a valid UUID."})
+            qs = qs.filter(audit_report__audit_report_id=parsed_uuid)
+        return qs
 
 
 class AssignedTaskDataView(OpportunityDataExportView, BaseDataExportListViewV2):
