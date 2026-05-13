@@ -622,6 +622,7 @@ def update_visit_status_import(request, org_slug=None, opp_id=None):
     return redirect(redirect_url)
 
 
+@require_POST
 @opportunity_required
 @block_when_automatic_verification
 def review_visit_import(request, org_slug=None, opp_id=None):

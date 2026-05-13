@@ -236,3 +236,13 @@ class TestAutomaticVerificationBackendGuards:
         url = reverse("opportunity:review_visit_export", args=(organization.slug, opp.opportunity_id))
         response = client.post(url)
         assert response.status_code == HTTPStatus.FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestReviewVisitImportRequirePost:
+    def test_get_is_rejected(self, client, organization, org_user_member):
+        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False, managed=False)
+        client.force_login(org_user_member)
+        url = reverse("opportunity:review_visit_import", args=(organization.slug, opp.opportunity_id))
+        response = client.get(url)
+        assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
