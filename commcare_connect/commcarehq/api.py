@@ -191,12 +191,16 @@ def bulk_update_usercases(updates: dict[OpportunityAccess, dict[str, Any]]) -> N
 
     cases_data = []
     for access, data in updates.items():
-        link = links_by_user[access.user_id]
-        if link.hq_case_id is None:
-            usercase = get_usercase(access)
-            link.hq_case_id = usercase.case_id
+        link = links_by_user.get(access.user_id)
+        if link is None:
+            hq_case_id = get_usercase(access).case_id
+        elif link.hq_case_id is None:
+            hq_case_id = get_usercase(access).case_id
+            link.hq_case_id = hq_case_id
             link.save()
-        cases_data.append({"case_id": link.hq_case_id, "create": False, **data})
+        else:
+            hq_case_id = link.hq_case_id
+        cases_data.append({"case_id": hq_case_id, "create": False, **data})
 
     bulk_create_or_update_cases(api_key, domain, cases_data)
 

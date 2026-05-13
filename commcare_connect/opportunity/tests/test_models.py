@@ -396,3 +396,20 @@ class TestAssignedTaskDeleteAndResetHQ:
             AssignedTask.bulk_delete([t.pk for t in tasks], access.opportunity)
 
         mock_update.assert_called_once_with({access: {"properties": {"needs_assessment": ""}}})
+
+    def test_merges_multiple_properties_per_user(self):
+        access = OpportunityAccessFactory()
+        due_date = date.today() + timedelta(days=7)
+        task_type_a = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="prop_a")
+        task_type_b = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="prop_b")
+        task_a = AssignedTaskFactory(
+            task_type=task_type_a, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED, due_date=due_date
+        )
+        task_b = AssignedTaskFactory(
+            task_type=task_type_b, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED, due_date=due_date
+        )
+
+        with mock.patch("commcare_connect.commcarehq.api.bulk_update_usercases") as mock_update:
+            AssignedTask.bulk_delete([task_a.pk, task_b.pk], access.opportunity)
+
+        mock_update.assert_called_once_with({access: {"properties": {"prop_a": "", "prop_b": ""}}})

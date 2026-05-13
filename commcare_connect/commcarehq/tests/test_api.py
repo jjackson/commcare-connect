@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.commcarehq.api import CommCareCase, create_or_update_case_by_work_area
+from commcare_connect.commcarehq.api import CommCareCase, bulk_update_usercases, create_or_update_case_by_work_area
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
 from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
@@ -72,3 +72,23 @@ class TestCreateOrUpdateCaseByWorkArea:
 
         with pytest.raises(ValueError, match="Work Area must have an assigned Opportunity Access"):
             create_or_update_case_by_work_area(work_area)
+
+
+@pytest.mark.django_db
+class TestBulkUpdateUsercases:
+    def test_falls_back_to_get_usercase_when_link_missing(self):
+        api_key = HQApiKeyFactory(hq_server=HQServerFactory())
+        access = OpportunityAccessFactory(opportunity__api_key=api_key)
+        hq_case_id = str(uuid.uuid4())
+        user_case = make_commcare_case(case_id=hq_case_id, owner_id=hq_case_id)
+
+        with (
+            patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case) as mock_get_usercase,
+            patch("commcare_connect.commcarehq.api.bulk_create_or_update_cases") as mock_bulk,
+        ):
+            bulk_update_usercases({access: {"properties": {"prop": "value"}}})
+
+        mock_get_usercase.assert_called_once_with(access)
+        mock_bulk.assert_called_once()
+        cases_data = mock_bulk.call_args[0][2]
+        assert cases_data == [{"case_id": hq_case_id, "create": False, "properties": {"prop": "value"}}]

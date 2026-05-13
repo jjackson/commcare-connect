@@ -496,7 +496,9 @@ class AssignedTask(XFormBaseModel):
                 hq_updates.setdefault((task.opportunity_access_id, prop), task.opportunity_access)
 
         with transaction.atomic():
-            deleted_count, _ = cls.objects.filter(pk__in=[t.pk for t in tasks]).delete()
+            deleted_count, _ = (
+                cls.objects.filter(pk__in=[t.pk for t in tasks]).exclude(status=AssignedTaskStatus.COMPLETED).delete()
+            )
             if hq_updates:
                 still_assigned = set(
                     cls.objects.filter(
@@ -505,10 +507,10 @@ class AssignedTask(XFormBaseModel):
                         task_type__case_property__in={p for _, p in hq_updates},
                     ).values_list("opportunity_access_id", "task_type__case_property")
                 )
-                to_reset = {
-                    hq_updates[access_id, prop]: {"properties": {prop: ""}}
-                    for access_id, prop in hq_updates.keys() - still_assigned
-                }
+                to_reset: dict[OpportunityAccess, dict] = {}
+                for access_id, prop in hq_updates.keys() - still_assigned:
+                    access = hq_updates[access_id, prop]
+                    to_reset.setdefault(access, {"properties": {}})["properties"][prop] = ""
                 if len(to_reset) > HQ_CASE_BULK_CHUNK_SIZE:
                     raise ListTooLongError(
                         f"Too many HQ case property resets ({len(to_reset)}); "
