@@ -255,3 +255,42 @@ class TestWorkAreaGrouper:
         for work_area in work_areas:
             work_area.refresh_from_db()
             assert work_area.work_area_group is not None
+
+    def test_cluster_no_bridging_across_wide_gap(self, opportunity):
+        """Two pairs of edge-sharing WAs separated by a ~33m gap should produce 2 groups, not 1.
+
+        In EPSG:3857 (Web Mercator), 0.0003° longitude ≈ 33 m — wider than the default
+        buffer_distance (10 m) but narrower than the previous default (100 m). Pins the fix
+        for CCCT-2392 Part 1: clusters must not bridge realistic inter-region gaps."""
+        size = 0.001  # ~111 m square in EPSG:3857
+        gap = 0.0003  # ~33 m gap in EPSG:3857 — between new (10 m) and old (100 m) defaults
+
+        start_a = 77.0
+        start_b = start_a + 2 * size + gap
+
+        for x_start, slug in [
+            (start_a, "a1"),
+            (start_a + size, "a2"),
+            (start_b, "b1"),
+            (start_b + size, "b2"),
+        ]:
+            x_end = x_start + size
+            WorkAreaFactory(
+                opportunity=opportunity,
+                slug=f"area-{slug}",
+                ward="ward-1",
+                centroid=Point(x_start + size / 2, 28.0 + size / 2, srid=SRID),
+                boundary=Polygon(
+                    ((x_start, 28.0), (x_end, 28.0), (x_end, 28.0 + size), (x_start, 28.0 + size), (x_start, 28.0)),
+                    srid=SRID,
+                ),
+                building_count=50,
+            )
+
+        grouper = WorkAreaGrouper(opportunity_id=opportunity.id)
+        grouper.cluster_work_areas()
+
+        groups = WorkAreaGroup.objects.filter(opportunity=opportunity)
+        assert groups.count() == 2
+        for group in groups:
+            assert group.workarea_set.count() == 2

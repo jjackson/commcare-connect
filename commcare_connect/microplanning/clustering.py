@@ -58,8 +58,10 @@ class WorkAreaGrouper:
                          Default is 60. Either cap (max_buildings or max_work_areas)
                          stops cluster growth — whichever trips first.
         buffer_distance: Distance in meters to consider work areas as adjacent even if
-                         they don't share a boundary. Default is 100 meters. This helps
-                         connect work areas that are close but separated by small gaps.
+                         they don't share a boundary. Default is 10 meters — large
+                         enough to tolerate minor topology slivers in input polygons,
+                         small enough to avoid bridging clusters across real gaps
+                         between distinct regions.
 
     Note:
         - Only work areas without an existing work_area_group are processed
@@ -73,7 +75,7 @@ class WorkAreaGrouper:
         opportunity_id: int,
         max_buildings: int = 300,
         max_work_areas: int = 60,
-        buffer_distance: int = 100,
+        buffer_distance: int = 10,
     ):
         self.opportunity_id = opportunity_id
         self.max_buildings = max_buildings
