@@ -18,7 +18,7 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import F, FloatField, Func, Sum, TextChoices, Value
 from django.db.models.functions import Cast
-from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -712,10 +712,7 @@ def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
         opportunity=request.opportunity,
         status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
     )
-    try:
-        inacc_request = WorkAreaInaccessibilityRequest.objects.filter(work_area=work_area).latest("pk")
-    except WorkAreaInaccessibilityRequest.DoesNotExist:
-        raise Http404
+    inacc_request = get_object_or_404(WorkAreaInaccessibilityRequest, work_area=work_area)
     photos = BlobMeta.objects.filter(parent_id=inacc_request.xform_id).exclude(name="form.xml")
     return render(
         request,
@@ -762,14 +759,10 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
         opportunity=request.opportunity,
         status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
     )
-    try:
-        inacc_request = (
-            WorkAreaInaccessibilityRequest.objects.select_related("opportunity_access__user")
-            .filter(work_area=work_area)
-            .latest("pk")
-        )
-    except WorkAreaInaccessibilityRequest.DoesNotExist:
-        raise Http404
+    inacc_request = get_object_or_404(
+        WorkAreaInaccessibilityRequest.objects.select_related("opportunity_access__user"),
+        work_area=work_area,
+    )
 
     work_area.status = new_status
     try:
@@ -787,8 +780,8 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
             partial(
                 send_push_notification_task.delay,
                 [inacc_request.opportunity_access.user_id],
-                _("Inaccessibility Request Denied"),
-                _("Your request to mark a work area inaccessible has been declined."),
+                "Inaccessibility Request Denied",
+                "Your request to mark a work area inaccessible has been declined.",
             )
         )
 
