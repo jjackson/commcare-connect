@@ -247,6 +247,13 @@ class TestReviewVisitImportRequirePost:
         response = client.get(url)
         assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
 
+    def test_non_member_is_rejected(self, client, organization, user):
+        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False, managed=False)
+        client.force_login(user)  # authenticated but not a member of `organization`
+        url = reverse("opportunity:review_visit_import", args=(organization.slug, opp.opportunity_id))
+        response = client.post(url)
+        assert response.status_code == HTTPStatus.NOT_FOUND
+
 
 @pytest.mark.django_db
 class TestVisitVerificationFilterStatusClamping:
