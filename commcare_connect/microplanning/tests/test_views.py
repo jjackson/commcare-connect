@@ -1185,17 +1185,17 @@ class TestGetMetricsForMicroplanningWorkAreas:
         assert m["percentage"] == 67  # round(2/3 * 100)
 
     def test_pct_visited_to_pct_visits(self, opp):
-        """Ratio uses approved UserVisits only, and data-driven `visited` count.
+        """Ratio uses approved UserVisits on non-excluded WAs only, and data-driven `visited` count.
 
         Setup:
           - wa_visited (NOT_STARTED, expected=10): 1 approved → counted as visited
           - wa_unvisited (NOT_STARTED, expected=10): 0 approved → not visited
-          - wa_excluded (EXCLUDED, expected=10): 3 approved → excluded from denominator
+          - wa_excluded (EXCLUDED, expected=10): 3 approved → excluded from both numerator and denominator
           pct_wa_visited = 1/2 = 0.5  (non_excluded = 2)
-          total_approved = 1 + 0 + 3 = 4
+          total_approved (non_excluded) = 1
           total_expected (non_excluded) = 10 + 10 = 20
-          pct_visits = 4/20 = 0.2
-          ratio = 0.5 / 0.2 = 2.5
+          pct_visits = 1/20 = 0.05
+          ratio = 0.5 / 0.05 = 10.0
         """
         wa_visited, wa_unvisited, wa_excluded = self._make_work_areas(
             opp,
@@ -1204,7 +1204,7 @@ class TestGetMetricsForMicroplanningWorkAreas:
         )
         # 1 approved on visited WA
         self._make_visits(opp, wa_visited, approved=1)
-        # 3 approved on excluded WA (boosts total_approved without affecting non_excluded denominator)
+        # Approved visits on excluded WAs must be ignored.
         self._make_visits(opp, wa_excluded, approved=3)
         # Non-approved noise must be ignored.
         self._make_visits(opp, wa_unvisited, pending=5)
@@ -1212,7 +1212,7 @@ class TestGetMetricsForMicroplanningWorkAreas:
 
         metrics = get_metrics_for_microplanning(opp)
         m = self._get_metric(metrics, "% WA visited to % total visits")
-        assert m["value"] == 250
+        assert m["value"] == 1000.0
         assert "percentage" not in m
         assert m["unit"] == "%"
 
@@ -1266,18 +1266,16 @@ class TestGetMetricsForMicroplanningWorkAreas:
         assert m["value"] == 1
         assert m["percentage"] == 50
 
-    def test_end_date_missing(self, opp):
-        """No end_date → Days Remaining shows '--'."""
-
-        opp.end_date = None
+    @pytest.mark.parametrize(
+        "end_date, expected",
+        [
+            pytest.param(None, "--", id="missing"),
+            pytest.param(date.today() - timedelta(days=3), 0, id="in-past"),
+        ],
+    )
+    def test_days_remaining_edge_cases(self, opp, end_date, expected):
+        """Missing end_date → '--'; past end_date → 0 (not negative)."""
+        opp.end_date = end_date
         metrics = get_metrics_for_microplanning(opp)
         m = self._get_metric(metrics, "Days Remaining")
-        assert m["value"] == "--"
-
-    def test_end_date_in_past(self, opp):
-        """Past end_date → Days Remaining is 0, not negative."""
-
-        opp.end_date = date.today() - timedelta(days=3)
-        metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "Days Remaining")
-        assert m["value"] == 0
+        assert m["value"] == expected

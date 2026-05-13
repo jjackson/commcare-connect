@@ -182,6 +182,7 @@ def get_metrics_for_microplanning(opportunity):
         ),
         inaccessible=Count("id", filter=Q(status=WorkAreaStatus.INACCESSIBLE)),
         total_expected_visits=Sum("expected_visit_count", filter=non_excluded),
+        total_approved_visits=Sum("approved_count", filter=non_excluded),
     )
 
     non_excluded_count = agg["non_excluded"] or 0
@@ -194,11 +195,7 @@ def get_metrics_for_microplanning(opportunity):
 
     total_expected = agg["total_expected_visits"] or 0
     if non_excluded_count and total_expected:
-        total_approved_visits = UserVisit.objects.filter(
-            opportunity=opportunity,
-            status=VisitValidationStatus.approved,
-            work_area__isnull=False,
-        ).count()
+        total_approved_visits = agg["total_approved_visits"] or 0
         pct_wa_visited = (agg["visited"] or 0) / non_excluded_count
         pct_visits = total_approved_visits / total_expected
         visited_to_visits = round((pct_wa_visited * 100) / pct_visits, 2) if pct_visits else "--"
