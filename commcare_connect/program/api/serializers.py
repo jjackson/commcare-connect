@@ -2,8 +2,10 @@ from django.db import IntegrityError, transaction
 from django.db.models import Sum
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
+from waffle import switch_is_active
 
 from commcare_connect.commcarehq.models import HQServer
+from commcare_connect.flags.switch_names import AUTOMATIC_VISIT_VERIFICATION
 from commcare_connect.opportunity.models import (
     CommCareApp,
     Country,
@@ -265,6 +267,7 @@ class ManagedOpportunityCreateSerializer(serializers.Serializer):
             api_key=learn_api_key,
             hq_server=learn_data["hq_server"],
             active=False,
+            automatic_visit_verification=switch_is_active(AUTOMATIC_VISIT_VERIFICATION),
             created_by=user.email,
             modified_by=user.email,
         )

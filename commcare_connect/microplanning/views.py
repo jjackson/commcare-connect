@@ -324,7 +324,7 @@ class WorkAreaTileView(MVTView):
 
 class UserVisitVectorLayer(VectorLayer):
     id = "user-visits"
-    tile_fields = ()
+    tile_fields = ("work_area_id",)
     geom_field = "location_point"
     min_zoom = WORKAREA_MIN_ZOOM
 
@@ -358,7 +358,7 @@ class UserVisitVectorLayer(VectorLayer):
                     output_field=PointField(srid=4326),
                 )
             )
-            .values("location_point")
+            .values("location_point", "work_area_id")
         )
 
 
@@ -517,9 +517,8 @@ def exclude_work_areas(request, org_slug, opp_id):
 @require_flag_for_opp(MICROPLANNING)
 def download_work_areas(request, org_slug, opp_id):
     opportunity = request.opportunity
-    filterset = WorkAreaMapFilterSet(
-        request.GET, queryset=WorkArea.objects.filter(opportunity=opportunity), opportunity=opportunity
-    )
+    base_qs = WorkArea.objects.filter(opportunity=opportunity).exclude(status=WorkAreaStatus.EXCLUDED)
+    filterset = WorkAreaMapFilterSet(request.GET, queryset=base_qs, opportunity=opportunity)
     queryset = filterset.qs.annotate(group_name=F("work_area_group__name"))
     response = StreamingHttpResponse(WorkAreaCSVExporter.rows(queryset), content_type="text/csv")
     response["Content-Disposition"] = f'attachment; filename="work_area_summary_{opportunity.opportunity_id}.csv"'
@@ -548,6 +547,8 @@ class ModifyWorkAreaUpdateView(UpdateView):
         try:
             with transaction.atomic(), pghistory.context(reason=reason):
                 work_area.save(update_fields=["expected_visit_count", "work_area_group"])
+                if "expected_visit_count" in form.changed_data:
+                    work_area.update_status(self.request.user)
                 if form.has_changed() and work_area.opportunity_access_id:
                     # let exception bubble up if case update fails, to avoid saving work area without case sync
                     create_or_update_case_by_work_area(work_area)

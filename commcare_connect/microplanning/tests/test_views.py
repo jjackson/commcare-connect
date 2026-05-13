@@ -25,7 +25,7 @@ from commcare_connect.microplanning.tests.factories import (
     WorkAreaInaccessibilityRequestFactory,
 )
 from commcare_connect.microplanning.views import UserVisitVectorLayer
-from commcare_connect.opportunity.models import BlobMeta
+from commcare_connect.opportunity.models import BlobMeta, VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory, OpportunityFactory, UserVisitFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
@@ -278,6 +278,49 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
         work_area.refresh_from_db()
         assert work_area.expected_visit_count == 10  # rolled back due to atomic transaction
 
+    @pytest.mark.parametrize(
+        "initial_status,prior_visits,old_count,new_count,expected_status",
+        [
+            # decreased below visit count → EXPECTED_VISIT_REACHED
+            (WorkAreaStatus.VISITED, 3, 5, 2, WorkAreaStatus.EXPECTED_VISIT_REACHED),
+            # no visits → status unchanged regardless of count change
+            (WorkAreaStatus.NOT_STARTED, 0, 5, 2, WorkAreaStatus.NOT_STARTED),
+            # only group changed, not expected_visit_count → status unchanged
+            (WorkAreaStatus.VISITED, 3, 5, 5, WorkAreaStatus.VISITED),
+        ],
+    )
+    @patch("commcare_connect.microplanning.views.create_or_update_case_by_work_area")
+    def test_expected_visit_count_change_reevaluates_status(
+        self,
+        mock_sync,
+        client,
+        org_user_admin,
+        opportunity,
+        initial_status,
+        prior_visits,
+        old_count,
+        new_count,
+        expected_status,
+    ):
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        work_area = WorkAreaFactory(opportunity=opportunity, status=initial_status, expected_visit_count=old_count)
+        for _ in range(prior_visits):
+            UserVisitFactory(
+                opportunity_access=access,
+                work_area=work_area,
+                opportunity=opportunity,
+                status=VisitValidationStatus.approved,
+            )
+
+        client.force_login(org_user_admin)
+        client.post(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id), work_area.id),
+            {"expected_visit_count": new_count},
+        )
+
+        work_area.refresh_from_db()
+        assert work_area.status == expected_status
+
 
 @pytest.mark.django_db
 class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
@@ -502,6 +545,7 @@ class TestUserVisitVectorLayer:
 
         assert round(visit["location_point"].x, 1) == 77.1
         assert round(visit["location_point"].y, 1) == 28.6
+        assert visit["work_area_id"] == visit_data.work_area.id
 
     def test_queryset_only_includes_visits_for_opportunity(self, opportunity, visit_data):
         other_opp = OpportunityFactory()
@@ -691,6 +735,14 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_STARTED}"))
         assert rows[1][0] == wa.slug
         assert len(rows) == 2
+
+    def test_excludes_excluded_work_areas(self, client, org_user_admin, opportunity):
+        kept = WorkAreaFactory(opportunity=opportunity, slug="kept", status=WorkAreaStatus.NOT_STARTED)
+        WorkAreaFactory(opportunity=opportunity, slug="dropped", status=WorkAreaStatus.EXCLUDED)
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity)))
+        assert [r[0] for r in rows[1:]] == [kept.slug]
 
     def test_assignee_filter(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)

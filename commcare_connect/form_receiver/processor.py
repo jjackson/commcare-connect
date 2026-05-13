@@ -437,9 +437,10 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     Acquires a Redis lock per entity to handle concurrent submissions, then:
     1. Creates a UserVisit with initial status based on daily/total/claim limits
     2. Runs verification flag checks via clean_form_submission()
-    3. Auto-approves if enabled and no flags are raised
-    4. Updates or creates the associated CompletedWork record
-    5. Triggers incremental payment recalculation
+    3. Auto-rejects flagged visits if automatic_visit_verification is enabled
+    4. Auto-approves if auto_approve_visits is enabled and no flags are raised
+    5. Updates or creates the associated CompletedWork record
+    6. Triggers incremental payment recalculation
     """
     deliver_unit = get_or_create_deliver_unit(app, deliver_unit_block)
     try:
@@ -512,19 +513,6 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             elif counts["entity"] > 0:
                 user_visit.status = VisitValidationStatus.duplicate
 
-        if work_area_case_id := deliver_unit_block.get("work_area_id"):
-            if is_a_uuid(work_area_case_id):
-                try:
-                    work_area = WorkArea.objects.get(case_id=work_area_case_id, opportunity=opportunity)
-                    user_visit.work_area = work_area
-                    if work_area.status in (WorkAreaStatus.NOT_STARTED, WorkAreaStatus.NOT_VISITED):
-                        work_area.status = WorkAreaStatus.VISITED
-                        work_area.save(update_fields=["status"])
-                except WorkArea.DoesNotExist:
-                    raise ProcessingError("Work area not found")
-            else:
-                raise ProcessingError(f"Invalid work area case id specified: {work_area_case_id}")
-
         flags = clean_form_submission(access, user_visit, xform)
         if access.suspended:
             flags.append(["user_suspended", "This user is suspended from the opportunity."])
@@ -535,6 +523,12 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.flag_reason = {"flags": flags}
 
         if (
+            opportunity.automatic_visit_verification
+            and user_visit.status == VisitValidationStatus.pending
+            and user_visit.flagged
+        ):
+            user_visit.status = VisitValidationStatus.rejected
+        if (
             opportunity.auto_approve_visits
             and user_visit.status == VisitValidationStatus.pending
             and not user_visit.flagged
@@ -542,7 +536,22 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.status = VisitValidationStatus.approved
             user_visit.review_status = VisitReviewStatus.agree
 
+        work_area = None
+        if work_area_case_id := deliver_unit_block.get("work_area_id"):
+            if not is_a_uuid(work_area_case_id):
+                raise ProcessingError(f"Invalid work area case id specified: {work_area_case_id}")
+            try:
+                work_area = WorkArea.objects.select_for_update().get(
+                    case_id=work_area_case_id, opportunity=access.opportunity
+                )
+                user_visit.work_area = work_area
+            except WorkArea.DoesNotExist:
+                raise ProcessingError("Work area not found")
+
         user_visit.save()
+
+        if work_area:
+            work_area.update_status(user)
 
         if not access.last_active or access.last_active < user_visit.visit_date:
             access.last_active = user_visit.visit_date

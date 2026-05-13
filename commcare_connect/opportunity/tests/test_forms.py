@@ -4,10 +4,11 @@ from unittest.mock import patch
 
 import pytest
 from dateutil.relativedelta import relativedelta
+from django.core.cache import cache
 from django.utils.timezone import now
 from waffle.testutils import override_switch
 
-from commcare_connect.flags.switch_names import OPPORTUNITY_CREDENTIALS
+from commcare_connect.flags.switch_names import AUTOMATIC_VISIT_VERIFICATION, OPPORTUNITY_CREDENTIALS
 from commcare_connect.opportunity.app_xml import TaskUnit
 from commcare_connect.opportunity.forms import (
     AddBudgetNewUsersForm,
@@ -16,6 +17,7 @@ from commcare_connect.opportunity.forms import (
     CreateTaskForm,
     EditTaskTypeForm,
     OpportunityChangeForm,
+    OpportunityInitForm,
     OpportunityInitUpdateForm,
     OpportunityUserInviteForm,
 )
@@ -472,6 +474,42 @@ class TestOpportunityInitUpdateForm:
         assert updated_opportunity.learn_app_id == learn_app.id
         assert learn_app.description == "updated learn description"
         assert learn_app.passing_score == 91
+
+
+@pytest.mark.django_db
+class TestOpportunityInitForm:
+    @pytest.mark.parametrize("switch_active", [True, False])
+    def test_init_form_sets_automatic_visit_verification_from_global_switch(self, opportunity, switch_active):
+        cache.clear()
+        learn_app = opportunity.learn_app
+        deliver_app = opportunity.deliver_app
+        data = {
+            "name": "Brand new opportunity",
+            "description": "Description",
+            "short_description": "Short",
+            "currency": opportunity.currency.code,
+            "country": opportunity.country.code,
+            "hq_server": opportunity.hq_server.id,
+            "api_key": str(opportunity.api_key.id),
+            "learn_app_domain": learn_app.cc_domain,
+            "learn_app": json.dumps({"id": learn_app.cc_app_id, "name": learn_app.name}),
+            "learn_app_description": "Learn description",
+            "learn_app_passing_score": 70,
+            "deliver_app_domain": deliver_app.cc_domain,
+            "deliver_app": json.dumps({"id": deliver_app.cc_app_id, "name": deliver_app.name}),
+        }
+        form = OpportunityInitForm(
+            data=data,
+            user=opportunity.api_key.user,
+            org_slug=opportunity.organization.slug,
+        )
+        assert form.is_valid(), form.errors
+
+        with override_switch(AUTOMATIC_VISIT_VERIFICATION, active=switch_active):
+            new_opportunity = form.save()
+        new_opportunity.refresh_from_db()
+        assert new_opportunity.pk != opportunity.pk
+        assert new_opportunity.automatic_visit_verification is switch_active
 
 
 class TestAddBudgetNewUsersForm:
