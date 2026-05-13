@@ -294,3 +294,61 @@ class TestWorkAreaGrouper:
         assert groups.count() == 2
         for group in groups:
             assert group.workarea_set.count() == 2
+
+    def test_cluster_does_not_bridge_across_intervening_wa(self, opportunity):
+        """5 WAs in a row, all sharing edges (A1-A2-X-B1-B2). X has a high building count
+        that prevents BFS expansion through it.
+
+        Without the blocker check: A2↔B1 forms an over-the-top adjacency edge (their nearest
+        corners are within buffer_distance), letting BFS from A1 reach B1 by skipping over X.
+        That would cluster {A1, A2, B1} together — physically separated by X — which is the
+        bug this test pins.
+
+        With the blocker check: the line from A2's nearest point to B1's nearest point passes
+        through X's polygon, so the A2↔B1 edge is filtered. BFS routes only through shared
+        edges. Result: {A1, A2}, {X}, {B1, B2}."""
+        size = 0.00008  # ~8.9 m in EPSG:3857 — within default buffer_distance=10m
+        layout = [
+            ("a1", 0, 50),
+            ("a2", 1, 50),
+            ("x", 2, 200),
+            ("b1", 3, 50),
+            ("b2", 4, 50),
+        ]
+
+        created = []
+        for slug, idx, buildings in layout:
+            x_start = idx * size
+            x_end = x_start + size
+            wa = WorkAreaFactory(
+                opportunity=opportunity,
+                slug=f"area-{slug}",
+                ward="ward-1",
+                centroid=Point(x_start + size / 2, 28.0 + size / 2, srid=SRID),
+                boundary=Polygon(
+                    (
+                        (x_start, 28.0),
+                        (x_end, 28.0),
+                        (x_end, 28.0 + size),
+                        (x_start, 28.0 + size),
+                        (x_start, 28.0),
+                    ),
+                    srid=SRID,
+                ),
+                building_count=buildings,
+            )
+            created.append(wa)
+
+        grouper = WorkAreaGrouper(opportunity_id=opportunity.id, max_buildings=150)
+        grouper.cluster_work_areas()
+
+        for wa in created:
+            wa.refresh_from_db()
+        a1, a2, x, b1, b2 = created
+
+        assert a1.work_area_group_id == a2.work_area_group_id
+        assert b1.work_area_group_id == b2.work_area_group_id
+        assert a1.work_area_group_id != b1.work_area_group_id
+        assert x.work_area_group_id != a1.work_area_group_id
+        assert x.work_area_group_id != b1.work_area_group_id
+        assert WorkAreaGroup.objects.filter(opportunity=opportunity).count() == 3

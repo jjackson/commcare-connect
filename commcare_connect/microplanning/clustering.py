@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from django.db import transaction
 from pyproj import Transformer
 from shapely import get_dimensions, wkb
+from shapely.geometry import LineString
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform
+from shapely.ops import nearest_points, transform
 from shapely.strtree import STRtree
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup
@@ -200,17 +201,38 @@ class WorkAreaGrouper:
                 shared_edge = geom.intersection(candidate_geom)
                 dist = geom.distance(candidate_geom)
 
-                if get_dimensions(shared_edge) >= 1 or dist <= self.buffer_distance:
-                    adjacency[work_area_id].add(neighbour_id)
-                    adjacency[neighbour_id].add(work_area_id)
-                    pair = (min(work_area_id, neighbour_id), max(work_area_id, neighbour_id))
-                    distances[pair] = dist
+                is_shared_edge = not shared_edge.is_empty and get_dimensions(shared_edge) >= 1
+                if not is_shared_edge and dist > self.buffer_distance:
+                    continue
+
+                if not is_shared_edge and self._has_blocker(
+                    geom, candidate_geom, spatial_index, wa_ids_list, work_area_id, neighbour_id
+                ):
+                    continue
+
+                adjacency[work_area_id].add(neighbour_id)
+                adjacency[neighbour_id].add(work_area_id)
+                pair = (min(work_area_id, neighbour_id), max(work_area_id, neighbour_id))
+                distances[pair] = dist
 
         def _dist(wa_id, neighbour_id):
             pair = (min(wa_id, neighbour_id), max(wa_id, neighbour_id))
             return distances[pair]
 
         return {wa_id: sorted(neighbours, key=lambda n: _dist(wa_id, n)) for wa_id, neighbours in adjacency.items()}
+
+    @staticmethod
+    def _has_blocker(geom, candidate_geom, spatial_index, wa_ids_list, work_area_id, neighbour_id):
+        # Distance-based adjacency: skip if another work area's polygon sits on the line
+        # between the two nearest points. Prevents BFS from forming an over-the-top edge
+        # that bridges two regions separated by an intervening work area.
+        near_a, near_b = nearest_points(geom, candidate_geom)
+        connector = LineString([near_a, near_b])
+        for idx in spatial_index.query(connector, predicate="intersects"):
+            blocker_id = wa_ids_list[idx]
+            if blocker_id != work_area_id and blocker_id != neighbour_id:
+                return True
+        return False
 
     def _bfs_cluster(
         self,
