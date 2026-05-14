@@ -611,10 +611,10 @@ class TestInaccessibleWARateLastCompletedWAG(BaseIndicatorTest):
         make_closed_wag(access, reached=4)
         self.assert_insufficient_run(access)
 
-    def test_wag_closed_outside_period_returns_insufficient_data(self):
-        """A fully closed WAG whose last visit was before the reporting period must return N/A."""
+    def test_wag_closed_after_period_end_returns_insufficient_data(self):
+        """A fully closed WAG whose last visit is after period_end must return N/A."""
         access = OpportunityAccessFactory()
-        make_closed_wag(access, reached=5, visit_date=OUT_OF_PERIOD)
+        make_closed_wag(access, reached=5, visit_date=AFTER_PERIOD)
         self.assert_insufficient_data(access)
 
 

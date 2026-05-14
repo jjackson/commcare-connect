@@ -43,8 +43,9 @@ def _q_link_present(form_field) -> Q:
     return Q(**{f"{path}__isnull": False}) & ~Q(**{path: ""})
 
 
-def _find_active_wag(opportunity_access) -> WorkAreaGroup | None:
-    """Return the active WAG with the most recent visit among WAGs that still have non-terminal WAs."""
+def _find_active_wag(opportunity_access, period_end) -> WorkAreaGroup | None:
+    """Return the active WAG with the most recent visit (up to period_end)
+    among WAGs that still have non-terminal WAs."""
     active_wag_ids = (
         WorkArea.objects.filter(
             opportunity_access=opportunity_access,
@@ -55,28 +56,21 @@ def _find_active_wag(opportunity_access) -> WorkAreaGroup | None:
         .distinct()
     )
 
-    if not active_wag_ids:
-        return None
-
-    last = (
-        UserVisit.objects.filter(
-            opportunity_access=opportunity_access,
-            work_area__work_area_group_id__in=active_wag_ids,
+    return (
+        WorkAreaGroup.objects.filter(id__in=active_wag_ids)
+        .annotate(
+            last_visit=Max(
+                "workarea__uservisit__visit_date",
+                filter=Q(workarea__uservisit__visit_date__date__lte=period_end),
+            )
         )
-        .values("work_area__work_area_group_id")
-        .annotate(last_visit=Max("visit_date"))
         .order_by("-last_visit")
         .first()
     )
 
-    if not last:
-        return None
 
-    return WorkAreaGroup.objects.get(id=last["work_area__work_area_group_id"])
-
-
-def _find_last_closed_wag(opportunity_access, period_start, period_end) -> WorkAreaGroup | None:
-    """Return the most recently closed WAG that had visits in the current reporting period."""
+def _find_last_closed_wag(opportunity_access, period_end) -> WorkAreaGroup | None:
+    """Return the most recently closed WAG (all WAs terminal) with visits up to period_end."""
     return (
         WorkAreaGroup.objects.filter(
             workarea__opportunity_access=opportunity_access,
@@ -90,7 +84,7 @@ def _find_last_closed_wag(opportunity_access, period_start, period_end) -> WorkA
             ),
             last_visit=Max(
                 "workarea__uservisit__visit_date",
-                filter=Q(workarea__uservisit__visit_date__date__range=(period_start, period_end)),
+                filter=Q(workarea__uservisit__visit_date__date__lte=period_end),
             ),
         )
         .filter(total=F("closed_count"), last_visit__isnull=False)
@@ -268,7 +262,7 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
     upper_bound = 0.25
 
     def compute(self, opportunity_access, period_start, period_end):
-        active_wag = _find_active_wag(opportunity_access)
+        active_wag = _find_active_wag(opportunity_access, period_end)
         if active_wag is None:
             return None, 0
 
@@ -296,7 +290,7 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
     upper_bound = 0.15
 
     def compute(self, opportunity_access, period_start, period_end):
-        last_wag = _find_last_closed_wag(opportunity_access, period_start, period_end)
+        last_wag = _find_last_closed_wag(opportunity_access, period_end)
         if last_wag is None:
             return None, 0
 
