@@ -8,6 +8,7 @@ from django.db import transaction
 from commcare_connect.microplanning.models import WorkArea
 from commcare_connect.microplanning.serializers import WorkAreaCaseSerializer
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess
+from commcare_connect.users.helpers import fetch_hq_user_uuid
 from commcare_connect.users.models import ConnectIDUserLink
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
@@ -68,12 +69,7 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     domain = opp_access.opportunity.deliver_app.cc_domain
     user = opp_access.user
     case_data = WorkAreaCaseSerializer(work_area).data
-    connect_id_user_link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
-    if connect_id_user_link and connect_id_user_link.hq_case_id:
-        case_data["owner_id"] = connect_id_user_link.hq_case_id
-    else:
-        user_case = get_usercase(opp_access)
-        case_data["owner_id"] = user_case.case_id
+    case_data["owner_id"] = _get_hq_user_uuid_for_owner(user, domain, api_key)
 
     with transaction.atomic():
         # Re-fetch with a row-level lock to prevent a race condition where two
@@ -84,6 +80,20 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
             locked_work_area.case_id = case.case_id
             locked_work_area.save(update_fields=["case_id"])
     return case
+
+
+def _get_hq_user_uuid_for_owner(user, domain, api_key):
+    link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
+    if link and link.hq_user_uuid:
+        return link.hq_user_uuid
+
+    hq_user_uuid = fetch_hq_user_uuid(user.username, domain, api_key)
+    if hq_user_uuid is None:
+        raise CommCareHQAPIException(f"Failed to find HQ user for {user.username.lower()} on {domain} HQ domain.")
+    if link:
+        link.hq_user_uuid = hq_user_uuid
+        link.save(update_fields=["hq_user_uuid"])
+    return hq_user_uuid
 
 
 def bulk_create_or_update_cases_by_work_areas(
