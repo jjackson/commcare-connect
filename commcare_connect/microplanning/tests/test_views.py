@@ -732,6 +732,14 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert rows[1][0] == wa.slug
         assert len(rows) == 2
 
+    def test_excludes_excluded_work_areas(self, client, org_user_admin, opportunity):
+        kept = WorkAreaFactory(opportunity=opportunity, slug="kept", status=WorkAreaStatus.NOT_STARTED)
+        WorkAreaFactory(opportunity=opportunity, slug="dropped", status=WorkAreaStatus.EXCLUDED)
+        client.force_login(org_user_admin)
+
+        rows = self._parse_csv(client.get(self.url(opportunity)))
+        assert [r[0] for r in rows[1:]] == [kept.slug]
+
     def test_assignee_filter(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
         wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=access)
@@ -984,7 +992,7 @@ class TestExcludeWorkAreasView:
 
     @patch(
         "commcare_connect.microplanning.views.exclude_work_areas_for_opportunity",
-        return_value={"excluded": 1, "skipped": 0, "failed": 0},
+        return_value={"excluded_ids": [1], "skipped": 0, "failed": 0},
     )
     def test_valid_request_calls_exclude_and_returns_200(self, mock_exclude, client, org_user_admin, opportunity):
         wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
@@ -996,7 +1004,9 @@ class TestExcludeWorkAreasView:
         )
 
         assert response.status_code == 200
-        assert response.json() == {"excluded": 1, "skipped": 0, "failed": 0}
+        assert "HX-Trigger" in response.headers
+        trigger = json.loads(response.headers["HX-Trigger"])
+        assert "work_areas_excluded" in trigger
         mock_exclude.assert_called_once()
         kwargs = mock_exclude.call_args.kwargs
         assert kwargs["opportunity"].pk == opportunity.pk

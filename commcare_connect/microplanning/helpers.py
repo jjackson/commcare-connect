@@ -16,7 +16,7 @@ def exclude_work_areas_for_opportunity(opportunity, work_area_ids, user, exclusi
     HQ calls are batched by HQ_BULK_CHUNK_SIZE; a batch failure skips DB exclusion
     for the whole chunk.
     """
-    excluded = 0
+    excluded_ids = []
     skipped = 0
     failed = 0
 
@@ -53,22 +53,22 @@ def exclude_work_areas_for_opportunity(opportunity, work_area_ids, user, exclusi
             logger.warning("Failed to unassign HQ case chunk (size=%d): %s", len(chunk), e)
             failed += len(chunk)
             continue
-        excluded += len(chunk)
+        excluded_ids.extend(wa.id for wa in chunk)
 
     if db_only:
         with transaction.atomic(), pghistory.context(**pghistory_ctx):
             _bulk_exclude(db_only, user, exclusion_reason)
-        excluded += len(db_only)
+        excluded_ids.extend(wa.id for wa in db_only)
 
     logger.info(
         "exclude_work_areas_for_opportunity finished opp=%s requested=%d excluded=%d skipped=%d failed=%d",
         opportunity.id,
         len(work_area_ids),
-        excluded,
+        len(excluded_ids),
         skipped,
         failed,
     )
-    return {"excluded": excluded, "skipped": skipped, "failed": failed}
+    return {"excluded_ids": excluded_ids, "skipped": skipped, "failed": failed}
 
 
 def _bulk_exclude(work_areas, user, exclusion_reason):

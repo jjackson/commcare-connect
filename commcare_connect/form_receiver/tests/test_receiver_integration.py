@@ -405,11 +405,11 @@ def test_auto_approve_flagged_visits(user_with_connectid_link: User, api_client:
     assert visit.status == VisitValidationStatus.pending
 
 
-def test_automatic_verification_rejects_flagged_visit(
+def test_automatic_visit_verification_rejects_flagged_visit(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
-    opportunity.automatic_verification = True
+    opportunity.automatic_visit_verification = True
     opportunity.save()
     oauth_application = opportunity.hq_server.oauth_application
     deliver_unit = opportunity.deliver_app.deliver_units.first()
@@ -420,10 +420,10 @@ def test_automatic_verification_rejects_flagged_visit(
     assert visit.status == VisitValidationStatus.rejected
 
 
-def test_automatic_verification_off_leaves_flagged_visit_pending(
+def test_automatic_visit_verification_off_leaves_flagged_visit_pending(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
-    assert opportunity.automatic_verification is False
+    assert opportunity.automatic_visit_verification is False
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     oauth_application = opportunity.hq_server.oauth_application
     deliver_unit = opportunity.deliver_app.deliver_units.first()
@@ -434,12 +434,12 @@ def test_automatic_verification_off_leaves_flagged_visit_pending(
     assert visit.status == VisitValidationStatus.pending
 
 
-def test_automatic_verification_does_not_reject_clean_visit(
+def test_automatic_visit_verification_does_not_reject_clean_visit(
     user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
 ):
     form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
     form_json["metadata"]["timeEnd"] = "2023-06-07T12:36:10.178000Z"
-    opportunity.automatic_verification = True
+    opportunity.automatic_visit_verification = True
     opportunity.auto_approve_visits = True
     opportunity.save()
     oauth_application = opportunity.hq_server.oauth_application
@@ -494,16 +494,17 @@ def _trigger_trial_visit(opportunity, user, api_client):
     ],
     ids=["over_limit", "duplicate", "trial"],
 )
-def test_automatic_verification_preserves_existing_status(
+def test_automatic_visit_verification_preserves_existing_status(
     user_with_connectid_link: User,
     api_client: APIClient,
     opportunity: Opportunity,
     trigger_visit,
     expected_status,
 ):
-    opportunity.automatic_verification = True
+    opportunity.automatic_visit_verification = True
     opportunity.save()
     visit = trigger_visit(opportunity, user_with_connectid_link, api_client)
+    assert visit.flagged
     assert visit.status == expected_status
 
 

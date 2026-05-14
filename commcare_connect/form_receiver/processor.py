@@ -391,8 +391,8 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
     Acquires a Redis lock per entity to handle concurrent submissions, then:
     1. Creates a UserVisit with initial status based on daily/total/claim limits
     2. Runs verification flag checks via clean_form_submission()
-    3. Auto-rejects flagged visits if automatic_verification is enabled
-    4. Auto-approves if enabled and no flags are raised
+    3. Auto-rejects flagged visits if automatic_visit_verification is enabled
+    4. Auto-approves if auto_approve_visits is enabled and no flags are raised
     5. Updates or creates the associated CompletedWork record
     6. Triggers incremental payment recalculation
     """
@@ -477,7 +477,7 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
             user_visit.flag_reason = {"flags": flags}
 
         if (
-            opportunity.automatic_verification
+            opportunity.automatic_visit_verification
             and user_visit.status == VisitValidationStatus.pending
             and user_visit.flagged
         ):

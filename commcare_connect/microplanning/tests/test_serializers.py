@@ -35,6 +35,7 @@ def test_work_area_case_serializer():
             "wa_status": work_area.status,
             "ward": "ward-x",
             "work_area_group": "group-a",
+            "work_area_group_id": str(group.id),
             "max_wag": "3",
             "wag_serial_number": "WAG123",
             "lga": "LGA1",
