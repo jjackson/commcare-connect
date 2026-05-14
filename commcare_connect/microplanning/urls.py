@@ -31,6 +31,7 @@ urlpatterns = [
         name="modify_work_area",
     ),
     path("<slug:opp_id>/download_work_areas/", views.download_work_areas, name="download_work_areas"),
+    path("<slug:opp_id>/exclude_work_areas/", views.exclude_work_areas, name="exclude_work_areas"),
     path(
         "<slug:opp_id>/review_inaccessibility/<int:work_area_id>/",
         views.review_inaccessibility_request,
@@ -61,5 +62,4 @@ urlpatterns = [
         views.save_assignment,
         name="save_assignment",
     ),
-    path("<slug:opp_id>/exclude_work_areas/", views.exclude_work_areas, name="exclude_work_areas"),
 ]

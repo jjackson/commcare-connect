@@ -1167,7 +1167,7 @@ class TestExcludeWorkAreasView:
 
     @patch(
         "commcare_connect.microplanning.views.exclude_work_areas_for_opportunity",
-        return_value={"excluded": 1, "skipped": 0, "failed": 0},
+        return_value={"excluded_ids": [1], "skipped": 0, "failed": 0},
     )
     def test_valid_request_calls_exclude_and_returns_200(self, mock_exclude, client, org_user_admin, opportunity):
         wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
@@ -1179,7 +1179,9 @@ class TestExcludeWorkAreasView:
         )
 
         assert response.status_code == 200
-        assert response.json() == {"excluded": 1, "skipped": 0, "failed": 0}
+        assert "HX-Trigger" in response.headers
+        trigger = json.loads(response.headers["HX-Trigger"])
+        assert "work_areas_excluded" in trigger
         mock_exclude.assert_called_once()
         kwargs = mock_exclude.call_args.kwargs
         assert kwargs["opportunity"].pk == opportunity.pk

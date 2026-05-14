@@ -11,7 +11,7 @@
       <thead {{ table.attrs.thead.as_html }}>
         <tr>
           {% for column in table.columns %}
-          <th>
+          <th {{ column.attrs.th.as_html }}>
             {% if column.orderable %}
             {% sortable_header column.name column.header table.use_view_url %}
             {% else %}

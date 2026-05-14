@@ -24,12 +24,19 @@
             flwSummaryLoading: false,
             showConfirmModal: false,
             showDiscardModal: false,
+            showExcludeModal: false,
             isSaving: false,
             showOnlyUnassigned: false,
             assignees: [],
             workAreaProperties: new Map(),
             assignmentQueue: [],
+            excludedWorkAreaIds: new Set(),
 
+            cannotExclude(id) {
+                if (this.excludedWorkAreaIds.has(id)) return true;
+                const status = this.workAreaProperties.get(id)?.status;
+                return status !== undefined && status !== 'NOT_STARTED';
+            },
 
             openWorkAreaEditModal(workAreaId) {
                 const editWorkAreaUrl = '{{ edit_work_area_url|escapejs }}';
@@ -489,6 +496,20 @@
                     this.showReviewInaccessibilityModal = false;
                     this.showToast("{% translate 'Work area review saved.' %}");
                 });
+
+                document.addEventListener('work_areas_excluded', (e) => {
+                    const excluded = e.detail?.excluded ?? [];
+                    for (const id of excluded) {
+                        this.map.setFeatureState(
+                            { source: 'workareas', sourceLayer: 'workareas', id },
+                            { status: 'EXCLUDED' }
+                        );
+                        this.excludedWorkAreaIds.add(id);
+                    }
+                    this.showExcludeModal = false;
+                    this.clearSelection();
+                    this.showToast(`{% translate "Work area(s) excluded successfully." %}`);
+                });
             },
 
 
@@ -536,6 +557,11 @@
                             'case',
                             ['boolean', ['feature-state', 'hovered'], false],
                             '#ffffff',
+
+                            // Excluded areas are always grey regardless of group — supports
+                            // live update via setFeatureState without waiting for tile reload.
+                            ['==', ['coalesce', ['feature-state', 'status'], ['get', 'status']], 'EXCLUDED'],
+                            '#9ca3af',
 
                             [
                                 'case',

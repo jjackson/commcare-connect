@@ -112,6 +112,11 @@ def microplanning_home(request, *args, **kwargs):
         kwargs={"org_slug": request.org.slug, "opp_id": opportunity.opportunity_id},
     )
 
+    exclude_url = reverse(
+        "microplanning:exclude_work_areas",
+        kwargs={"org_slug": request.org.slug, "opp_id": opportunity.opportunity_id},
+    )
+
     status_meta = {
         status.value: {
             "label": status.label,
@@ -146,6 +151,7 @@ def microplanning_home(request, *args, **kwargs):
             "microplanning:review_inaccessibility_request",
             args=[request.org.slug, opportunity.opportunity_id, 0],
         ).replace("/0/", "/"),
+        "exclude_url": exclude_url,
         "filter_form": filterset.form,
         "is_program_manager": is_program_manager,
         "assignment_mode": assignment_mode,
@@ -502,13 +508,15 @@ def exclude_work_areas(request, org_slug, opp_id):
     except (ValueError, TypeError):
         return JsonResponse({"error": _("Work Area IDs must be integers")}, status=400)
 
-    res = exclude_work_areas_for_opportunity(
+    result = exclude_work_areas_for_opportunity(
         opportunity=request.opportunity,
         work_area_ids=work_area_ids,
         user=request.user,
         exclusion_reason=exclusion_reason,
     )
-    return JsonResponse(res)
+    response = HttpResponse('<div id="exclude-progress"></div>')
+    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": result["excluded_ids"]}})
+    return response
 
 
 @require_GET
