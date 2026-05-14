@@ -36,6 +36,7 @@ class WorkAreaCSVImporter:
         "boundary": "Boundary",
         "building_count": "Building Count",
         "visit_count": "Expected Visit Count",
+        "target_population": "Target Population",
         "max_wag": "Max WAG",
         "wag_serial_number": "WAG Serial Number",
         "lga": "LGA",
@@ -81,6 +82,7 @@ class WorkAreaCSVImporter:
                     boundary=self.get_boundary(row),
                     building_count=buildings,
                     expected_visit_count=visits,
+                    target_population=self.get_target_population(row),
                     case_properties={
                         "max_wag": extra_props.get("max_wag"),
                         "wag_serial_number": extra_props.get("wag_serial_number"),
@@ -164,6 +166,10 @@ class WorkAreaCSVImporter:
         visit = int(visit_raw) if visit_raw else 0
         return building, visit
 
+    def get_target_population(self, row):
+        raw = row.get(self.HEADERS.get("target_population"))
+        return int(raw) if raw else 0
+
     def get_extra_properties(self, row):
         max_wag = row.get(self.HEADERS.get("max_wag"))
         wag_serial_number = row.get(self.HEADERS.get("wag_serial_number"))
@@ -229,13 +235,16 @@ class WorkAreaCSVImporter:
         invalid = True
         try:
             building, visit = self.get_building_and_visit(row)
-            if building >= 0 and visit >= 0:
+            target_population = self.get_target_population(row)
+            if building >= 0 and visit >= 0 and target_population >= 0:
                 invalid = False
         except ValueError:
             pass
 
         if invalid:
-            self._add_error(line_num, _("Building count and Expected visit count must be positive integers"))
+            self._add_error(
+                line_num, _("Building count, Expected visit count, and Target population must be positive integers")
+            )
         return invalid
 
     def _validate_extra_properties(self, row, line_num):
@@ -278,6 +287,7 @@ class WorkAreaCSVExporter:
         "boundary": lambda wa: wa.boundary.wkt,
         "building_count": lambda wa: wa.building_count,
         "visit_count": lambda wa: wa.expected_visit_count,
+        "target_population": lambda wa: wa.target_population,
         "max_wag": lambda wa: (wa.case_properties or {}).get("max_wag", ""),
         "wag_serial_number": lambda wa: (wa.case_properties or {}).get("wag_serial_number", ""),
         "lga": lambda wa: (wa.case_properties or {}).get("lga", ""),
