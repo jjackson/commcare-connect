@@ -198,44 +198,23 @@ class TestProgramHomePendingReview:
 
 @pytest.mark.django_db
 class TestAutomaticVerificationBackendGuards:
-    def _opp(self, organization):
-        return OpportunityFactory(organization=organization, automatic_visit_verification=True)
-
-    def test_approve_visits_returns_403(self, client, organization, org_user_member):
-        opp = self._opp(organization)
+    @pytest.mark.parametrize(
+        "url_name,post_data",
+        [
+            ("opportunity:approve_visits", {"visit_ids[]": []}),
+            ("opportunity:reject_visits", {"visit_ids[]": [], "reason": "x"}),
+            ("opportunity:user_visit_review", {"review_status": "agree"}),
+            ("opportunity:visit_import", {}),
+            ("opportunity:review_visit_export", {}),
+        ],
+    )
+    def test_endpoint_returns_403(self, client, organization, org_user_member, url_name, post_data):
+        opp = OpportunityFactory(organization=organization, automatic_visit_verification=True)
         client.force_login(org_user_member)
-        url = reverse("opportunity:approve_visits", args=(organization.slug, opp.opportunity_id))
-        response = client.post(url, data={"visit_ids[]": []})
+        url = reverse(url_name, args=(organization.slug, opp.opportunity_id))
+        response = client.post(url, data=post_data)
         assert response.status_code == HTTPStatus.FORBIDDEN
         assert response["HX-Trigger"] == "reload_table"
-
-    def test_reject_visits_returns_403(self, client, organization, org_user_member):
-        opp = self._opp(organization)
-        client.force_login(org_user_member)
-        url = reverse("opportunity:reject_visits", args=(organization.slug, opp.opportunity_id))
-        response = client.post(url, data={"visit_ids[]": [], "reason": "x"})
-        assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_user_visit_review_returns_403(self, client, organization, org_user_member):
-        opp = self._opp(organization)
-        client.force_login(org_user_member)
-        url = reverse("opportunity:user_visit_review", args=(organization.slug, opp.opportunity_id))
-        response = client.post(url, data={"review_status": "agree"})
-        assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_visit_import_returns_403(self, client, organization, org_user_member):
-        opp = self._opp(organization)
-        client.force_login(org_user_member)
-        url = reverse("opportunity:visit_import", args=(organization.slug, opp.opportunity_id))
-        response = client.post(url)
-        assert response.status_code == HTTPStatus.FORBIDDEN
-
-    def test_review_visit_export_returns_403(self, client, organization, org_user_member):
-        opp = self._opp(organization)
-        client.force_login(org_user_member)
-        url = reverse("opportunity:review_visit_export", args=(organization.slug, opp.opportunity_id))
-        response = client.post(url)
-        assert response.status_code == HTTPStatus.FORBIDDEN
 
 
 @pytest.mark.django_db
