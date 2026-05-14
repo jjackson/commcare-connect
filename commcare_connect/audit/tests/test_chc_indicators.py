@@ -6,7 +6,7 @@ from datetime import timezone
 
 import pytest
 
-from commcare_connect.audit.indicators import (
+from commcare_connect.audit.chc_indicators import (
     FEMALE,
     YES,
     AgeHeaping,
