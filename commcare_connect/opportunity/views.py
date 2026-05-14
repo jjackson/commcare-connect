@@ -2319,46 +2319,46 @@ class VisitVerificationTableView(WorkerVisitTableView):
         if opportunity.automatic_visit_verification:
             if self.request.is_opportunity_pm:
                 tabs = [
-                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
                 ]
             else:
                 tabs = [
                     {
                         "name": "approved",
-                        "label": "Approved",
+                        "label": _("Approved"),
                         "count": user_visit_counts.get("approved", 0),
                     },
                     {
                         "name": "rejected",
-                        "label": "Rejected",
+                        "label": _("Rejected"),
                         "count": user_visit_counts.get("rejected", 0),
                     },
-                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
                 ]
         elif self.request.is_opportunity_pm:
             tabs = [
                 {
                     "name": "pending_review",
-                    "label": "Pending PM Review",
+                    "label": _("Pending PM Review"),
                     "count": user_visit_counts.get("pending_review", 0),
                 },
                 {
                     "name": "disagree",
-                    "label": "Disagree",
+                    "label": _("Disagree"),
                     "count": user_visit_counts.get("disagree", 0),
                 },
                 {
                     "name": "agree",
-                    "label": "Agree",
+                    "label": _("Agree"),
                     "count": user_visit_counts.get("agree", 0),
                 },
-                {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
             ]
         else:
             tabs = [
                 {
                     "name": "pending",
-                    "label": "Pending NM Review",
+                    "label": _("Pending NM Review"),
                     "count": user_visit_counts.get("pending", 0),
                 }
             ]
@@ -2367,17 +2367,17 @@ class VisitVerificationTableView(WorkerVisitTableView):
                 dynamic_tabs = [
                     {
                         "name": "pending_review",
-                        "label": "Pending PM Review",
+                        "label": _("Pending PM Review"),
                         "count": user_visit_counts.get("pending_review", 0),
                     },
                     {
                         "name": "disagree",
-                        "label": "Revalidate",
+                        "label": _("Revalidate"),
                         "count": user_visit_counts.get("disagree", 0),
                     },
                     {
                         "name": "agree",
-                        "label": "Approved",
+                        "label": _("Approved"),
                         "count": user_visit_counts.get("agree", 0),
                     },
                 ]
@@ -2385,7 +2385,7 @@ class VisitVerificationTableView(WorkerVisitTableView):
                 dynamic_tabs = [
                     {
                         "name": "approved",
-                        "label": "Approved",
+                        "label": _("Approved"),
                         "count": user_visit_counts.get("approved", 0),
                     },
                 ]
@@ -2395,10 +2395,10 @@ class VisitVerificationTableView(WorkerVisitTableView):
                 [
                     {
                         "name": "rejected",
-                        "label": "Rejected",
+                        "label": _("Rejected"),
                         "count": user_visit_counts.get("rejected", 0),
                     },
-                    {"name": "all", "label": "All", "count": user_visit_counts.get("total", 0)},
+                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
                 ]
             )
 
