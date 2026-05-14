@@ -940,7 +940,7 @@ class TestExcludeWorkAreasView:
 
     @patch(
         "commcare_connect.microplanning.views.exclude_work_areas_for_opportunity",
-        return_value={"excluded": 1, "skipped": 0, "failed": 0},
+        return_value={"excluded_ids": [1], "skipped": 0, "failed": 0},
     )
     def test_valid_request_calls_exclude_and_returns_200(self, mock_exclude, client, org_user_admin, opportunity):
         wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)

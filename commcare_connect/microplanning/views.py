@@ -497,21 +497,14 @@ def exclude_work_areas(request, org_slug, opp_id):
     except (ValueError, TypeError):
         return JsonResponse({"error": _("Work Area IDs must be integers")}, status=400)
 
-    exclude_work_areas_for_opportunity(
+    result = exclude_work_areas_for_opportunity(
         opportunity=request.opportunity,
         work_area_ids=work_area_ids,
         user=request.user,
         exclusion_reason=exclusion_reason,
     )
-    excluded_ids = list(
-        WorkArea.objects.filter(
-            id__in=work_area_ids,
-            opportunity=request.opportunity,
-            status=WorkAreaStatus.EXCLUDED,
-        ).values_list("id", flat=True)
-    )
     response = HttpResponse('<div id="exclude-progress"></div>')
-    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": excluded_ids}})
+    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": result["excluded_ids"]}})
     return response
 
 
