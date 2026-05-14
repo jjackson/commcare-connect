@@ -24,11 +24,18 @@ def create_hq_user_and_link(user, domain, opportunity):
     hq_server = opportunity.hq_server
     api_key = opportunity.api_key
     if not ConnectIDUserLink.objects.filter(user=user, domain=domain, hq_server=hq_server).exists():
-        user_created = _create_hq_user(user, domain, api_key)
-        if not user_created:
+        response = _create_hq_user(user, domain, api_key)
+        if response is None:
             return False
+        hq_user_uuid = response.json().get("id") if response.status_code == 201 else None
         cc_username = f"{user.username.lower()}@{domain}.commcarehq.org"
-        ConnectIDUserLink.objects.create(commcare_username=cc_username, user=user, domain=domain, hq_server=hq_server)
+        ConnectIDUserLink.objects.create(
+            commcare_username=cc_username,
+            user=user,
+            domain=domain,
+            hq_server=hq_server,
+            hq_user_uuid=hq_user_uuid,
+        )
     return True
 
 
@@ -44,12 +51,12 @@ def _create_hq_user(user, domain, api_key):
         hq_request.raise_for_status()
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 400 and "already taken" in e.response.text:
-            return True
+            return e.response
         raise CommCareHQAPIException(
             f"{e.response.status_code} Error response {e.response.text} while creating user {user.username}"
         )
 
-    return hq_request.status_code == 201
+    return hq_request if hq_request.status_code == 201 else None
 
 
 def build_hq_user_payload(user):

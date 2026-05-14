@@ -43,12 +43,19 @@ class TestCreateHqUserAndLink:
 
     def test_creates_user_and_link(self, mobile_user, opportunity, httpx_mock):
         domain = "test-domain"
-        httpx_mock.add_response(url=self._get_api_url(opportunity, domain), method="POST", status_code=201)
+        hq_user_uuid = "abc123def456"
+        httpx_mock.add_response(
+            url=self._get_api_url(opportunity, domain),
+            method="POST",
+            status_code=201,
+            json={"id": hq_user_uuid},
+        )
 
         assert create_hq_user_and_link(mobile_user, domain, opportunity)
         link = ConnectIDUserLink.objects.get(user=mobile_user, domain=domain)
         assert link.commcare_username == f"{mobile_user.username.lower()}@{domain}.commcarehq.org"
         assert link.hq_server == opportunity.hq_server
+        assert link.hq_user_uuid == hq_user_uuid
 
     def test_skips_creation_when_link_exists(self, mobile_user, opportunity):
         domain = "test-domain"
@@ -66,7 +73,8 @@ class TestCreateHqUserAndLink:
         )
 
         assert create_hq_user_and_link(mobile_user, domain, opportunity)
-        assert ConnectIDUserLink.objects.filter(user=mobile_user, domain=domain).exists()
+        link = ConnectIDUserLink.objects.get(user=mobile_user, domain=domain)
+        assert link.hq_user_uuid is None
 
     def test_raises_on_other_errors(self, mobile_user, opportunity, httpx_mock):
         domain = "test-domain"
