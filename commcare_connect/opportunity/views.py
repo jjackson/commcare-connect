@@ -63,7 +63,7 @@ from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.opportunity.api.serializers.mobile import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
-from commcare_connect.opportunity.decorators import block_when_automatic_verification
+from commcare_connect.opportunity.decorators import require_manual_visit_verification
 from commcare_connect.opportunity.filters import (
     AssignedTaskFilterSet,
     DeliverFilterSet,
@@ -556,7 +556,7 @@ def export_user_visits(request, org_slug, opp_id):
 
 @org_member_required
 @opportunity_required
-@block_when_automatic_verification
+@require_manual_visit_verification
 def review_visit_export(request, org_slug, opp_id):
     form = VisitExportForm(data=request.POST, opportunity=request.opportunity, org_slug=org_slug, review_export=True)
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
@@ -605,7 +605,7 @@ def download_export(request, org_slug, task_id):
 @org_member_required
 @opportunity_required
 @require_POST
-@block_when_automatic_verification
+@require_manual_visit_verification
 def update_visit_status_import(request, org_slug=None, opp_id=None):
     file = request.FILES.get("visits")
     file_format = get_file_extension(file)
@@ -625,7 +625,7 @@ def update_visit_status_import(request, org_slug=None, opp_id=None):
 @org_member_required
 @require_POST
 @opportunity_required
-@block_when_automatic_verification
+@require_manual_visit_verification
 def review_visit_import(request, org_slug=None, opp_id=None):
     file = request.FILES.get("visits")
     redirect_url = reverse("opportunity:worker_deliver", args=(org_slug, opp_id))
@@ -1054,7 +1054,7 @@ def send_message_mobile_users(request, org_slug=None, opp_id=None):
 @org_member_required
 @require_POST
 @opportunity_required
-@block_when_automatic_verification
+@require_manual_visit_verification
 def approve_visits(request, org_slug, opp_id):
     visit_ids = request.POST.getlist("visit_ids[]")
 
@@ -1102,7 +1102,7 @@ def approve_visits(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 @require_POST
-@block_when_automatic_verification
+@require_manual_visit_verification
 def reject_visits(request, org_slug=None, opp_id=None):
     visit_ids = request.POST.getlist("visit_ids[]")
     reason = request.POST.get("reason", "").strip()
@@ -1468,7 +1468,7 @@ def opportunity_user_invite(request, org_slug=None, opp_id=None):
 
 @org_member_required
 @opportunity_required
-@block_when_automatic_verification
+@require_manual_visit_verification
 def user_visit_review(request, org_slug, opp_id):
     if request.POST and request.is_opportunity_pm:
         review_status = request.POST.get("review_status").lower()

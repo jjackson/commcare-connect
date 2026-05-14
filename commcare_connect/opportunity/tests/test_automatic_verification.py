@@ -3,7 +3,7 @@ from http import HTTPStatus
 import pytest
 from django.urls import reverse
 
-from commcare_connect.opportunity.decorators import block_when_automatic_verification
+from commcare_connect.opportunity.decorators import require_manual_visit_verification
 from commcare_connect.opportunity.filters import DeliverFilterSet
 from commcare_connect.opportunity.forms import (
     DeliverUnitFlagsForm,
@@ -23,7 +23,7 @@ from commcare_connect.users.tests.factories import OrganizationFactory
 
 
 @pytest.mark.django_db
-class TestBlockWhenAutomaticVerificationDecorator:
+class TestRequireManualVisitVerificationDecorator:
     def _request_with_opp(self, automatic_visit_verification):
         opp = OpportunityFactory(automatic_visit_verification=automatic_visit_verification)
         request = type("R", (), {})()
@@ -33,7 +33,7 @@ class TestBlockWhenAutomaticVerificationDecorator:
     def test_passes_through_when_flag_off(self):
         called = {}
 
-        @block_when_automatic_verification
+        @require_manual_visit_verification
         def view(request):
             called["yes"] = True
             return "ok"
@@ -43,7 +43,7 @@ class TestBlockWhenAutomaticVerificationDecorator:
         assert result == "ok"
 
     def test_blocks_when_flag_on(self):
-        @block_when_automatic_verification
+        @require_manual_visit_verification
         def view(request):
             raise AssertionError("inner view should not run")
 
