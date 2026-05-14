@@ -84,6 +84,10 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
 
 def _get_hq_user_uuid_for_owner(user, domain, api_key):
     link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
+    return _resolve_hq_user_uuid(user, domain, api_key, link)
+
+
+def _resolve_hq_user_uuid(user, domain, api_key, link):
     if link and link.hq_user_uuid:
         return link.hq_user_uuid
 
@@ -107,14 +111,14 @@ def bulk_create_or_update_cases_by_work_areas(
     domain = opportunity.deliver_app.cc_domain
 
     wa_by_username: dict[str, WorkArea] = {wa.opportunity_access.user.username.lower(): wa for wa in work_areas}
-    owner_id_by_username: dict[str, str] = {
-        link.commcare_username: link.hq_case_id
-        for link in ConnectIDUserLink.objects.filter(
-            commcare_username__in=wa_by_username.keys(),
-        ).exclude(hq_case_id=None)
+    links_by_username: dict[str, ConnectIDUserLink] = {
+        link.commcare_username: link
+        for link in ConnectIDUserLink.objects.filter(commcare_username__in=wa_by_username.keys())
     }
-    for username in wa_by_username.keys() - owner_id_by_username.keys():
-        owner_id_by_username[username] = get_usercase(wa_by_username[username].opportunity_access).case_id
+    owner_id_by_username: dict[str, str] = {
+        username: _resolve_hq_user_uuid(wa.opportunity_access.user, domain, api_key, links_by_username.get(username))
+        for username, wa in wa_by_username.items()
+    }
 
     cases_data = []
     for wa in work_areas:

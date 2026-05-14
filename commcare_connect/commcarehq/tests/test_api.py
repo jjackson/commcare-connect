@@ -4,7 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from commcare_connect.commcarehq.api import CommCareCase, bulk_update_cases, create_or_update_case_by_work_area
+from commcare_connect.commcarehq.api import (
+    CommCareCase,
+    bulk_create_or_update_cases_by_work_areas,
+    bulk_update_cases,
+    create_or_update_case_by_work_area,
+)
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
 from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
@@ -126,6 +131,70 @@ class TestCreateOrUpdateCaseByWorkArea:
 
         with pytest.raises(ValueError, match="Work Area must have an assigned Opportunity Access"):
             create_or_update_case_by_work_area(work_area)
+
+
+@pytest.mark.django_db
+class TestBulkCreateOrUpdateCasesByWorkAreas:
+    def _make_opportunity_with_work_area(self):
+        api_key = HQApiKeyFactory(hq_server=HQServerFactory())
+        opp_access = OpportunityAccessFactory(opportunity__api_key=api_key)
+        wa_group = WorkAreaGroupFactory(opportunity=opp_access.opportunity)
+        work_area = WorkAreaFactory(
+            opportunity=opp_access.opportunity,
+            work_area_group=wa_group,
+            opportunity_access=opp_access,
+        )
+        return opp_access.opportunity, work_area
+
+    def test_uses_stored_uuid_and_fetches_missing(self):
+        opportunity, wa_with_stored = self._make_opportunity_with_work_area()
+        wa_group = wa_with_stored.work_area_group
+        access_to_fetch = OpportunityAccessFactory(opportunity=opportunity)
+        wa_to_fetch = WorkAreaFactory(
+            opportunity=opportunity, work_area_group=wa_group, opportunity_access=access_to_fetch
+        )
+
+        stored_uuid = "stored-uuid"
+        fetched_uuid = "fetched-uuid"
+        ConnectIDUserLink.objects.create(
+            user=wa_with_stored.opportunity_access.user,
+            commcare_username=wa_with_stored.opportunity_access.user.username.lower(),
+            hq_user_uuid=stored_uuid,
+        )
+        link_to_backfill = ConnectIDUserLink.objects.create(
+            user=access_to_fetch.user,
+            commcare_username=access_to_fetch.user.username.lower(),
+        )
+
+        returned_cases = [make_commcare_case(), make_commcare_case()]
+        with (
+            patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value=fetched_uuid) as mock_fetch,
+            patch(
+                "commcare_connect.commcarehq.api.bulk_create_or_update_cases", return_value=returned_cases
+            ) as mock_bulk,
+        ):
+            bulk_create_or_update_cases_by_work_areas([wa_with_stored, wa_to_fetch], opportunity)
+
+        mock_fetch.assert_called_once()
+        _, kwargs = mock_fetch.call_args
+        sent_cases = mock_bulk.call_args[0][2]
+        owners_by_external_id = {c["external_id"]: c["owner_id"] for c in sent_cases}
+        assert owners_by_external_id[str(wa_with_stored.id)] == stored_uuid
+        assert owners_by_external_id[str(wa_to_fetch.id)] == fetched_uuid
+        link_to_backfill.refresh_from_db()
+        assert link_to_backfill.hq_user_uuid == fetched_uuid
+
+    def test_raises_when_user_not_found_on_hq(self):
+        opportunity, work_area = self._make_opportunity_with_work_area()
+
+        with patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value=None):
+            with pytest.raises(CommCareHQAPIException, match="Failed to find HQ user"):
+                bulk_create_or_update_cases_by_work_areas([work_area], opportunity)
+
+    def test_returns_empty_for_no_work_areas(self):
+        opportunity, _ = self._make_opportunity_with_work_area()
+
+        assert bulk_create_or_update_cases_by_work_areas([], opportunity) == []
 
 
 @pytest.mark.django_db
