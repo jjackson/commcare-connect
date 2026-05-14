@@ -7,7 +7,6 @@ import pghistory
 from django.contrib.gis.geos import Point
 from django.db import transaction
 from django.db.models import Count, Min, Q
-from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from geopy.distance import distance
 from jsonpath_ng import JSONPathError
@@ -316,29 +315,29 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
         if not reason:
             raise ProcessingError("reason is required for request_for_inaccessible")
 
-        raw_date = block.get("date_of_visit", "")
-        date_of_visit = parse_date(raw_date) if raw_date else None
-        if date_of_visit is None:
-            raise ProcessingError("date_of_visit is required and must be a valid ISO date")
+        photo_evidence = block.get("photo_evidence", "").strip()
+        if not photo_evidence:
+            raise ProcessingError("photo_evidence is required for request_for_inaccessible")
 
         additional_details = block.get("additional_details", "")
         estimated_duration = block.get("estimated_duration", "")
-        # TODO Revisit if any change required to source this based on xform structure in CCCT-2397
         location = _parse_xform_location(xform.metadata.location)
 
         WorkAreaInaccessibilityRequest.objects.create(
             work_area=work_area,
             opportunity_access=access,
             xform_id=xform.id,
-            date_of_visit=date_of_visit,
+            date_of_visit=xform.metadata.timeStart.date(),
             location=location,
             reason=reason,
             additional_details=additional_details,
             estimated_duration=estimated_duration,
         )
-        # TODO Revisit if any change required to source this based on xform structure in CCCT-2397
-        attachments = xform.raw_form.get("attachments", {})
-        transaction.on_commit(partial(download_inaccessibility_request_attachments.delay, xform.id, attachments))
+        all_attachments = xform.raw_form.get("attachments", {})
+        photo_attachments = {name: meta for name, meta in all_attachments.items() if name == photo_evidence}
+        if not photo_attachments:
+            raise ProcessingError(f"photo_evidence attachment '{photo_evidence}' not found on form")
+        transaction.on_commit(partial(download_inaccessibility_request_attachments.delay, xform.id, photo_attachments))
 
         work_area.status = new_status
         with pghistory.context(username=user.username, user_email=user.email):

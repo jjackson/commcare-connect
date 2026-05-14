@@ -1226,6 +1226,10 @@ def test_work_area_update_inaccessible(
         form_block={**stub.json},
         domain=opportunity.deliver_app.cc_domain,
         app_id=opportunity.deliver_app.cc_app_id,
+        attachments={
+            "form.xml": {"content_type": "text/xml", "length": 1000, "url": "https://example.com/form.xml"},
+            "photo.jpg": {"content_type": "image/jpeg", "length": 20, "url": "https://example.com/photo.jpg"},
+        },
     )
 
     make_request(api_client, form_json, mobile_user_with_connect_link, oauth_application=oauth_application)
@@ -1322,12 +1326,10 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
         status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
-    today = datetime.date.today()
     stub = WorkAreaUpdateStubFactory(
         work_area_id=work_area.case_id,
         status="request_for_inaccessible",
         reason="Flood",
-        date_of_visit=today.isoformat(),
         additional_details="Road is blocked.",
         estimated_duration="1 week",
     )
@@ -1336,6 +1338,10 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
         domain=opportunity.deliver_app.cc_domain,
         app_id=opportunity.deliver_app.cc_app_id,
         metadata={**FORM_META, "location": "20.09 40.09 20 40"},
+        attachments={
+            "form.xml": {"content_type": "text/xml", "length": 1000, "url": "https://example.com/form.xml"},
+            "photo.jpg": {"content_type": "image/jpeg", "length": 20, "url": "https://example.com/photo.jpg"},
+        },
     )
 
     make_request(api_client, form_json, mobile_user_with_connect_link, oauth_application=oauth_application)
@@ -1345,7 +1351,7 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
     assert req.work_area == work_area
     assert req.opportunity_access.user == mobile_user_with_connect_link
     assert req.xform_id == form_json["id"]
-    assert req.date_of_visit == today
+    assert req.date_of_visit == datetime.date(2023, 6, 7)
     assert req.reason == "Flood"
     assert req.additional_details == "Road is blocked."
     assert req.estimated_duration == "1 week"
@@ -1365,11 +1371,20 @@ def test_work_area_update_attachment_download_queued(mobile_user_with_connect_li
         status=WorkAreaStatus.NOT_STARTED,
     )
     oauth_application = opportunity.hq_server.oauth_application
-    stub = WorkAreaUpdateStubFactory(work_area_id=work_area.case_id, status="request_for_inaccessible")
+    stub = WorkAreaUpdateStubFactory(
+        work_area_id=work_area.case_id, status="request_for_inaccessible", photo_evidence="evidence.jpg"
+    )
+    photo_attachment = {"content_type": "image/jpeg", "length": 20, "url": "https://example.com/evidence.jpg"}
+    other_attachment = {"content_type": "audio/mpeg", "length": 30, "url": "https://example.com/audio.mp3"}
     form_json = get_form_json(
         form_block={**stub.json},
         domain=opportunity.deliver_app.cc_domain,
         app_id=opportunity.deliver_app.cc_app_id,
+        attachments={
+            "form.xml": {"content_type": "text/xml", "length": 1000, "url": "https://example.com/form.xml"},
+            "evidence.jpg": photo_attachment,
+            "audio.mp3": other_attachment,
+        },
     )
 
     with patch("commcare_connect.opportunity.tasks.download_inaccessibility_request_attachments.delay") as mock_delay:
@@ -1377,6 +1392,7 @@ def test_work_area_update_attachment_download_queued(mobile_user_with_connect_li
 
     mock_delay.assert_called_once()
     assert mock_delay.call_args[0][0] == form_json["id"]  # xform_id is first arg
+    assert mock_delay.call_args[0][1] == {"evidence.jpg": photo_attachment}
 
 
 @pytest.mark.django_db
@@ -1425,15 +1441,15 @@ def test_work_area_update_invalid_reason(
 
 @pytest.mark.django_db
 @pytest.mark.parametrize(
-    "date_value, stub_kwargs",
+    "photo_value, stub_kwargs",
     [
         pytest.param("missing", {}, id="missing"),
-        pytest.param("empty_string", {"date_of_visit": ""}, id="empty_string"),
-        pytest.param("unparseable", {"date_of_visit": "not-a-date"}, id="unparseable"),
+        pytest.param("empty_string", {"photo_evidence": ""}, id="empty_string"),
+        pytest.param("whitespace_only", {"photo_evidence": "   "}, id="whitespace_only"),
     ],
 )
-def test_work_area_update_invalid_date_of_visit(
-    date_value,
+def test_work_area_update_invalid_photo_evidence(
+    photo_value,
     stub_kwargs,
     mobile_user_with_connect_link,
     api_client,
@@ -1449,8 +1465,8 @@ def test_work_area_update_invalid_date_of_visit(
     )
     oauth_application = opportunity.hq_server.oauth_application
     stub = WorkAreaUpdateStubFactory(work_area_id=work_area.case_id, status="request_for_inaccessible", **stub_kwargs)
-    if date_value == "missing":
-        del stub.json["work_area_update"]["date_of_visit"]
+    if photo_value == "missing":
+        del stub.json["work_area_update"]["photo_evidence"]
     form_json = get_form_json(
         form_block={**stub.json},
         domain=opportunity.deliver_app.cc_domain,

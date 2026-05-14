@@ -1,4 +1,3 @@
-import datetime
 from copy import deepcopy
 
 import factory
@@ -91,7 +90,7 @@ WORK_AREA_UPDATE_XML_TEMPLATE = (
     <work_area_id>{work_area_id}</work_area_id>
     <status>{status}</status>
     <reason>{reason}</reason>
-    <date_of_visit>{date_of_visit}</date_of_visit>
+    <photo_evidence>{photo_evidence}</photo_evidence>
     <additional_details>{additional_details}</additional_details>
     <estimated_duration>{estimated_duration}</estimated_duration>
 </work_area_update>
@@ -179,7 +178,7 @@ class WorkAreaUpdateStubFactory(factory.StubFactory):
     work_area_id = factory.Faker("uuid4")
     status = "request_for_inaccessible"
     reason = factory.Faker("sentence", nb_words=3)
-    date_of_visit = factory.LazyFunction(lambda: datetime.date.today().isoformat())
+    photo_evidence = "photo.jpg"
     additional_details = ""
     estimated_duration = "1 week"
 
@@ -190,7 +189,7 @@ class WorkAreaUpdateStubFactory(factory.StubFactory):
             work_area_id=self.work_area_id,
             status=self.status,
             reason=self.reason,
-            date_of_visit=self.date_of_visit,
+            photo_evidence=self.photo_evidence,
             additional_details=self.additional_details,
             estimated_duration=self.estimated_duration,
         )
