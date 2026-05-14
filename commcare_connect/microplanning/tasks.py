@@ -159,16 +159,15 @@ class WorkAreaCSVImporter:
         slug = (row.get(self.HEADERS.get("slug")) or "").strip()
         return strip_tags(slug)
 
+    def _get_int(self, row, key):
+        raw = row.get(self.HEADERS.get(key))
+        return int(raw) if raw else 0
+
     def get_building_and_visit(self, row):
-        building_raw = row.get(self.HEADERS.get("building_count"))
-        visit_raw = row.get(self.HEADERS.get("visit_count"))
-        building = int(building_raw) if building_raw else 0
-        visit = int(visit_raw) if visit_raw else 0
-        return building, visit
+        return self._get_int(row, "building_count"), self._get_int(row, "visit_count")
 
     def get_target_population(self, row):
-        raw = row.get(self.HEADERS.get("target_population"))
-        return int(raw) if raw else 0
+        return self._get_int(row, "target_population")
 
     def get_extra_properties(self, row):
         max_wag = row.get(self.HEADERS.get("max_wag"))
