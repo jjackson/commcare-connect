@@ -1209,7 +1209,7 @@ def verification_flags_config(request, org_slug=None, opp_id=None):
         {
             "title": _("Verification Rules Configuration")
             if request.opportunity.automatic_visit_verification
-            else _("Verification Flags Config"),
+            else _("Verification Flags Configuration"),
             "url": request.path,
         },
     ]
