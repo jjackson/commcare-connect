@@ -66,9 +66,16 @@
 
   <div class="w-full grid grid-cols-10 gap-2">
     <div class="col-span-6" hx-indicator="#loading-spinner">
-      <div
+      <div class="w-full relative shadow-sm rounded-lg flex items-center justify-center"
+        style="min-height: 70vh"
         hx-get="{% url 'opportunity:user_tasks_table' request.org.slug opportunity.opportunity_id %}{% querystring %}"
-        hx-trigger="load" hx-swap="outerHTML"></div>
+        hx-trigger="load" hx-swap="innerHTML"
+        hx-on::after-swap="this.style.minHeight = ''; this.classList.remove('flex', 'items-center', 'justify-center')">
+        <div role="status">
+          <div class="animate-spin rounded-full h-12 w-12 border-4 border-brand-mango border-t-transparent"></div>
+          <span class="sr-only">{% trans "Loading..." %}</span>
+        </div>
+      </div>
       {% if can_manage_tasks %}
       <div class="flex gap-4 items-center justify-start mt-4">
         <form x-ref="deleteTasksForm"
@@ -117,6 +124,7 @@
               </div>
             </div>
             <div id="task-loading-indicator" role="status"
+              x-cloak
               class="htmx-indicator absolute -translate-x-1/2 -translate-y-1/2 top-2/4 left-1/2">
               <div class="animate-spin rounded-full h-12 w-12 border-4 border-brand-mango border-t-transparent"></div>
               <span class="sr-only">{% translate "Loading..." %}</span>
