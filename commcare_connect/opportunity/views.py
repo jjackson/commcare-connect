@@ -2721,7 +2721,9 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
     filter_class = DeliverFilterSet
 
     def get_extra_context(self, opportunity, org_slug):
+        manual_verification = not opportunity.automatic_visit_verification
         context = {
+            "manual_verification": manual_verification,
             "visit_export_form": VisitExportForm(opportunity=opportunity, org_slug=org_slug),
             "review_visit_export_form": VisitExportForm(
                 opportunity=opportunity, org_slug=org_slug, review_export=True
