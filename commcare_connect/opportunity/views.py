@@ -2277,7 +2277,7 @@ def get_user_visit_counts(opportunity, queryset):
         pending=Count("id", filter=Q(status__in=[VisitValidationStatus.pending, VisitValidationStatus.duplicate])),
         rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
         flagged=Count("id", filter=Q(flagged=True)),
-        total=Count("*"),
+        all=Count("*"),
     )
     return user_visit_counts
 
@@ -2312,98 +2312,42 @@ class VisitVerificationTableView(WorkerVisitTableView):
         self.table = super().get_table(**kwargs)
         return self.table
 
-    def get_context_data(self, **kwargs):
-        user_visit_counts = get_user_visit_counts(self.opportunity, self.filter_queryset)
+    def get_tabs(self, **kwargs):
         opportunity = self.get_opportunity()
-
         if opportunity.automatic_visit_verification:
             if self.request.is_opportunity_pm:
-                tabs = [
-                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
-                ]
+                return ["all"]
             else:
-                tabs = [
-                    {
-                        "name": "approved",
-                        "label": _("Approved"),
-                        "count": user_visit_counts.get("approved", 0),
-                    },
-                    {
-                        "name": "rejected",
-                        "label": _("Rejected"),
-                        "count": user_visit_counts.get("rejected", 0),
-                    },
-                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
-                ]
-        elif self.request.is_opportunity_pm:
-            tabs = [
-                {
-                    "name": "pending_review",
-                    "label": _("Pending PM Review"),
-                    "count": user_visit_counts.get("pending_review", 0),
-                },
-                {
-                    "name": "disagree",
-                    "label": _("Disagree"),
-                    "count": user_visit_counts.get("disagree", 0),
-                },
-                {
-                    "name": "agree",
-                    "label": _("Agree"),
-                    "count": user_visit_counts.get("agree", 0),
-                },
-                {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
-            ]
-        else:
-            tabs = [
-                {
-                    "name": "pending",
-                    "label": _("Pending NM Review"),
-                    "count": user_visit_counts.get("pending", 0),
-                }
-            ]
+                return ["approved", "rejected", "all"]
 
-            if opportunity.managed:
-                dynamic_tabs = [
-                    {
-                        "name": "pending_review",
-                        "label": _("Pending PM Review"),
-                        "count": user_visit_counts.get("pending_review", 0),
-                    },
-                    {
-                        "name": "disagree",
-                        "label": _("Revalidate"),
-                        "count": user_visit_counts.get("disagree", 0),
-                    },
-                    {
-                        "name": "agree",
-                        "label": _("Approved"),
-                        "count": user_visit_counts.get("agree", 0),
-                    },
-                ]
+        if opportunity.managed:
+            if self.request.is_opportunity_pm:
+                return ["pending_review", "disagree", "agree", "all"]
             else:
-                dynamic_tabs = [
-                    {
-                        "name": "approved",
-                        "label": _("Approved"),
-                        "count": user_visit_counts.get("approved", 0),
-                    },
-                ]
+                return ["pending", "pending_review", "disagree", "agree", "rejected", "all"]
 
-            tabs.extend(dynamic_tabs)
-            tabs.extend(
-                [
-                    {
-                        "name": "rejected",
-                        "label": _("Rejected"),
-                        "count": user_visit_counts.get("rejected", 0),
-                    },
-                    {"name": "all", "label": _("All"), "count": user_visit_counts.get("total", 0)},
-                ]
-            )
+        return ["pending", "approved", "rejected", "all"]
 
+    def get_tab_display(self, **kwargs):
+        user_visit_counts = get_user_visit_counts(self.opportunity, self.filter_queryset)
+        tabs_to_labels = {
+            "all": _("All"),
+            "approved": _("Approved"),
+            "rejected": _("Rejected"),
+            "pending": _("Pending NM Review"),
+            "pending_review": _("Pending PM Review"),
+            "agree": _("Agree") if self.request.is_opportunity_pm else _("Approved"),
+            "disagree": _("Disagree") if self.request.is_opportunity_pm else _("Revalidate"),
+        }
+        tabs_to_display = self.get_tabs()
+        tabs = []
+        for tab in tabs_to_display:
+            tabs.append({"name": tab, "label": tabs_to_labels[tab], "count": user_visit_counts.get(tab, 0)})
+        return tabs
+
+    def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["tabs"] = tabs
+        context["tabs"] = self.get_tab_display()
         persisted_filters = []
         for name, values in self.request.GET.lists():
             if name in {"page", "filter_status", "sort"}:
