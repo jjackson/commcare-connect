@@ -1392,13 +1392,13 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
-        self.opportunity = kwargs.pop("opportunity", None)
+        self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
         self.helper = FormHelper(self)
         self.helper.form_tag = False
 
-        self.auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
+        self.auto_verify = self.opportunity.automatic_visit_verification
 
         form_submission_hour_fields = (
             Fieldset(
