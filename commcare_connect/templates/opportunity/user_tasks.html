@@ -66,14 +66,36 @@
 
   <div class="w-full grid grid-cols-10 gap-2">
     <div class="col-span-6" hx-indicator="#loading-spinner">
-      <div class="w-full relative shadow-sm rounded-lg flex items-center justify-center"
-        style="min-height: 70vh"
+      <div class="w-full"
         hx-get="{% url 'opportunity:user_tasks_table' request.org.slug opportunity.opportunity_id %}{% querystring %}"
-        hx-trigger="load" hx-swap="innerHTML"
-        hx-on::after-swap="this.style.minHeight = ''; this.classList.remove('flex', 'items-center', 'justify-center')">
-        <div role="status">
-          <div class="animate-spin rounded-full h-12 w-12 border-4 border-brand-mango border-t-transparent"></div>
-          <span class="sr-only">{% trans "Loading..." %}</span>
+        hx-trigger="load" hx-swap="innerHTML">
+        <div class="table-container flex flex-col gap-2 mb-1">
+          <div class="w-full overflow-x-auto block">
+            <table class="base-table animate-pulse">
+              <thead>
+                <tr>
+                  <th><div class="h-3 w-4 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-28 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-24 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-24 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-20 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-16 rounded bg-gray-300"></div></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for _ in "xxx" %}
+                <tr>
+                  <td><div class="h-3 w-4 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-40 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-28 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-24 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-24 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-16 rounded bg-gray-200"></div></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       {% if can_manage_tasks %}
