@@ -39,6 +39,27 @@ def create_hq_user_and_link(user, domain, opportunity):
     return True
 
 
+def fetch_hq_user_uuid(commcare_username, domain, api_key):
+    hq_username = f"{commcare_username.lower()}@{domain}.commcarehq.org"
+    headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
+    next_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/?limit=1000"
+    while next_url:
+        response = httpx.get(next_url, headers=headers, timeout=30)
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            raise CommCareHQAPIException(
+                f"{e.response.status_code} Error response {e.response.text} while fetching users for {domain}"
+            )
+        data = response.json()
+        for obj in data.get("objects", []):
+            if obj.get("username") == hq_username:
+                return obj.get("id")
+        next_path = data.get("meta", {}).get("next")
+        next_url = f"{api_key.hq_server.url}{next_path}" if next_path else None
+    return None
+
+
 def _create_hq_user(user, domain, api_key):
     mobile_worker_api_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/"
     hq_request = httpx.post(

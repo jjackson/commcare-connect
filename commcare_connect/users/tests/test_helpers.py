@@ -1,7 +1,12 @@
 import pytest
 from django.test import RequestFactory
 
-from commcare_connect.users.helpers import build_hq_user_payload, create_hq_user_and_link, get_organization_for_request
+from commcare_connect.users.helpers import (
+    build_hq_user_payload,
+    create_hq_user_and_link,
+    fetch_hq_user_uuid,
+    get_organization_for_request,
+)
 from commcare_connect.users.models import ConnectIDUserLink
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
@@ -84,6 +89,74 @@ class TestCreateHqUserAndLink:
 
         with pytest.raises(CommCareHQAPIException):
             create_hq_user_and_link(mobile_user, domain, opportunity)
+
+
+@pytest.mark.django_db
+class TestFetchHqUserUuid:
+    def _list_url(self, opportunity, domain, query="?limit=1000"):
+        return f"{opportunity.api_key.hq_server.url}/a/{domain}/api/v0.5/user/{query}"
+
+    def test_returns_uuid_when_username_matches(self, opportunity, httpx_mock):
+        domain = "test-domain"
+        hq_user_uuid = "uuid-alice"
+        httpx_mock.add_response(
+            url=self._list_url(opportunity, domain),
+            method="GET",
+            json={
+                "meta": {"next": None},
+                "objects": [
+                    {"id": "uuid-bob", "username": f"bob@{domain}.commcarehq.org"},
+                    {"id": hq_user_uuid, "username": f"alice@{domain}.commcarehq.org"},
+                ],
+            },
+        )
+
+        assert fetch_hq_user_uuid("alice", domain, opportunity.api_key) == hq_user_uuid
+
+    def test_returns_none_when_no_match(self, opportunity, httpx_mock):
+        domain = "test-domain"
+        httpx_mock.add_response(
+            url=self._list_url(opportunity, domain),
+            method="GET",
+            json={
+                "meta": {"next": None},
+                "objects": [{"id": "uuid-bob", "username": f"bob@{domain}.commcarehq.org"}],
+            },
+        )
+
+        assert fetch_hq_user_uuid("alice", domain, opportunity.api_key) is None
+
+    def test_follows_pagination_until_match(self, opportunity, httpx_mock):
+        domain = "test-domain"
+        hq_user_uuid = "uuid-alice"
+        next_path = f"/a/{domain}/api/v0.5/user/?limit=1000&offset=1000"
+        httpx_mock.add_response(
+            url=self._list_url(opportunity, domain),
+            method="GET",
+            json={
+                "meta": {"next": next_path},
+                "objects": [{"id": "uuid-bob", "username": f"bob@{domain}.commcarehq.org"}],
+            },
+        )
+        httpx_mock.add_response(
+            url=f"{opportunity.api_key.hq_server.url}{next_path}",
+            method="GET",
+            json={
+                "meta": {"next": None},
+                "objects": [{"id": hq_user_uuid, "username": f"alice@{domain}.commcarehq.org"}],
+            },
+        )
+
+        assert fetch_hq_user_uuid("alice", domain, opportunity.api_key) == hq_user_uuid
+
+    def test_raises_on_http_error(self, opportunity, httpx_mock):
+        domain = "test-domain"
+        httpx_mock.add_response(
+            url=self._list_url(opportunity, domain), method="GET", status_code=500, text="server error"
+        )
+
+        with pytest.raises(CommCareHQAPIException):
+            fetch_hq_user_uuid("alice", domain, opportunity.api_key)
 
 
 @pytest.mark.django_db
