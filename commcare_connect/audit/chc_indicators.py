@@ -22,7 +22,7 @@ TERMINAL_STATUSES = [
 GENDER_FIELD = "additional_case_info__childs_gender"  # values: "female_child" / "male_child"
 FEMALE = "female_child"
 AGE_FIELD = "additional_case_info__childs_age_in_month"  # integer months
-DOB_FIELD = "additional_case_info__childs_dob"  # exclude when present (age is auto-calculated)
+DOB_FIELD = "additional_case_info__childs_dob"
 
 MUAC_MEASUREMENT_FIELD = "muac_group__muac_display_group_1__soliciter_muac_cm"  # float cm
 MUAC_PHOTO_LINK_FIELD = "muac_group__muac_photo_link"  # URL (non-empty = photo taken)
@@ -34,6 +34,7 @@ VACCINE_CARD_LINK_FIELD = "immunization_photo_group__photo_link_vaccine"  # URL 
 
 MUAC_BIN_EDGES = [9.5, 10.5, 11.5, 12.5, 13.5, 14.5, 15.5, 16.5, 17.5, 18.5, 19.5, 20.5, 21.5]
 AGE_HEAPING_VALUES = [12, 24, 36, 48]
+MAX_VISITS_PER_BUILDING = 12  # threshold above which a WA is flagged as "camping"
 
 
 def _q_link_present(form_field) -> Q:
@@ -101,7 +102,7 @@ def _find_last_closed_wag(opportunity_access, period_start, period_end) -> WorkA
 @register_calculation
 class CampingRatio(AuditCalculation):
     """Detect inflated visit reporting within a Work Area's building count.
-    Flags if any WA has >12 visits per building in the report week.
+    Flags if any WA has >MAX_VISITS_PER_BUILDING visits per building in the report week.
     Returns count of camping WAs; upper_bound=0 means any camping WA flags the FLW.
     """
 
@@ -123,7 +124,11 @@ class CampingRatio(AuditCalculation):
         )
 
         total_evaluated = len(wa_visit_counts)
-        camping_count = sum(1 for row in wa_visit_counts if row["visit_count"] > 12 * row["work_area__building_count"])
+        camping_count = sum(
+            1
+            for row in wa_visit_counts
+            if row["visit_count"] > MAX_VISITS_PER_BUILDING * row["work_area__building_count"]
+        )
         return camping_count, total_evaluated
 
 
