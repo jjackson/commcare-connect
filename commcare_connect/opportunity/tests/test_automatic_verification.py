@@ -205,6 +205,7 @@ class TestAutomaticVerificationBackendGuards:
             ("opportunity:reject_visits", {"visit_ids[]": [], "reason": "x"}),
             ("opportunity:user_visit_review", {"review_status": "agree"}),
             ("opportunity:visit_import", {}),
+            ("opportunity:review_visit_import", {}),
             ("opportunity:review_visit_export", {}),
         ],
     )
