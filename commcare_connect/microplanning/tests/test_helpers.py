@@ -30,7 +30,9 @@ class TestExcludeWorkAreas:
             user=org_user_admin,
             exclusion_reason="Flooding",
         )
-        assert res == {"excluded": 2, "skipped": 0, "failed": 0}
+        assert set(res["excluded_ids"]) == {wa.id for wa in work_areas}
+        assert res["skipped"] == 0
+        assert res["failed"] == 0
 
         for wa in work_areas:
             wa.refresh_from_db()
@@ -53,7 +55,9 @@ class TestExcludeWorkAreas:
             user=org_user_admin,
             exclusion_reason="Test",
         )
-        assert res == {"excluded": 1, "skipped": 2, "failed": 0}
+        assert res["excluded_ids"] == [wa_valid.id]
+        assert res["skipped"] == 2
+        assert res["failed"] == 0
 
         wa_valid.refresh_from_db()
         wa_inaccessible.refresh_from_db()
@@ -83,7 +87,9 @@ class TestExcludeWorkAreas:
             user=org_user_admin,
             exclusion_reason="Test",
         )
-        assert res == {"excluded": 0, "skipped": 0, "failed": 2}
+        assert res["excluded_ids"] == []
+        assert res["skipped"] == 0
+        assert res["failed"] == 2
 
         for wa in work_areas:
             wa.refresh_from_db()
