@@ -30,23 +30,16 @@
     </div>
 
     <div class="mb-6">
-        <p class="text-sm font-medium text-brand-deep-purple mb-2">{% translate "Photos" %}</p>
-        {% if photos %}
-        <div class="grid grid-cols-2 gap-3">
-            {% for photo in photos %}
-            <a href="{% url 'opportunity:fetch_attachment' org_slug=request.org.slug opp_id=request.opportunity.opportunity_id blob_id=photo.blob_id %}"
-               target="_blank" rel="noopener noreferrer">
-                <div class="relative">
-                    <img src="{% url 'opportunity:fetch_attachment' org_slug=request.org.slug opp_id=request.opportunity.opportunity_id blob_id=photo.blob_id %}"
-                         alt="{{ photo.name }}"
-                         class="object-cover w-full rounded-lg aspect-square hover:opacity-90 transition-opacity">
-                    <p class="text-xs text-gray-500 mt-1 truncate">{{ photo.name }}</p>
-                </div>
-            </a>
-            {% endfor %}
-        </div>
+        <p class="text-sm font-medium text-brand-deep-purple mb-2">{% translate "Photo Evidence" %}</p>
+        {% if photo %}
+        <a href="{% url 'opportunity:fetch_attachment' org_slug=request.org.slug opp_id=request.opportunity.opportunity_id blob_id=photo.blob_id %}"
+           target="_blank" rel="noopener noreferrer">
+            <img src="{% url 'opportunity:fetch_attachment' org_slug=request.org.slug opp_id=request.opportunity.opportunity_id blob_id=photo.blob_id %}"
+                 alt="{{ photo.name }}"
+                 class="object-contain w-full rounded-lg max-h-64 hover:opacity-90 transition-opacity">
+        </a>
         {% else %}
-        <p class="text-sm text-gray-400 italic">{% translate "No photos were submitted with this request." %}</p>
+        <p class="text-sm text-gray-400 italic">{% translate "No photo was submitted with this request." %}</p>
         {% endif %}
     </div>
 

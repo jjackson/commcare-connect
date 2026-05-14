@@ -714,14 +714,17 @@ def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
         status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
     )
     inacc_request = get_object_or_404(WorkAreaInaccessibilityRequest, work_area=work_area)
-    photos = BlobMeta.objects.filter(parent_id=inacc_request.xform_id).exclude(name="form.xml")
+    try:
+        photo = BlobMeta.objects.get(parent_id=inacc_request.xform_id)
+    except BlobMeta.DoesNotExist:
+        photo = None
     return render(
         request,
         "microplanning/review_inaccessibility_modal.html",
         context={
             "work_area": work_area,
             "inaccessibility_request": inacc_request,
-            "photos": photos,
+            "photo": photo,
             "boundary_geojson": json.loads(work_area.boundary.geojson),
             "request_location_geojson": (
                 json.loads(inacc_request.location.geojson) if inacc_request.location else None

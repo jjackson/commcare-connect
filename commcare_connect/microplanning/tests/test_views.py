@@ -930,13 +930,10 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
         response = client.get(url)
         assert response.status_code == 404
 
-    def test_get_modal_photos_filtered_by_xform_id(self, client, org_user_admin, pending_wa, organization):
+    def test_get_modal_photo_filtered_by_xform_id(self, client, org_user_admin, pending_wa, organization):
         work_area, inacc_request = pending_wa
         BlobMeta.objects.create(
             name="photo.jpg", parent_id=inacc_request.xform_id, content_length=10, content_type="image/jpeg"
-        )
-        BlobMeta.objects.create(
-            name="form.xml", parent_id=inacc_request.xform_id, content_length=5, content_type="text/xml"
         )
         BlobMeta.objects.create(
             name="other.jpg", parent_id="some-other-xform-id", content_length=10, content_type="image/jpeg"
@@ -946,9 +943,9 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
         response = client.get(url)
         assert response.status_code == 200
         assert any(t.name == "microplanning/review_inaccessibility_modal.html" for t in response.templates)
-        photos = response.context["photos"]
-        assert photos.count() == 1
-        assert photos.first().name == "photo.jpg"
+        photo = response.context["photo"]
+        assert photo is not None
+        assert photo.name == "photo.jpg"
 
     @pytest.mark.parametrize(
         "action, expected_status, expect_notify",
