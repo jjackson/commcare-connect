@@ -1399,19 +1399,22 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         self.helper.form_tag = False
 
         self.auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
+
+        form_submission_hour_fields = (
+            Fieldset(
+                _("Form Submission Hours"),
+                Row(
+                    Field("form_submission_start"),
+                    Field("form_submission_end"),
+                    css_class="grid grid-cols-2 gap-2",
+                ),
+            ),
+        )
+
         if self.auto_verify:
             for hidden in ("duplicate", "gps", "catchment_areas", "location"):
                 self.fields.pop(hidden, None)
-            self.helper.layout = Layout(
-                Fieldset(
-                    "Form Submission Hours",
-                    Row(
-                        Field("form_submission_start"),
-                        Field("form_submission_end"),
-                        css_class="grid grid-cols-2 gap-2",
-                    ),
-                ),
-            )
+            self.helper.layout = Layout(form_submission_hour_fields)
         else:
             self.helper.layout = Layout(
                 Row(
@@ -1421,14 +1424,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
                     css_class="grid grid-cols-3 gap-2",
                 ),
                 Row(Field("location")),
-                Fieldset(
-                    "Form Submission Hours",
-                    Row(
-                        Field("form_submission_start"),
-                        Field("form_submission_end"),
-                        css_class="grid grid-cols-2 gap-2",
-                    ),
-                ),
+                form_submission_hour_fields,
             )
             self.fields["duplicate"].required = False
             self.fields["gps"].required = False
