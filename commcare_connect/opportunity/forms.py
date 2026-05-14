@@ -1398,8 +1398,8 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         self.helper = FormHelper(self)
         self.helper.form_tag = False
 
-        auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
-        if auto_verify:
+        self.auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
+        if self.auto_verify:
             for hidden in ("duplicate", "gps", "catchment_areas", "location"):
                 self.fields.pop(hidden, None)
             self.helper.layout = Layout(
@@ -1439,7 +1439,7 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        if self.opportunity and self.opportunity.automatic_visit_verification:
+        if self.auto_verify:
             instance.duplicate = False
             instance.gps = False
             instance.catchment_areas = False
@@ -1460,13 +1460,13 @@ class DeliverUnitFlagsForm(forms.ModelForm):
         self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
-        auto_verify = self.opportunity.automatic_visit_verification
-        if auto_verify:
+        self.auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
+        if self.auto_verify:
             self.fields.pop("check_attachments", None)
 
         self.helper = FormHelper(self)
         self.helper.form_tag = False
-        if auto_verify:
+        if self.auto_verify:
             self.helper.layout = Layout(
                 Row(
                     Column(Field("deliver_unit")),
@@ -1489,7 +1489,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        if self.opportunity.automatic_visit_verification:
+        if self.auto_verify:
             instance.check_attachments = False
         if commit:
             instance.save()
