@@ -1377,18 +1377,18 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
             "form_submission_end": forms.TimeInput(attrs={"type": "time", "class": "form-control"}),
         }
         labels = {
-            "duplicate": "Check Duplicates",
-            "gps": "Check GPS",
-            "form_submission_start": "Start Time",
-            "form_submission_end": "End Time",
-            "location": "Location Distance",
-            "catchment_areas": "Catchment Area",
+            "duplicate": _("Check Duplicates"),
+            "gps": _("Check GPS"),
+            "form_submission_start": _("Start Time"),
+            "form_submission_end": _("End Time"),
+            "location": _("Location Distance"),
+            "catchment_areas": _("Catchment Area"),
         }
         help_texts = {
-            "location": "Minimum distance between form locations (metres)",
-            "duplicate": "Flag duplicate form submissions for an entity.",
-            "gps": "Flag forms with no location information.",
-            "catchment_areas": "Flag forms outside a users's assigned catchment area",
+            "location": _("Minimum distance between form locations (metres)"),
+            "duplicate": _("Flag duplicate form submissions for an entity."),
+            "gps": _("Flag forms with no location information."),
+            "catchment_areas": _("Flag forms outside a users's assigned catchment area"),
         }
 
     def __init__(self, *args, **kwargs):
@@ -1453,8 +1453,8 @@ class DeliverUnitFlagsForm(forms.ModelForm):
     class Meta:
         model = DeliverUnitFlagRules
         fields = ("deliver_unit", "check_attachments", "duration")
-        help_texts = {"duration": "Minimum time to complete form (minutes)"}
-        labels = {"check_attachments": "Require Attachments"}
+        help_texts = {"duration": _("Minimum time to complete form (minutes)")}
+        labels = {"check_attachments": _("Require Attachments")}
 
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity")
