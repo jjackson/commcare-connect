@@ -1908,7 +1908,7 @@ class WorkerCompletedTaskTable(tables.Table):
     use_view_url = True
 
     select = select_column(td_extra=_task_select_td_extra)
-    task_type = tables.Column(verbose_name=_("Task Type"), accessor="task", orderable=False)
+    task_type = tables.Column(verbose_name=_("Task Type"), accessor="task_type", orderable=False)
     assigned_by = tables.Column(
         verbose_name=_("Assigned By"),
         accessor="assigned_by__name",
