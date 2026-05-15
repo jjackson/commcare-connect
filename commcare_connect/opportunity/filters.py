@@ -209,7 +209,7 @@ class TasksFilterSet(django_filters.FilterSet):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
         if self.opportunity:
-            active_tasks = TaskType.objects.filter(opportunity=self.opportunity, is_active=True)
+            active_tasks = TaskType.objects.filter(app=self.opportunity.deliver_app, is_active=True)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
 
             worker_queryset = (
@@ -270,7 +270,7 @@ class UserTasksFilterSet(django_filters.FilterSet):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
         if self.opportunity:
-            active_tasks = TaskType.objects.filter(opportunity=self.opportunity, is_active=True)
+            active_tasks = TaskType.objects.filter(app=self.opportunity.deliver_app, is_active=True)
             self.filters["task_type"].extra["choices"] = [(str(t.pk), t.name) for t in active_tasks]
         self.form.helper.layout = Layout(
             "task_status",
