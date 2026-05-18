@@ -1,4 +1,5 @@
 import datetime
+import functools
 import json
 from collections import Counter, defaultdict
 from datetime import timedelta
@@ -2329,6 +2330,7 @@ class VisitVerificationTableView(WorkerVisitTableView):
             tabs.append({"name": tab, "label": tabs_to_labels[tab], "count": user_visit_counts.get(tab, 0)})
         return tabs
 
+    @functools.cache
     def get_tabs(self, **kwargs):
         opportunity = self.get_opportunity()
         if opportunity.automatic_visit_verification:
