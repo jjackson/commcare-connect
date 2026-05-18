@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -64,6 +65,7 @@ from commcare_connect.form_receiver.serializers import XFormSerializer
 from commcare_connect.microplanning.models import WorkAreaInaccessibilityRequest
 from commcare_connect.opportunity.api.serializers.mobile import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
+from commcare_connect.opportunity.exceptions import ListTooLongError
 from commcare_connect.opportunity.filters import (
     AssignedTaskFilterSet,
     DeliverFilterSet,
@@ -222,6 +224,8 @@ from commcare_connect.utils.tables import (
     get_duration_min,
     get_validated_page_size,
 )
+
+logger = logging.getLogger(__name__)
 
 EXPORT_ROW_LIMIT = 10_000
 _NEXT_WORKER_TASKS = "worker_tasks"
@@ -3580,17 +3584,17 @@ def delete_tasks(request, org_slug, opp_id):
     except (TypeError, ValueError):
         return HttpResponseBadRequest()
 
-    deleted_count, _info = (
-        AssignedTask.objects.filter(
-            pk__in=task_ids,
-            opportunity_access__opportunity=request.opportunity,
-        )
-        .exclude(status=AssignedTaskStatus.COMPLETED)
-        .delete()
-    )
-
-    if deleted_count:
-        messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
-
     redirect_url = _task_redirect_url(request, org_slug, opp_id)
+
+    try:
+        deleted_count = AssignedTask.bulk_delete(task_ids, request.opportunity)
+    except CommCareHQAPIException:
+        logger.exception("Task deletion failed: could not update CommCare HQ for opportunity %s", opp_id)
+        messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
+    except ListTooLongError:
+        logger.exception("Task deletion failed: too many tasks queued for opportunity %s", opp_id)
+        messages.error(request, _("Too many tasks queued for deletion. Please select a smaller batch."))
+    else:
+        if deleted_count:
+            messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
     return HttpResponse(headers={"HX-Redirect": redirect_url})
