@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from django.db.models import Count, F, Max, Q, Sum
 
 from commcare_connect.audit.calculations import AuditCalculation, register_calculation
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit
+
+logger = logging.getLogger(__name__)
 
 CLOSED_STATUSES = [
     WorkAreaStatus.EXPECTED_VISIT_REACHED,
@@ -64,6 +68,7 @@ def _find_active_wag(opportunity_access, period_end) -> WorkAreaGroup | None:
                 filter=Q(workarea__uservisit__visit_date__date__lte=period_end),
             )
         )
+        .filter(last_visit__isnull=False)
         .order_by("-last_visit")
         .first()
     )
@@ -106,7 +111,7 @@ class CampingRatio(AuditCalculation):
     upper_bound = 0
 
     def compute(self, opportunity_access, period_start, period_end):
-        wa_visit_counts = list(
+        wa_visit_counts = (
             UserVisit.objects.filter(
                 opportunity_access=opportunity_access,
                 visit_date__date__range=(period_start, period_end),
@@ -230,7 +235,9 @@ class WACoverageToVisitRatio(AuditCalculation):
         _eligible = ~Q(status__in=[WorkAreaStatus.EXCLUDED, WorkAreaStatus.INACCESSIBLE])
         wa_stats = WorkArea.objects.filter(opportunity_access=opportunity_access).aggregate(
             total_eligible=Count("id", filter=_eligible),
-            visited_count=Count("id", filter=Q(status=WorkAreaStatus.VISITED)),
+            visited_count=Count(
+                "id", filter=Q(status__in=[WorkAreaStatus.VISITED, WorkAreaStatus.EXPECTED_VISIT_REACHED])
+            ),
             expected_visits=Sum("expected_visit_count", filter=_eligible),
         )
 
@@ -266,15 +273,16 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
         if active_wag is None:
             return None, 0
 
-        was = WorkArea.objects.filter(work_area_group=active_wag, opportunity_access=opportunity_access)
-        total = was.count()
-        if total == 0:
+        stats = WorkArea.objects.filter(work_area_group=active_wag, opportunity_access=opportunity_access).aggregate(
+            total=Count("id"),
+            terminal_count=Count("id", filter=Q(status__in=TERMINAL_STATUSES)),
+            inaccessible_count=Count("id", filter=Q(status=WorkAreaStatus.INACCESSIBLE)),
+        )
+
+        if not stats["total"]:
             return None, 0
 
-        terminal_count = was.filter(status__in=TERMINAL_STATUSES).count()
-        inaccessible_count = was.filter(status=WorkAreaStatus.INACCESSIBLE).count()
-
-        return inaccessible_count / total, terminal_count
+        return stats["inaccessible_count"] / stats["total"], stats["terminal_count"]
 
 
 @register_calculation
@@ -477,22 +485,34 @@ class MUACDistributionPatternIndex(AuditCalculation):
     lower_bound = 5
 
     def compute(self, opportunity_access, period_start, period_end):
-        raw = list(
-            UserVisit.objects.filter(
-                opportunity_access=opportunity_access,
-                visit_date__date__range=(period_start, period_end),
-                **{f"form_json__form__{MUAC_MEASUREMENT_FIELD}__isnull": False},
-            ).values_list(f"form_json__form__{MUAC_MEASUREMENT_FIELD}", flat=True)
-        )
+        raw = UserVisit.objects.filter(
+            opportunity_access=opportunity_access,
+            visit_date__date__range=(period_start, period_end),
+            **{f"form_json__form__{MUAC_MEASUREMENT_FIELD}__isnull": False},
+        ).values_list(f"form_json__form__{MUAC_MEASUREMENT_FIELD}", flat=True)
 
         measurements = []
+        out_of_range = []
         for v in raw:
             try:
                 f = float(v)
                 if 9.5 <= f <= 21.5:
                     measurements.append(f)
+                else:
+                    out_of_range.append(f)
             except (TypeError, ValueError):
                 pass
+
+        if out_of_range:
+            logger.warning(
+                "MUAC out-of-range values for opportunity_access=%s period=%s–%s: "
+                "%d value(s) outside 9.5–21.5 cm: %s",
+                opportunity_access.id,
+                period_start,
+                period_end,
+                len(out_of_range),
+                out_of_range[:10],
+            )
 
         total = len(measurements)
         if total < self.min_sample_size:
