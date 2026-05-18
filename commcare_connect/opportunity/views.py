@@ -62,6 +62,7 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
 from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.serializers import XFormSerializer
+from commcare_connect.microplanning.models import WorkAreaInaccessibilityRequest
 from commcare_connect.opportunity.api.serializers.mobile import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
 from commcare_connect.opportunity.exceptions import ListTooLongError
@@ -1127,10 +1128,12 @@ def reject_visits(request, org_slug=None, opp_id=None):
 def fetch_attachment(request, org_slug, opp_id, blob_id):
     blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
 
-    if not UserVisit.objects.filter(
-        opportunity=request.opportunity,
-        xform_id=blob_meta.parent_id,
-    ).exists():
+    if not (
+        UserVisit.objects.filter(opportunity=request.opportunity, xform_id=blob_meta.parent_id).exists()
+        or WorkAreaInaccessibilityRequest.objects.filter(
+            work_area__opportunity=request.opportunity, xform_id=blob_meta.parent_id
+        ).exists()
+    ):
         return HttpResponseNotFound()
 
     try:

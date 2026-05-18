@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import uuid
+from functools import partial
 from http import HTTPStatus
 
 import pghistory
@@ -15,10 +16,10 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import Count, F, FloatField, Func, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models import Count, F, FloatField, Func, IntegerField, OuterRef, Q, Subquery, Sum, TextChoices, Value
 from django.db.models.functions import Cast, Coalesce
-from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
-from django.shortcuts import redirect, render
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.timezone import localdate
@@ -39,8 +40,14 @@ from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AR
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
 from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
-from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
-from commcare_connect.opportunity.models import OpportunityAccess, UserVisit, VisitValidationStatus
+from commcare_connect.microplanning.models import (
+    WorkArea,
+    WorkAreaGroup,
+    WorkAreaInaccessibilityRequest,
+    WorkAreaStatus,
+)
+from commcare_connect.opportunity.models import BlobMeta, OpportunityAccess, UserVisit, VisitValidationStatus
+from commcare_connect.opportunity.tasks import send_push_notification_task
 from commcare_connect.organization.decorators import (
     opportunity_required,
     org_admin_required,
@@ -140,6 +147,10 @@ def microplanning_home(request, *args, **kwargs):
         "workarea_min_zoom": WORKAREA_MIN_ZOOM,
         "edit_work_area_url": edit_work_area_url,
         "download_url": download_url,
+        "review_inaccessibility_url": reverse(
+            "microplanning:review_inaccessibility_request",
+            args=[request.org.slug, opportunity.opportunity_id, 0],
+        ).replace("/0/", "/"),
         "exclude_url": exclude_url,
         "filter_form": filterset.form,
         "is_program_manager": is_program_manager,
@@ -773,3 +784,95 @@ def save_assignment(request, org_slug, opp_id):
         transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
 
     return JsonResponse({"status": "ok"})
+
+
+@require_GET
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
+    work_area = get_object_or_404(
+        WorkArea,
+        id=work_area_id,
+        opportunity=request.opportunity,
+        status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
+    )
+    inacc_request = get_object_or_404(WorkAreaInaccessibilityRequest, work_area=work_area)
+    try:
+        photo = BlobMeta.objects.get(parent_id=inacc_request.xform_id)
+    except BlobMeta.DoesNotExist:
+        photo = None
+    return render(
+        request,
+        "microplanning/review_inaccessibility_modal.html",
+        context={
+            "work_area": work_area,
+            "inaccessibility_request": inacc_request,
+            "photo": photo,
+            "boundary_geojson": json.loads(work_area.boundary.geojson),
+            "request_location_geojson": (
+                json.loads(inacc_request.location.geojson) if inacc_request.location else None
+            ),
+            "mapbox_api_key": settings.MAPBOX_TOKEN,
+        },
+    )
+
+
+class InaccessibilityReviewAction(TextChoices):
+    APPROVE = "approve", "Approve"
+    DENY = "deny", "Deny"
+
+
+_ACTION_TO_NEW_STATUS = {
+    InaccessibilityReviewAction.APPROVE: WorkAreaStatus.INACCESSIBLE,
+    InaccessibilityReviewAction.DENY: WorkAreaStatus.NOT_VISITED,
+}
+
+
+@require_POST
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
+    try:
+        action = InaccessibilityReviewAction(request.POST.get("action", ""))
+    except ValueError:
+        return HttpResponseBadRequest("Invalid action")
+
+    new_status = _ACTION_TO_NEW_STATUS[action]
+
+    work_area = get_object_or_404(
+        WorkArea.objects.select_for_update(),
+        id=work_area_id,
+        opportunity=request.opportunity,
+        status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
+    )
+    inacc_request = get_object_or_404(
+        WorkAreaInaccessibilityRequest.objects.select_related("opportunity_access__user"),
+        work_area=work_area,
+    )
+
+    work_area.status = new_status
+    try:
+        with transaction.atomic():
+            with pghistory.context(username=request.user.username, user_email=request.user.email):
+                work_area.save(update_fields=["status"])
+            if work_area.opportunity_access_id:
+                create_or_update_case_by_work_area(work_area)
+    except CommCareHQAPIException as e:
+        logger.info(f"Failed to sync work area {work_area.id} to HQ after review action. Error: {e}")
+        return HttpResponse(status=500, content=_("Failed to sync work area status. Please try again."))
+
+    if action == InaccessibilityReviewAction.DENY:
+        transaction.on_commit(
+            partial(
+                send_push_notification_task.delay,
+                [inacc_request.opportunity_access.user_id],
+                "Inaccessibility Request Denied",
+                "Your request to mark a work area inaccessible has been declined.",
+            )
+        )
+
+    response = HttpResponse(status=204)
+    response["HX-Trigger"] = json.dumps({"inaccessibilityReviewed": {"id": work_area.id, "status": new_status}})
+    return response
