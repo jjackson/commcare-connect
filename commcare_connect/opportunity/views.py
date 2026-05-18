@@ -1,5 +1,4 @@
 import datetime
-import functools
 import json
 from collections import Counter, defaultdict
 from datetime import timedelta
@@ -2324,14 +2323,14 @@ class VisitVerificationTableView(WorkerVisitTableView):
             "agree": _("Agree") if self.request.is_opportunity_pm else _("Approved"),
             "disagree": _("Disagree") if self.request.is_opportunity_pm else _("Revalidate"),
         }
-        tabs_to_display = self.get_tabs()
+        tabs_to_display = self.tabs
         tabs = []
         for tab in tabs_to_display:
             tabs.append({"name": tab, "label": tabs_to_labels[tab], "count": user_visit_counts.get(tab, 0)})
         return tabs
 
-    @functools.cache
-    def get_tabs(self, **kwargs):
+    @cached_property
+    def tabs(self):
         opportunity = self.get_opportunity()
         if opportunity.automatic_visit_verification:
             if self.request.is_opportunity_pm:
@@ -2366,7 +2365,7 @@ class VisitVerificationTableView(WorkerVisitTableView):
         self.filter_queryset = super().get_queryset()
 
         requested_status = self.request.GET.get("filter_status")
-        allowed = set(self.get_tabs())
+        allowed = set(self.tabs)
         self.filter_status = requested_status if requested_status in allowed else None
         queryset = self.filter_queryset
         if self.filter_status == "pending":
