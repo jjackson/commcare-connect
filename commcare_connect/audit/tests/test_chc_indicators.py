@@ -373,7 +373,7 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
 
     def test_balanced_coverage_and_visits_in_range(self):
         access, wag = make_access_and_wag()
-        WorkAreaFactory(
+        wa = WorkAreaFactory(
             opportunity=wag.opportunity,
             work_area_group=wag,
             opportunity_access=access,
@@ -387,12 +387,12 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             status=WorkAreaStatus.NOT_VISITED,
             expected_visit_count=10,
         )
-        make_visits(10, access)
+        make_visits(10, access, work_area=wa)
         self.assert_compute_result(access, sample=2, value=1.0, in_range=True)
 
     def test_high_coverage_low_visits_out_of_range(self):
         access, wag = make_access_and_wag()
-        WorkAreaFactory(
+        wa = WorkAreaFactory(
             opportunity=wag.opportunity,
             work_area_group=wag,
             opportunity_access=access,
@@ -406,27 +406,27 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             status=WorkAreaStatus.NOT_VISITED,
             expected_visit_count=100,
         )
-        make_visit(access)
+        make_visit(access, work_area=wa)
         value, _ = self.compute(access)
         assert value > 1.4
 
     def test_low_coverage_high_visits_out_of_range(self):
         access, wag = make_access_and_wag()
-        WorkAreaFactory(
+        wa = WorkAreaFactory(
             opportunity=wag.opportunity,
             work_area_group=wag,
             opportunity_access=access,
             status=WorkAreaStatus.NOT_VISITED,
             expected_visit_count=1,
         )
-        make_visits(10, access)
+        make_visits(10, access, work_area=wa)
         value, _ = self.compute(access)
         assert value < 0.6
 
     def test_excluded_and_inaccessible_was_not_counted_in_eligible(self):
         """EXCLUDED/INACCESSIBLE WAs must not count in eligible denominator or expected visits."""
         access, wag = make_access_and_wag()
-        WorkAreaFactory(
+        wa = WorkAreaFactory(
             opportunity=wag.opportunity,
             work_area_group=wag,
             opportunity_access=access,
@@ -447,7 +447,7 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             status=WorkAreaStatus.INACCESSIBLE,
             expected_visit_count=10,
         )
-        make_visits(10, access)
+        make_visits(10, access, work_area=wa)
         self.assert_compute_result(access, sample=1, value=1.0)  # only VISITED WA is eligible
 
     def test_no_actual_visits_returns_insufficient_data(self):
