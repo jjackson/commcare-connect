@@ -21,7 +21,6 @@ class Migration(migrations.Migration):
                 ("location", django.contrib.gis.db.models.fields.PointField(blank=True, null=True, srid=4326)),
                 ("reason", models.CharField(max_length=256)),
                 ("additional_details", models.TextField(blank=True, default="")),
-                ("estimated_duration", models.CharField(blank=True, default="", max_length=256)),
                 (
                     "opportunity_access",
                     models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="opportunity.opportunityaccess"),

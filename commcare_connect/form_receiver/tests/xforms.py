@@ -92,7 +92,6 @@ WORK_AREA_UPDATE_XML_TEMPLATE = (
     <reason>{reason}</reason>
     <photo_evidence>{photo_evidence}</photo_evidence>
     <additional_details>{additional_details}</additional_details>
-    <estimated_duration>{estimated_duration}</estimated_duration>
 </work_area_update>
 </data>"""
     % CCC_LEARN_XMLNS
@@ -180,7 +179,6 @@ class WorkAreaUpdateStubFactory(factory.StubFactory):
     reason = factory.Faker("sentence", nb_words=3)
     photo_evidence = "photo.jpg"
     additional_details = ""
-    estimated_duration = "1 week"
 
     @factory.lazy_attribute
     def json(self):
@@ -191,7 +189,6 @@ class WorkAreaUpdateStubFactory(factory.StubFactory):
             reason=self.reason,
             photo_evidence=self.photo_evidence,
             additional_details=self.additional_details,
-            estimated_duration=self.estimated_duration,
         )
         _, block = xml2json(xml)
         return block

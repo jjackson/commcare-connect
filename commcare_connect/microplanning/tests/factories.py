@@ -71,7 +71,6 @@ class WorkAreaInaccessibilityRequestFactory(DjangoModelFactory):
     location = None
     reason = factory.Faker("sentence", nb_words=3)
     additional_details = ""
-    estimated_duration = ""
 
     class Meta:
         model = WorkAreaInaccessibilityRequest

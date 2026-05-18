@@ -118,7 +118,6 @@ class WorkAreaInaccessibilityRequest(geo_models.Model):
     location = geo_models.PointField(null=True, blank=True, srid=SRID)
     reason = geo_models.CharField(max_length=256)
     additional_details = geo_models.TextField(blank=True, default="")
-    estimated_duration = geo_models.CharField(max_length=256, blank=True, default="")
 
     class Meta:
         constraints = [

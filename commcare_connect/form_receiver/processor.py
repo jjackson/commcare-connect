@@ -320,7 +320,6 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
             raise ProcessingError("photo_evidence is required for request_for_inaccessible")
 
         additional_details = block.get("additional_details", "")
-        estimated_duration = block.get("estimated_duration", "")
         location = _parse_xform_location(xform.metadata.location)
 
         WorkAreaInaccessibilityRequest.objects.create(
@@ -331,7 +330,6 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
             location=location,
             reason=reason,
             additional_details=additional_details,
-            estimated_duration=estimated_duration,
         )
         all_attachments = xform.raw_form.get("attachments", {})
         photo_attachments = {name: meta for name, meta in all_attachments.items() if name == photo_evidence}

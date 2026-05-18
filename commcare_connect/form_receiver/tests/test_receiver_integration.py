@@ -1331,7 +1331,6 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
         status="request_for_inaccessible",
         reason="Flood",
         additional_details="Road is blocked.",
-        estimated_duration="1 week",
     )
     form_json = get_form_json(
         form_block={**stub.json},
@@ -1354,7 +1353,6 @@ def test_work_area_update_inaccessible_creates_request_row(mobile_user_with_conn
     assert req.date_of_visit == datetime.date(2023, 6, 7)
     assert req.reason == "Flood"
     assert req.additional_details == "Road is blocked."
-    assert req.estimated_duration == "1 week"
     assert req.location is not None
     assert abs(req.location.y - 20.09) < 0.01  # lat
     assert abs(req.location.x - 40.09) < 0.01  # lng
