@@ -1412,8 +1412,8 @@ class OpportunityVerificationFlagsConfigForm(forms.ModelForm):
         )
 
         if self.auto_verify:
-            for hidden in ("duplicate", "gps", "catchment_areas", "location"):
-                self.fields.pop(hidden, None)
+            for field_name in ("duplicate", "gps", "catchment_areas", "location"):
+                self.fields.pop(field_name, None)
             self.helper.layout = Layout(form_submission_hour_fields)
         else:
             self.helper.layout = Layout(
