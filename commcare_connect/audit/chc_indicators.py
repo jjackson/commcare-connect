@@ -244,8 +244,7 @@ class WACoverageToVisitRatio(AuditCalculation):
         total_eligible = wa_stats["total_eligible"] or 0
         expected_visits = wa_stats["expected_visits"] or 0
         actual_visits = UserVisit.objects.filter(
-            opportunity_access=opportunity_access,
-            visit_date__date__lte=period_end,
+            opportunity_access=opportunity_access, visit_date__date__lte=period_end, work_area__isnull=False
         ).count()
 
         if not (total_eligible and expected_visits and actual_visits):
@@ -387,7 +386,10 @@ def _muac_build_bins(measurements: list[float]) -> list[int]:
     counts = []
     for i in range(len(MUAC_BIN_EDGES) - 1):
         lo, hi = MUAC_BIN_EDGES[i], MUAC_BIN_EDGES[i + 1]
-        counts.append(sum(1 for m in measurements if lo <= m < hi))
+        if i == len(MUAC_BIN_EDGES) - 2:
+            counts.append(sum(1 for m in measurements if lo <= m <= hi))
+        else:
+            counts.append(sum(1 for m in measurements if lo <= m < hi))
     return counts
 
 
@@ -463,9 +465,9 @@ def _muac_no_plateau(bin_counts, max_count) -> bool:
             if max(segment_counts) - min(segment_counts) <= tolerance:
                 longest_plateau = max(longest_plateau, len(segment))
             else:
-                plateau_start = i - 1
+                plateau_start = i
         else:
-            plateau_start = i - 1
+            plateau_start = i
 
     return longest_plateau < 3  # 3+ consecutive similar high bins = suspicious
 
