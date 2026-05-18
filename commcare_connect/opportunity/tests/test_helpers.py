@@ -634,8 +634,8 @@ def test_filter_worker_tasks_by_task_status(opportunity):
 def test_filter_worker_tasks_by_task_type(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    task_a = TaskTypeFactory(app=opportunity.deliver_app, is_active=True)
-    task_b = TaskTypeFactory(app=opportunity.deliver_app, is_active=True)
+    task_a = TaskTypeFactory(app=opportunity.deliver_app, opportunity=opportunity, is_active=True)
+    task_b = TaskTypeFactory(app=opportunity.deliver_app, opportunity=opportunity, is_active=True)
     AssignedTaskFactory(opportunity_access=access, task_type=task_a)
     AssignedTaskFactory(opportunity_access=access, task_type=task_b)
 
