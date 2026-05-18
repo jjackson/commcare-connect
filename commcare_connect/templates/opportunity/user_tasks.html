@@ -10,22 +10,8 @@
      x-data="{
        showCreateTaskModal: false,
        showEditTaskModal: false,
-       showFilterModal: false,
        editTaskError: false,
-       closeFilter() {
-         const params = new URLSearchParams(window.location.search);
-         const form = document.getElementById('userTaskFilterForm');
-         form.querySelectorAll('input[type=date]').forEach(el => {
-           el.value = params.get(el.name) || '';
-         });
-         form.querySelectorAll('[data-tomselect]').forEach(el => {
-           if (!el.tomselect) return;
-           const values = params.getAll(el.name);
-           el.tomselect.clear();
-           if (values.length) el.tomselect.setValue(values);
-         });
-         this.showFilterModal = false;
-       },
+       ...resetFilterModalState('userTaskFilterForm'),
        ...selectableTable()
      }"
   >
