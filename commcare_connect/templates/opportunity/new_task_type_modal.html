@@ -12,7 +12,7 @@
             </button>
         </div>
 
-        <form method="post"
+        <form method="post" x-ref="createTaskForm"
             action="{% url 'opportunity:task_types_config' request.org.slug opportunity.opportunity_id %}">
             {% csrf_token %}
             <div class="modal-body">
