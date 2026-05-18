@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import uuid
+from functools import partial
 from http import HTTPStatus
 
 import pghistory
@@ -15,10 +16,10 @@ from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import F, FloatField, Func, Sum, Value
-from django.db.models.functions import Cast
-from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
-from django.shortcuts import redirect, render
+from django.db.models import Count, F, FloatField, Func, IntegerField, OuterRef, Q, Subquery, Sum, TextChoices, Value
+from django.db.models.functions import Cast, Coalesce
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.utils.timezone import localdate
@@ -39,8 +40,14 @@ from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AR
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
 from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
-from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
-from commcare_connect.opportunity.models import OpportunityAccess, UserVisit
+from commcare_connect.microplanning.models import (
+    WorkArea,
+    WorkAreaGroup,
+    WorkAreaInaccessibilityRequest,
+    WorkAreaStatus,
+)
+from commcare_connect.opportunity.models import BlobMeta, OpportunityAccess, UserVisit, VisitValidationStatus
+from commcare_connect.opportunity.tasks import send_push_notification_task
 from commcare_connect.organization.decorators import (
     opportunity_required,
     org_admin_required,
@@ -140,6 +147,10 @@ def microplanning_home(request, *args, **kwargs):
         "workarea_min_zoom": WORKAREA_MIN_ZOOM,
         "edit_work_area_url": edit_work_area_url,
         "download_url": download_url,
+        "review_inaccessibility_url": reverse(
+            "microplanning:review_inaccessibility_request",
+            args=[request.org.slug, opportunity.opportunity_id, 0],
+        ).replace("/0/", "/"),
         "exclude_url": exclude_url,
         "filter_form": filterset.form,
         "is_program_manager": is_program_manager,
@@ -157,11 +168,87 @@ def microplanning_home(request, *args, **kwargs):
 
 
 def get_metrics_for_microplanning(opportunity):
+    approved_visits_for_work_area = (
+        UserVisit.objects.filter(
+            opportunity=opportunity,
+            work_area=OuterRef("pk"),
+            status=VisitValidationStatus.approved,
+        )
+        .values("work_area")
+        .annotate(c=Count("*"))
+        .values("c")
+    )
+
+    qs = WorkArea.objects.filter(opportunity=opportunity).annotate(
+        approved_count=Coalesce(
+            Subquery(approved_visits_for_work_area, output_field=IntegerField()),
+            0,
+        )
+    )
+
+    non_excluded = ~Q(status=WorkAreaStatus.EXCLUDED)
+    agg = qs.aggregate(
+        total=Count("id"),
+        excluded=Count("id", filter=Q(status=WorkAreaStatus.EXCLUDED)),
+        non_excluded=Count("id", filter=non_excluded),
+        unvisited=Count("id", filter=non_excluded & Q(approved_count=0)),
+        visited=Count("id", filter=non_excluded & Q(approved_count__gte=1)),
+        evc_reached=Count(
+            "id",
+            filter=non_excluded & Q(approved_count__gte=F("expected_visit_count")),
+        ),
+        inaccessible=Count("id", filter=Q(status=WorkAreaStatus.INACCESSIBLE)),
+        total_expected_visits=Sum("expected_visit_count", filter=non_excluded),
+        total_approved_visits=Sum("approved_count", filter=non_excluded),
+    )
+
+    non_excluded_count = agg["non_excluded"] or 0
+    total = agg["total"] or 0
+
+    def pct(numerator, denominator):
+        if not denominator:
+            return None
+        return round(numerator / denominator * 100)
+
+    total_expected = agg["total_expected_visits"] or 0
+    if non_excluded_count and total_expected:
+        total_approved_visits = agg["total_approved_visits"] or 0
+        pct_wa_visited = (agg["visited"] or 0) / non_excluded_count
+        pct_visits = total_approved_visits / total_expected
+        visited_to_visits = round((pct_wa_visited * 100) / pct_visits, 2) if pct_visits else "--"
+    else:
+        visited_to_visits = "--"
+
+    days_remaining = max((opportunity.end_date - localdate()).days, 0) if opportunity.end_date else "--"
+
     return [
+        {"name": _("Days Remaining"), "value": days_remaining},
         {
-            "name": _("Days Remaining"),
-            "value": max((opportunity.end_date - localdate()).days, 0) if opportunity.end_date else "--",
+            "name": _("Unvisited Work Areas"),
+            "value": agg["unvisited"],
+            "percentage": pct(agg["unvisited"], non_excluded_count),
         },
+        {
+            "name": _("Visited Work Areas"),
+            "value": agg["visited"],
+            "percentage": pct(agg["visited"], non_excluded_count),
+        },
+        {
+            "name": _("EVC Reached"),
+            "value": agg["evc_reached"],
+            "percentage": pct(agg["evc_reached"], non_excluded_count),
+        },
+        {
+            "name": _("Inaccessible Work Areas"),
+            "value": agg["inaccessible"],
+            "percentage": pct(agg["inaccessible"], non_excluded_count),
+        },
+        {
+            "name": _("Excluded Work Areas"),
+            "value": agg["excluded"],
+            "percentage": pct(agg["excluded"], total),
+        },
+        {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
     ]
 
 
@@ -697,3 +784,95 @@ def save_assignment(request, org_slug, opp_id):
         transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
 
     return JsonResponse({"status": "ok"})
+
+
+@require_GET
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
+    work_area = get_object_or_404(
+        WorkArea,
+        id=work_area_id,
+        opportunity=request.opportunity,
+        status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
+    )
+    inacc_request = get_object_or_404(WorkAreaInaccessibilityRequest, work_area=work_area)
+    try:
+        photo = BlobMeta.objects.get(parent_id=inacc_request.xform_id)
+    except BlobMeta.DoesNotExist:
+        photo = None
+    return render(
+        request,
+        "microplanning/review_inaccessibility_modal.html",
+        context={
+            "work_area": work_area,
+            "inaccessibility_request": inacc_request,
+            "photo": photo,
+            "boundary_geojson": json.loads(work_area.boundary.geojson),
+            "request_location_geojson": (
+                json.loads(inacc_request.location.geojson) if inacc_request.location else None
+            ),
+            "mapbox_api_key": settings.MAPBOX_TOKEN,
+        },
+    )
+
+
+class InaccessibilityReviewAction(TextChoices):
+    APPROVE = "approve", "Approve"
+    DENY = "deny", "Deny"
+
+
+_ACTION_TO_NEW_STATUS = {
+    InaccessibilityReviewAction.APPROVE: WorkAreaStatus.INACCESSIBLE,
+    InaccessibilityReviewAction.DENY: WorkAreaStatus.NOT_VISITED,
+}
+
+
+@require_POST
+@org_admin_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
+    try:
+        action = InaccessibilityReviewAction(request.POST.get("action", ""))
+    except ValueError:
+        return HttpResponseBadRequest("Invalid action")
+
+    new_status = _ACTION_TO_NEW_STATUS[action]
+
+    work_area = get_object_or_404(
+        WorkArea.objects.select_for_update(),
+        id=work_area_id,
+        opportunity=request.opportunity,
+        status=WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
+    )
+    inacc_request = get_object_or_404(
+        WorkAreaInaccessibilityRequest.objects.select_related("opportunity_access__user"),
+        work_area=work_area,
+    )
+
+    work_area.status = new_status
+    try:
+        with transaction.atomic():
+            with pghistory.context(username=request.user.username, user_email=request.user.email):
+                work_area.save(update_fields=["status"])
+            if work_area.opportunity_access_id:
+                create_or_update_case_by_work_area(work_area)
+    except CommCareHQAPIException as e:
+        logger.info(f"Failed to sync work area {work_area.id} to HQ after review action. Error: {e}")
+        return HttpResponse(status=500, content=_("Failed to sync work area status. Please try again."))
+
+    if action == InaccessibilityReviewAction.DENY:
+        transaction.on_commit(
+            partial(
+                send_push_notification_task.delay,
+                [inacc_request.opportunity_access.user_id],
+                "Inaccessibility Request Denied",
+                "Your request to mark a work area inaccessible has been declined.",
+            )
+        )
+
+    response = HttpResponse(status=204)
+    response["HX-Trigger"] = json.dumps({"inaccessibilityReviewed": {"id": work_area.id, "status": new_status}})
+    return response

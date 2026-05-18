@@ -171,38 +171,38 @@ def create_or_update_case(
     return CommCareCase(**data.get("case", {}))
 
 
-def bulk_update_cases(api_key: HQApiKey, domain: str, updates: list[dict[str, Any]]) -> None:
-    """POST a JSON array of case updates to /api/case/v2/.
+def bulk_update_usercases(updates: dict[OpportunityAccess, dict[str, Any]]) -> None:
+    """Update usercase properties on CommCare HQ for multiple users in a single bulk request.
 
-    HQ's bulk endpoint requires each row to carry a create flag; this helper
-    only updates existing cases, so create=False is injected per item.
-
-    All-or-nothing: raises CommCareHQAPIException on any non-2xx response.
+    All entries in `updates` must belong to the same opportunity. The domain, API key, and
+    HQ server are derived from the first entry and applied to the entire batch.
     """
-    base_url = f"{api_key.hq_server.url}/a/{domain}/api/case/v2/"
-    headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
-    payload = [{**update, "create": False} for update in updates]
+    if not updates:
+        return
 
-    try:
-        with httpx.Client(base_url=base_url, headers=headers) as client:
-            response = client.post("", json=payload)
-        response.raise_for_status()
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        raise CommCareHQAPIException(f"Failed to bulk-update {len(updates)} cases for {domain}. HQ Error: {e}") from e
-
-
-def update_usercase(opportunity_access: OpportunityAccess, data: dict[str, Any]) -> CommCareCase:
-    domain = opportunity_access.opportunity.deliver_app.cc_domain
-    api_key = opportunity_access.opportunity.api_key
+    first_access = next(iter(updates))
+    domain = first_access.opportunity.deliver_app.cc_domain
+    api_key = first_access.opportunity.api_key
     hq_server = api_key.hq_server
 
-    link = ConnectIDUserLink.objects.get(user=opportunity_access.user, domain=domain, hq_server=hq_server)
-    if link.hq_case_id is None:
-        usercase = get_usercase(opportunity_access)
-        link.hq_case_id = usercase.case_id
-        link.save()
+    users = [access.user for access in updates]
+    links = ConnectIDUserLink.objects.filter(user__in=users, domain=domain, hq_server=hq_server)
+    links_by_user = {link.user_id: link for link in links}
 
-    return create_or_update_case(api_key, domain, data, case_id=link.hq_case_id)
+    cases_data = []
+    for access, data in updates.items():
+        link = links_by_user.get(access.user_id)
+        if link is None:
+            hq_case_id = get_usercase(access).case_id
+        elif link.hq_case_id is None:
+            hq_case_id = get_usercase(access).case_id
+            link.hq_case_id = hq_case_id
+            link.save()
+        else:
+            hq_case_id = link.hq_case_id
+        cases_data.append({"case_id": hq_case_id, "create": False, **data})
+
+    bulk_create_or_update_cases(api_key, domain, cases_data)
 
 
 def get_usercase(opportunity_access: OpportunityAccess) -> CommCareCase:
