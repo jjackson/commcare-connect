@@ -718,7 +718,7 @@
 
 .better-tabs {
   .tabs {
-    @apply flex h-full gap-x-8 overflow-x-scroll px-2;
+    @apply flex h-full gap-x-8 overflow-x-auto px-2;
   }
 
   .tab {
