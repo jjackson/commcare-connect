@@ -8,7 +8,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     dependencies = [
         ("opportunity", "0128_remove_assignedtask_update_update_and_more"),
-        ("microplanning", "0008_workareaexpectedvisitcountworkareagroupstatusopportunityaccessexcludedreasonevent_and_more"),
+        ("microplanning", "0009_add_target_population_to_work_area"),
     ]
 
     operations = [
