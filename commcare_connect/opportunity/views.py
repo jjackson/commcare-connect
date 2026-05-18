@@ -2312,22 +2312,6 @@ class VisitVerificationTableView(WorkerVisitTableView):
         self.table = super().get_table(**kwargs)
         return self.table
 
-    def get_tabs(self, **kwargs):
-        opportunity = self.get_opportunity()
-        if opportunity.automatic_visit_verification:
-            if self.request.is_opportunity_pm:
-                return ["all"]
-            else:
-                return ["approved", "rejected", "all"]
-
-        if opportunity.managed:
-            if self.request.is_opportunity_pm:
-                return ["pending_review", "disagree", "agree", "all"]
-            else:
-                return ["pending", "pending_review", "disagree", "agree", "rejected", "all"]
-
-        return ["pending", "approved", "rejected", "all"]
-
     def get_tab_display(self, **kwargs):
         user_visit_counts = get_user_visit_counts(self.opportunity, self.filter_queryset)
         tabs_to_labels = {
@@ -2344,6 +2328,22 @@ class VisitVerificationTableView(WorkerVisitTableView):
         for tab in tabs_to_display:
             tabs.append({"name": tab, "label": tabs_to_labels[tab], "count": user_visit_counts.get(tab, 0)})
         return tabs
+
+    def get_tabs(self, **kwargs):
+        opportunity = self.get_opportunity()
+        if opportunity.automatic_visit_verification:
+            if self.request.is_opportunity_pm:
+                return ["all"]
+            else:
+                return ["approved", "rejected", "all"]
+
+        if opportunity.managed:
+            if self.request.is_opportunity_pm:
+                return ["pending_review", "disagree", "agree", "all"]
+            else:
+                return ["pending", "pending_review", "disagree", "agree", "rejected", "all"]
+
+        return ["pending", "approved", "rejected", "all"]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
