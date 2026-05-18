@@ -683,6 +683,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             wa.boundary.wkt,
             "10",
             "5",
+            "0",
             "3",
             "42",
             "LGA1",
@@ -708,7 +709,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         WorkAreaFactory(opportunity=opportunity, case_properties=None, work_area_group=None)
         client.force_login(org_user_admin)
         row = self._parse_csv(client.get(self.url(opportunity)))[1]
-        assert row[6:] == ["", "", "", "", ""]
+        assert row[6:] == ["0", "", "", "", "", ""]
 
     @pytest.mark.parametrize(
         "login_as, method, expected_status",
