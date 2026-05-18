@@ -126,11 +126,11 @@ class DeliverFilterSet(django_filters.FilterSet):
         form = CSRFExemptForm
 
     def __init__(self, *args, **kwargs):
-        opportunity = kwargs.pop("opportunity", None)
+        opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
-        if opportunity and opportunity.automatic_visit_verification:
-            self.filters.pop("review_pending", None)
-            self.filters.pop("has_duplicates", None)
+        if opportunity.automatic_visit_verification:
+            self.filters.pop("review_pending")
+            self.filters.pop("has_duplicates")
 
 
 class OpportunityListFilterSet(django_filters.FilterSet):
