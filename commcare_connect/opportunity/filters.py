@@ -373,6 +373,9 @@ class AssignedTaskFilterSet(django_filters.FilterSet):
     def __init__(self, *args, **kwargs):
         self.opportunity = kwargs.pop("opportunity", None)
         super().__init__(*args, **kwargs)
+        today = date.today().isoformat()
+        self.filters["date_assigned_after"].extra["widget"].attrs["max"] = today
+        self.filters["date_assigned_before"].extra["widget"].attrs["max"] = today
         if self.opportunity:
             self.filters["task_type"].extra["choices"] = self._get_task_type_choices()
             self.filters["worker_name"].extra["choices"] = self._get_worker_name_choices()
