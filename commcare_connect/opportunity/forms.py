@@ -1895,7 +1895,7 @@ class CreateTaskForm(forms.Form):
     def __init__(self, *args, opportunity=None, access=None, **kwargs):
         super().__init__(*args, **kwargs)
         if opportunity is not None:
-            self.fields["task"].queryset = TaskType.objects.filter(app=opportunity.deliver_app)
+            self.fields["task"].queryset = TaskType.objects.filter(app=opportunity.deliver_app, is_active=True)
             self.fields["access"].queryset = OpportunityAccess.objects.filter(
                 opportunity=opportunity,
                 accepted=True,
