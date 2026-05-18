@@ -7,6 +7,7 @@
             selectedFeature: null,
             highlightedWorkAreaId: null,
             showWorkAreaEditModal: false,
+            showReviewInaccessibilityModal: false,
             showVisits: false,
             filterQuery: '',
 
@@ -120,6 +121,16 @@
                         );
                     }
                 }
+            },
+
+            openReviewInaccessibilityModal(workAreaId) {
+                const reviewUrl = '{{ review_inaccessibility_url|escapejs }}';
+                const url = reviewUrl + workAreaId + '/';
+                htmx.ajax('GET', url, { target: '#review-inaccessibility-fragment', swap: 'innerHTML' })
+                    .then(() => {
+                        this.showReviewInaccessibilityModal = true;
+                        setTimeout(() => window.reviewInaccessibilityMap?.resize(), 0);
+                    });
             },
 
             getDownloadUrl() {
@@ -471,6 +482,19 @@
 
                     this.showWorkAreaEditModal = false;
                     this.showToast("{% translate 'Work area updated successfully!' %}");
+                });
+
+                document.addEventListener('inaccessibilityReviewed', (e) => {
+                    const data = e.detail;
+                    if (this.selectedFeature && this.selectedFeature._id === data.id) {
+                        this.selectedFeature = { ...this.selectedFeature, status: data.status };
+                    }
+                    this.map.setFeatureState(
+                        { source: 'workareas', sourceLayer: 'workareas', id: data.id },
+                        { status: data.status }
+                    );
+                    this.showReviewInaccessibilityModal = false;
+                    this.showToast("{% translate 'Work area review saved.' %}");
                 });
 
                 document.addEventListener('work_areas_excluded', (e) => {

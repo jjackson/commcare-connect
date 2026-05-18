@@ -1,4 +1,3 @@
-import json
 import uuid
 from unittest.mock import patch
 
@@ -7,14 +6,13 @@ import pytest
 from commcare_connect.commcarehq.api import (
     CommCareCase,
     bulk_create_or_update_cases_by_work_areas,
-    bulk_update_cases,
+    bulk_update_usercases,
     create_or_update_case_by_work_area,
 )
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
 from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import HQApiKeyFactory, OpportunityAccessFactory, OpportunityFactory
-from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 DOMAIN = "test-domain"
 
@@ -121,30 +119,20 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize(
-    "status_code, expect_exception",
-    [(200, False), (500, True)],
-)
-def test_bulk_update_cases(httpx_mock, status_code, expect_exception):
-    api_key = HQApiKeyFactory(hq_server=HQServerFactory())
-    updates = [
-        {"case_id": "case-1", "owner_id": ""},
-        {"case_id": "case-2", "owner_id": ""},
-    ]
-    httpx_mock.add_response(
-        method="POST",
-        url=f"{api_key.hq_server.url}/a/{DOMAIN}/api/case/v2/",
-        status_code=status_code,
-        json={} if not expect_exception else None,
-    )
+class TestBulkUpdateUsercases:
+    def test_falls_back_to_get_usercase_when_link_missing(self):
+        api_key = HQApiKeyFactory(hq_server=HQServerFactory())
+        access = OpportunityAccessFactory(opportunity__api_key=api_key)
+        hq_case_id = str(uuid.uuid4())
+        user_case = make_commcare_case(case_id=hq_case_id, owner_id=hq_case_id)
 
-    if expect_exception:
-        with pytest.raises(CommCareHQAPIException):
-            bulk_update_cases(api_key, DOMAIN, updates)
-    else:
-        bulk_update_cases(api_key, DOMAIN, updates)
-        request = httpx_mock.get_request()
-        assert request.method == "POST"
-        expected_payload = [{**update, "create": False} for update in updates]
-        assert json.loads(request.content) == expected_payload
-        assert request.headers["Authorization"] == f"ApiKey {api_key.user.email}:{api_key.api_key}"
+        with (
+            patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case) as mock_get_usercase,
+            patch("commcare_connect.commcarehq.api.bulk_create_or_update_cases") as mock_bulk,
+        ):
+            bulk_update_usercases({access: {"properties": {"prop": "value"}}})
+
+        mock_get_usercase.assert_called_once_with(access)
+        mock_bulk.assert_called_once()
+        cases_data = mock_bulk.call_args[0][2]
+        assert cases_data == [{"case_id": hq_case_id, "create": False, "properties": {"prop": "value"}}]
