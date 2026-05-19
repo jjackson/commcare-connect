@@ -3158,7 +3158,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
     ]
 
-    tasks_url = reverse("opportunity:worker_tasks", args=(org_slug, opp_id))
+    tasks_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
     opp_stats = [
         {
             "title": _("Connect Workers"),
