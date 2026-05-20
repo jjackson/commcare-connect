@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models.signals import m2m_changed
 from django.utils.translation import gettext_lazy
 from waffle.models import CACHE_EMPTY, AbstractUserFlag
 from waffle.utils import get_cache, get_setting, keyfmt
@@ -126,3 +127,19 @@ class Flag(AbstractUserFlag):
 
         cache.add(cache_key, ids)
         return ids
+
+
+def _flush_flag_relation_cache(sender, instance, action, **kwargs):
+    from waffle.signals import flag_membership_changed
+
+    flag_membership_changed(sender, instance, action, **kwargs)
+
+
+# Ties the custom flag relationships to the m2m_changed signal
+# to ensure flag's cache is cleared after editing
+for _relation in ("organizations", "opportunities", "programs"):
+    m2m_changed.connect(
+        _flush_flag_relation_cache,
+        sender=getattr(Flag, _relation).through,
+        dispatch_uid=f"commcare_connect.flag.{_relation}.through",
+    )
