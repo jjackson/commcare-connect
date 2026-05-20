@@ -66,8 +66,28 @@ class Flag(AbstractUserFlag):
         user = getattr(request, "user", None)
         if not (user and user.is_authenticated):
             return False
-        active_flags_query = cls.active_flags_for_user(user, include_role_flags=True).filter(name=flag_name)
-        return active_flags_query.exists()
+        try:
+            flag = cls.objects.get(name=flag_name)
+        except cls.DoesNotExist:
+            return False
+
+        if flag.everyone:
+            return True
+        if flag.staff and user.is_staff:
+            return True
+        if flag.superusers and user.is_superuser:
+            return True
+        if flag.users.filter(pk=user.pk).exists():
+            return True
+
+        opportunity = getattr(request, "opportunity", None)
+        if opportunity and flag.is_active_for(opportunity):
+            return True
+        org = getattr(request, "org", None)
+        if org and flag.is_active_for(org):
+            return True
+
+        return False
 
     def is_active_for(self, obj: Organization | Opportunity | Program):
         if isinstance(obj, Organization):
