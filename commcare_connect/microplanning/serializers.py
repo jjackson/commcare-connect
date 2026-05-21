@@ -21,11 +21,19 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "properties",
         ]
 
-    def get_properties(self, obj) -> dict:
+    def get_properties(self, obj: WorkArea) -> dict:
+        centroid = f"{obj.centroid.y:.2f} {obj.centroid.x:.2f}" if obj.centroid else ""
+        bounding_box = ""
+        if obj.boundary:
+            for lat, lon in list(obj.boundary.shell.coords):
+                bounding_box += f"{lat:.2f} {lon:.2f}"
+
+        print(f"{centroid=}")
+        print(f"{bounding_box=}")
         return {
-            "bounding_box": str(obj.boundary) if obj.boundary else "",
+            "bounding_box": bounding_box,
             "building_count": str(obj.building_count),
-            "centroid": str(obj.centroid) if obj.centroid else "",
+            "centroid": centroid,
             "expected_visit_count": str(obj.expected_visit_count),
             "wa_status": obj.status,
             "ward": obj.ward,
