@@ -216,10 +216,9 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
             make_commcare_case(case_id=expected_case_ids[str(wa.pk)], external_id=str(wa.pk))
             for wa in reversed(work_areas)
         ]
-        user_case = make_commcare_case(case_id=str(uuid.uuid4()))
 
         with (
-            patch("commcare_connect.commcarehq.api.get_usercase", return_value=user_case),
+            patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value="fetched-uuid"),
             patch(
                 "commcare_connect.commcarehq.api.bulk_create_or_update_cases",
                 return_value=returned_cases,
