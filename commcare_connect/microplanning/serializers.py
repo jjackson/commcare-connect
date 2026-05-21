@@ -27,9 +27,6 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
         if obj.boundary:
             for lat, lon in list(obj.boundary.shell.coords):
                 bounding_box += f"{lat:.2f} {lon:.2f}"
-
-        print(f"{centroid=}")
-        print(f"{bounding_box=}")
         return {
             "bounding_box": bounding_box,
             "building_count": str(obj.building_count),
