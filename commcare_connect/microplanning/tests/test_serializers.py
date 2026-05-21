@@ -22,6 +22,8 @@ def test_work_area_case_serializer():
     )
 
     data = WorkAreaCaseSerializer(work_area).data
+
+    centroid = f"{work_area.centroid.y:.2f} {work_area.centroid.x:.2f}" if work_area.centroid else ""
     assert data == {
         "case_name": "my-area",
         "case_type": WORK_AREA_CASE_TYPE,
@@ -30,7 +32,7 @@ def test_work_area_case_serializer():
         "properties": {
             "bounding_box": str(work_area.boundary),
             "building_count": "5",
-            "centroid": str(work_area.centroid),
+            "centroid": centroid,
             "expected_visit_count": "10",
             "wa_status": work_area.status,
             "ward": "ward-x",
