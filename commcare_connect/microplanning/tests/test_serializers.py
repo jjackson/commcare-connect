@@ -23,11 +23,11 @@ def test_work_area_case_serializer():
 
     data = WorkAreaCaseSerializer(work_area).data
 
-    centroid = f"{work_area.centroid.y:.2f} {work_area.centroid.x:.2f}" if work_area.centroid else ""
+    centroid = f"{work_area.centroid.x:.2f} {work_area.centroid.y:.2f}" if work_area.centroid else ""
     bounding_box = ""
     if work_area.boundary:
         for lat, lon in list(work_area.boundary.shell.coords):
-            bounding_box += f"{lat:.2f} {lon:.2f}"
+            bounding_box += f"{lat:.2f} {lon:.2f} "
 
     assert data == {
         "case_name": "my-area",
