@@ -15,9 +15,13 @@ from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 HQ_CASE_BULK_CHUNK_SIZE = 100
 
 
-class GetCaseDataAPIFilters(TypedDict):
-    case_type: str
-    case_name: str
+GetCaseDataAPIFilters = TypedDict(
+    "GetCaseDataAPIFilters",
+    {
+        "case_type": str,
+        "properties.username": str,
+    },
+)
 
 
 @dataclasses.dataclass
@@ -129,11 +133,13 @@ def bulk_create_or_update_cases_by_work_areas(
 
     cases = bulk_create_or_update_cases(api_key, domain, cases_data)
 
+    wa_by_id = {str(wa.pk): wa for wa in work_areas if wa.case_id is None}
     newly_created = []
-    for wa, case in zip(work_areas, cases, strict=True):
-        if wa.case_id is None:
+    for case in cases:
+        if case.external_id in wa_by_id:
+            wa = wa_by_id[case.external_id]
+            wa.case_id = case.case_id
             newly_created.append(wa)
-        wa.case_id = case.case_id
     if newly_created:
         WorkArea.objects.bulk_update(newly_created, ["case_id"])
 
@@ -228,7 +234,7 @@ def get_usercase(opportunity_access: OpportunityAccess) -> CommCareCase:
         domain,
         filters={
             "case_type": "commcare-user",
-            "case_name": user.username.lower(),
+            "properties.username": user.username.lower(),
         },
     )
     usercase = next(iter(case_data), None)
