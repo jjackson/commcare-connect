@@ -67,9 +67,8 @@ class Flag(AbstractUserFlag):
         user = getattr(request, "user", None)
         if not (user and user.is_authenticated):
             return False
-        try:
-            flag = cls.objects.get(name=flag_name)
-        except cls.DoesNotExist:
+        flag = cls.get(flag_name)
+        if flag.pk is None:
             return False
 
         if flag.everyone:
@@ -78,7 +77,7 @@ class Flag(AbstractUserFlag):
             return True
         if flag.superusers and user.is_superuser:
             return True
-        if flag.users.filter(pk=user.pk).exists():
+        if user.pk in flag._get_user_ids():
             return True
 
         opportunity = getattr(request, "opportunity", None)
