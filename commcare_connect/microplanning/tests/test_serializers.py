@@ -1,6 +1,10 @@
 import pytest
 
-from commcare_connect.microplanning.serializers import WORK_AREA_CASE_TYPE, WorkAreaCaseSerializer
+from commcare_connect.microplanning.serializers import (
+    WORK_AREA_CASE_TYPE,
+    WorkAreaCaseSerializer,
+    _coords_to_lat_lon_string,
+)
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 
 
@@ -23,11 +27,11 @@ def test_work_area_case_serializer():
 
     data = WorkAreaCaseSerializer(work_area).data
 
-    centroid = f"{work_area.centroid.x:.2f} {work_area.centroid.y:.2f}" if work_area.centroid else ""
+    centroid = _coords_to_lat_lon_string(work_area.centroid.coords)
     bounding_box = ""
     if work_area.boundary:
-        for lat, lon in list(work_area.boundary.shell.coords):
-            bounding_box += f"{lat:.2f} {lon:.2f} "
+        lat_lon = [_coords_to_lat_lon_string(coords) for coords in list(work_area.boundary.shell.coords)]
+        bounding_box = " ".join(lat_lon)
 
     assert data == {
         "case_name": "my-area",
