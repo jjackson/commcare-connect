@@ -22,11 +22,13 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
         ]
 
     def get_properties(self, obj: WorkArea) -> dict:
-        centroid = f"{obj.centroid.x:.2f} {obj.centroid.y:.2f}" if obj.centroid else ""
+        centroid = ""
+        if obj.centroid:
+            centroid = _coords_to_lat_lon_string(obj.centroid.coords)
         bounding_box = ""
         if obj.boundary:
-            for lat, lon in list(obj.boundary.shell.coords):
-                bounding_box += f"{lat:.2f} {lon:.2f} "
+            lat_lon_strings = [_coords_to_lat_lon_string(coords) for coords in list(obj.boundary.shell.coords)]
+            bounding_box = " ".join(lat_lon_strings)
         return {
             "bounding_box": bounding_box,
             "building_count": str(obj.building_count),
@@ -41,3 +43,8 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "lga": str(obj.case_properties.get("lga", "")),
             "state": str(obj.case_properties.get("state", "")),
         }
+
+
+def _coords_to_lat_lon_string(coords: tuple[float, float]) -> str:
+    lon, lat = coords
+    return f"{lat:.5f} {lon:.5f}"
