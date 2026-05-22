@@ -1456,7 +1456,7 @@ class DeliverUnitFlagsForm(forms.ModelForm):
         self.opportunity = kwargs.pop("opportunity")
         super().__init__(*args, **kwargs)
 
-        self.auto_verify = bool(self.opportunity and self.opportunity.automatic_visit_verification)
+        self.auto_verify = self.opportunity.automatic_visit_verification
         if self.auto_verify:
             self.fields.pop("check_attachments", None)
 
