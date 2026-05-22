@@ -40,10 +40,10 @@ def test_work_area_case_serializer():
         "owner_id": None,
         "properties": {
             "bounding_box": bounding_box,
-            "bounding_box_wkt": str(work_area.boundary) if work_area.boundary else "",
+            "bounding_box_wkt": str(work_area.boundary),
             "building_count": "5",
             "centroid": centroid,
-            "centroid_wkt": str(work_area.centroid) if work_area.centroid else "",
+            "centroid_wkt": str(work_area.centroid),
             "expected_visit_count": "10",
             "wa_status": work_area.status,
             "ward": "ward-x",
