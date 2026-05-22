@@ -1895,7 +1895,7 @@ class CreateTaskForm(forms.Form):
     def __init__(self, *args, opportunity=None, access=None, **kwargs):
         super().__init__(*args, **kwargs)
         if opportunity is not None:
-            self.fields["task"].queryset = TaskType.objects.filter(app=opportunity.deliver_app)
+            self.fields["task"].queryset = TaskType.objects.filter(app=opportunity.deliver_app, is_active=True)
             self.fields["access"].queryset = OpportunityAccess.objects.filter(
                 opportunity=opportunity,
                 accepted=True,
@@ -1980,6 +1980,7 @@ class AddTaskTypeForm(forms.ModelForm):
     def save(self, commit=True):
         task_type = super().save(commit=False)
         task_type.app = self.opportunity.deliver_app
+        task_type.opportunity = self.opportunity
         task_type.slug = self.cleaned_data["task_unit_id"]
         unit_name = dict(self.fields["task_unit_id"].choices).get(task_type.slug, "")
         task_type.unit_name = unit_name[:255]

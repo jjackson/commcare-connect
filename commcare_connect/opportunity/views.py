@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
@@ -61,8 +62,10 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
 from commcare_connect.flags.utils import is_flag_active
 from commcare_connect.form_receiver.serializers import XFormSerializer
+from commcare_connect.microplanning.models import WorkAreaInaccessibilityRequest
 from commcare_connect.opportunity.api.serializers.mobile import remove_opportunity_access_cache
 from commcare_connect.opportunity.app_xml import AppNoBuildException
+from commcare_connect.opportunity.exceptions import ListTooLongError
 from commcare_connect.opportunity.filters import (
     AssignedTaskFilterSet,
     DeliverFilterSet,
@@ -221,6 +224,8 @@ from commcare_connect.utils.tables import (
     get_duration_min,
     get_validated_page_size,
 )
+
+logger = logging.getLogger(__name__)
 
 EXPORT_ROW_LIMIT = 10_000
 _NEXT_WORKER_TASKS = "worker_tasks"
@@ -1123,10 +1128,12 @@ def reject_visits(request, org_slug=None, opp_id=None):
 def fetch_attachment(request, org_slug, opp_id, blob_id):
     blob_meta = get_object_or_404(BlobMeta, blob_id=blob_id)
 
-    if not UserVisit.objects.filter(
-        opportunity=request.opportunity,
-        xform_id=blob_meta.parent_id,
-    ).exists():
+    if not (
+        UserVisit.objects.filter(opportunity=request.opportunity, xform_id=blob_meta.parent_id).exists()
+        or WorkAreaInaccessibilityRequest.objects.filter(
+            work_area__opportunity=request.opportunity, xform_id=blob_meta.parent_id
+        ).exists()
+    ):
         return HttpResponseNotFound()
 
     try:
@@ -3151,7 +3158,7 @@ def opportunity_delivery_stats(request, org_slug, opp_id):
         },
     ]
 
-    tasks_url = reverse("opportunity:worker_tasks", args=(org_slug, opp_id))
+    tasks_url = reverse("opportunity:assigned_task_list", args=(org_slug, opp_id))
     opp_stats = [
         {
             "title": _("Connect Workers"),
@@ -3577,17 +3584,17 @@ def delete_tasks(request, org_slug, opp_id):
     except (TypeError, ValueError):
         return HttpResponseBadRequest()
 
-    deleted_count, _info = (
-        AssignedTask.objects.filter(
-            pk__in=task_ids,
-            opportunity_access__opportunity=request.opportunity,
-        )
-        .exclude(status=AssignedTaskStatus.COMPLETED)
-        .delete()
-    )
-
-    if deleted_count:
-        messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
-
     redirect_url = _task_redirect_url(request, org_slug, opp_id)
+
+    try:
+        deleted_count = AssignedTask.bulk_delete(task_ids, request.opportunity)
+    except CommCareHQAPIException:
+        logger.exception("Task deletion failed: could not update CommCare HQ for opportunity %s", opp_id)
+        messages.error(request, _("Task deletion failed: could not update CommCare HQ. Please try again."))
+    except ListTooLongError:
+        logger.exception("Task deletion failed: too many tasks queued for opportunity %s", opp_id)
+        messages.error(request, _("Too many tasks queued for deletion. Please select a smaller batch."))
+    else:
+        if deleted_count:
+            messages.success(request, _("Successfully deleted %(count)d task(s).") % {"count": deleted_count})
     return HttpResponse(headers={"HX-Redirect": redirect_url})

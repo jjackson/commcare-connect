@@ -9,6 +9,7 @@
 {% include 'components/breadcrumbs.html' with path=path %}
 
 <div class="container md:max-w-screen-lg mx-auto flex flex-col gap-6"
+     x-init="$watch('showCreateTaskTypeModal', val => { if (!val) $refs.createTaskForm.reset() })"
      x-data="{
        showCreateTaskTypeModal: {% if form.errors %}true{% else %}false{% endif %},
        showEditTaskTypeModal: false,

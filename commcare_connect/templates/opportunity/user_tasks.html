@@ -10,8 +10,8 @@
      x-data="{
        showCreateTaskModal: false,
        showEditTaskModal: false,
-       showFilterModal: false,
        editTaskError: false,
+       ...resetFilterModalState('userTaskFilterForm'),
        ...selectableTable()
      }"
   >
@@ -44,7 +44,7 @@
     <div class="modal">
       <div class="header text-lg font-semibold text-brand-deep-purple">
         <h1>{% trans "Filters" %}</h1>
-        <button @click="showFilterModal = false">
+        <button @click="closeFilter()">
           <i class="fa-solid fa-xmark text-xl"></i>
         </button>
       </div>
@@ -54,7 +54,7 @@
           {% crispy filter_form %}
         </div>
         <div class="footer">
-          <button type="button" @click="showFilterModal = false" class="button button-md outline-style">{% trans "Close" %}</button>
+          <button type="button" @click="closeFilter()" class="button button-md outline-style">{% trans "Close" %}</button>
           <button form="userTaskFilterForm" type="submit" @click="showFilterModal = false" class="button button-md primary-dark">
             {% trans "Apply" %}
           </button>
@@ -66,9 +66,38 @@
 
   <div class="w-full grid grid-cols-10 gap-2">
     <div class="col-span-6" hx-indicator="#loading-spinner">
-      <div
+      <div class="w-full"
         hx-get="{% url 'opportunity:user_tasks_table' request.org.slug opportunity.opportunity_id %}{% querystring %}"
-        hx-trigger="load" hx-swap="outerHTML"></div>
+        hx-trigger="load" hx-swap="innerHTML">
+        <div class="table-container flex flex-col gap-2 mb-1">
+          <div class="w-full overflow-x-auto block">
+            <table class="base-table animate-pulse">
+              <thead>
+                <tr>
+                  <th><div class="h-3 w-4 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-28 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-24 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-24 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-20 rounded bg-gray-300"></div></th>
+                  <th><div class="h-3 w-16 rounded bg-gray-300"></div></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for _ in "xxx" %}
+                <tr>
+                  <td><div class="h-3 w-4 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-40 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-28 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-24 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-24 rounded bg-gray-200"></div></td>
+                  <td><div class="h-3 w-16 rounded bg-gray-200"></div></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
       {% if can_manage_tasks %}
       <div class="flex gap-4 items-center justify-start mt-4">
         <form x-ref="deleteTasksForm"
@@ -117,6 +146,7 @@
               </div>
             </div>
             <div id="task-loading-indicator" role="status"
+              x-cloak
               class="htmx-indicator absolute -translate-x-1/2 -translate-y-1/2 top-2/4 left-1/2">
               <div class="animate-spin rounded-full h-12 w-12 border-4 border-brand-mango border-t-transparent"></div>
               <span class="sr-only">{% translate "Loading..." %}</span>
