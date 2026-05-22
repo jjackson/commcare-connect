@@ -8,6 +8,7 @@
 
 <div x-show="{{ modal_name }}" x-cloak x-transition.opacity class="modal-backdrop" role="dialog" aria-modal="true"
     aria-labelledby="new-task-modal-title"
+    x-init="$watch('{{ modal_name }}', val => { if (!val) resetModalForm('create-task-form') })"
     @keydown.escape.window="{{ modal_name }} = false"
     @create-task-success.window="{{ modal_name }} = false">
     <div @click.outside="{{ modal_name }} = false" class="modal">
