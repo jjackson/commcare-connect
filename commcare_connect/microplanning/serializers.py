@@ -31,8 +31,10 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             bounding_box = " ".join(lat_lon_strings)
         return {
             "bounding_box": bounding_box,
+            "bounding_box_wkt": str(obj.boundary) if obj.boundary else "",
             "building_count": str(obj.building_count),
             "centroid": centroid,
+            "centroid_wkt": str(obj.centroid) if obj.centroid else "",
             "expected_visit_count": str(obj.expected_visit_count),
             "wa_status": obj.status,
             "ward": obj.ward,
