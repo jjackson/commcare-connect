@@ -924,7 +924,7 @@ class UserVisit(XFormBaseModel):
     def duration(self):
         duration = None
         start = self.form_json["metadata"].get("timeStart")
-        end = self.form_json["metatdata"].get("timeEnd")
+        end = self.form_json["metadata"].get("timeEnd")
         if start and end:
             try:
                 duration = parse_datetime(end) - parse_datetime(start)
