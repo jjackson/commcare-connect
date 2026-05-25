@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pghistory
 from django.core.validators import MinValueValidator
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Count, F, Q, Sum
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
@@ -454,7 +454,12 @@ class AssignedTask(XFormBaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["xform_id", "task_type", "opportunity_access"], name="unique_xform_assigned_task"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["task_type", "opportunity_access"],
+                condition=Q(status=AssignedTaskStatus.ASSIGNED),
+                name="unique_assigned_task_type_per_access",
+            ),
         ]
 
     @classmethod
@@ -463,14 +468,16 @@ class AssignedTask(XFormBaseModel):
         from commcare_connect.opportunity.tasks import send_task_assignment_notification
 
         with transaction.atomic():
-            assigned_task, created = cls.objects.get_or_create(
-                task_type=task_type,
-                opportunity_access=opportunity_access,
-                status=AssignedTaskStatus.ASSIGNED,
-                defaults={"due_date": due_date, "assigned_by": assigned_by},
-            )
-            if not created:
-                raise TaskAlreadyAssignedError(f"Task type '{task_type}' is already assigned to this user.")
+            try:
+                assigned_task = cls.objects.create(
+                    task_type=task_type,
+                    opportunity_access=opportunity_access,
+                    status=AssignedTaskStatus.ASSIGNED,
+                    due_date=due_date,
+                    assigned_by=assigned_by,
+                )
+            except IntegrityError:
+                raise TaskAlreadyAssignedError(f"Task type '{task_type}' could not be assigned.")
             case_property = task_type.case_property
             if case_property:
                 bulk_update_usercases({opportunity_access: {"properties": {case_property: "1"}}})

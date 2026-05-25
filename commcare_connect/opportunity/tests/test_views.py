@@ -2321,10 +2321,9 @@ class TestAssignedTaskListView:
         self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task_type = TaskTypeFactory(app=opportunity.deliver_app)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2367,9 +2366,8 @@ class TestAssignedTaskListView:
 
     def test_page_size_param_is_respected(self, organization, org_user_member, opportunity, client):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task = TaskTypeFactory(app=opportunity.deliver_app)
         for _ in range(30):
-            AssignedTaskFactory(task_type=task, opportunity_access=access)
+            AssignedTaskFactory(opportunity_access=access)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2796,12 +2794,7 @@ class TestDeleteTasks:
     @pytest.fixture
     def assigned_tasks(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        return AssignedTaskFactory.create_batch(
-            3,
-            opportunity_access=access,
-            task_type=TaskTypeFactory(app=opportunity.deliver_app),
-            status=AssignedTaskStatus.ASSIGNED,
-        )
+        return AssignedTaskFactory.create_batch(3, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
 
     def _url(self, opportunity):
         return reverse("opportunity:delete_tasks", args=(opportunity.organization.slug, opportunity.opportunity_id))

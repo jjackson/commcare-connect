@@ -383,6 +383,7 @@ class TestAssignedTaskDeleteAndResetHQ:
     def test_skips_hq_when_other_assigned_task_remains(self):
         access = OpportunityAccessFactory()
         task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
+        task_type2 = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
         task_to_delete = AssignedTaskFactory(
             task_type=task_type,
             opportunity_access=access,
@@ -390,7 +391,7 @@ class TestAssignedTaskDeleteAndResetHQ:
             due_date=date.today() + timedelta(days=7),
         )
         AssignedTaskFactory(
-            task_type=task_type,
+            task_type=task_type2,
             opportunity_access=access,
             status=AssignedTaskStatus.ASSIGNED,
             due_date=date.today() + timedelta(days=7),
@@ -405,11 +406,11 @@ class TestAssignedTaskDeleteAndResetHQ:
 
     def test_deduplicates_hq_calls(self):
         access = OpportunityAccessFactory()
-        task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
         due_date = date.today() + timedelta(days=7)
         tasks = AssignedTaskFactory.create_batch(
             2,
-            task_type=task_type,
+            task_type__app=access.opportunity.deliver_app,
+            task_type__case_property="needs_assessment",
             opportunity_access=access,
             status=AssignedTaskStatus.ASSIGNED,
             due_date=due_date,
