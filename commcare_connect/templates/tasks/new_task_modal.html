@@ -6,8 +6,11 @@
 <script src="{% static 'bundles/js/tomselect-bundle.js' %}"></script>
 
 
-<div x-show="{{ modal_name }}" x-cloak x-transition.opacity class="modal-backdrop" role="dialog" aria-modal="true"
+<template x-if="{{ modal_name }}">
+{# The form lives inside an x-if <template>, which htmx's page-load scan ignores. Without htmx.process, hx-post is dead and the form falls back to a native POST. #}
+<div x-transition.opacity class="modal-backdrop" role="dialog" aria-modal="true"
     aria-labelledby="new-task-modal-title"
+    x-init="htmx.process($el)"
     @keydown.escape.window="{{ modal_name }} = false"
     @create-task-success.window="{{ modal_name }} = false">
     <div @click.outside="{{ modal_name }} = false" class="modal">
@@ -49,3 +52,4 @@
         </div>
     </div>
 </div>
+</template>

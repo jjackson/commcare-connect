@@ -108,7 +108,7 @@
             <input type="hidden" name="task_ids" :value="id">
           </template>
         </form>
-        <button type="button" class="button button-md primary-dark" @click="showCreateTaskModal = true">
+        <button type="button" class="button button-md primary-dark" @click.stop="showCreateTaskModal = true">
           <i class="fa-solid fa-plus mr-2"></i>
           {% trans "Create Task" %}
         </button>
