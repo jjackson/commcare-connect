@@ -293,9 +293,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
             self.currently_active = self.instance.active
 
     def add_credential_fields(self, credential_config=None):
-        if credential_config is None and self.instance:
-            credential_config = CredentialConfiguration.objects.filter(opportunity=self.instance).first()
-
         self.fields["enable_credentials"] = forms.BooleanField(
             required=False,
             initial=credential_config is not None,
