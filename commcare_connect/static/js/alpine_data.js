@@ -20,14 +20,3 @@ function resetFilterModalState(formId) {
   };
 }
 window.resetFilterModalState = resetFilterModalState;
-
-// Clears all fields of a modal form (native inputs and tom-select widgets).
-function resetModalForm(formId) {
-  const form = document.getElementById(formId);
-  if (!form) return;
-  form.reset();
-  form.querySelectorAll('[data-tomselect]').forEach((el) => {
-    if (el.tomselect) el.tomselect.clear();
-  });
-}
-window.resetModalForm = resetModalForm;
