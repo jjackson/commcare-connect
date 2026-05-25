@@ -397,6 +397,12 @@ def test_opportunity_delivery_stats(opportunity):
     PaymentFactory(opportunity_access=oa1, date_paid=yesterday, amount=100)
     PaymentFactory(opportunity_access=oa2, date_paid=today, amount=50)
 
+    # active_tasks_count counts AssignedTask rows with status ASSIGNED on this opportunity
+    task_type = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
+    AssignedTaskFactory(opportunity_access=oa1, task_type=task_type, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=oa2, task_type=task_type, status=AssignedTaskStatus.ASSIGNED)
+    AssignedTaskFactory(opportunity_access=oa2, task_type=task_type, status=AssignedTaskStatus.COMPLETED)
+
     result = get_opportunity_delivery_progress(opportunity.id)
 
     assert opportunity.id == result.id
@@ -411,6 +417,7 @@ def test_opportunity_delivery_stats(opportunity):
     assert result.recent_payment == today
     assert result.workers_invited == 3
     assert result.pending_invites == 1
+    assert result.active_tasks_count == 2
 
 
 @pytest.mark.django_db
