@@ -598,9 +598,8 @@ def _filter_worker_tasks(opportunity, filters):
 def test_get_worker_tasks_base_queryset(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    task_type = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
-    AssignedTaskFactory(opportunity_access=access, task_type=task_type)
-    AssignedTaskFactory(opportunity_access=access, task_type=task_type)
+    AssignedTaskFactory(opportunity_access=access)
+    AssignedTaskFactory(opportunity_access=access)
 
     result = list(get_worker_tasks_base_queryset(opportunity))
     assert len(result) == 2
@@ -659,7 +658,7 @@ def test_filter_worker_tasks_by_date_assigned_range(opportunity):
     old_task = AssignedTaskFactory(opportunity_access=access, task_type=task_type)
     AssignedTask.objects.filter(pk=old_task.pk).update(date_created=date.today() - timedelta(days=30))
 
-    AssignedTaskFactory(opportunity_access=access, task_type=task_type)
+    AssignedTaskFactory(opportunity_access=access)
 
     result = _filter_worker_tasks(opportunity, {"date_assigned_from": date.today() - timedelta(days=7)})
     assert len(result) == 1
@@ -669,9 +668,8 @@ def test_filter_worker_tasks_by_date_assigned_range(opportunity):
 def test_filter_worker_tasks_by_due_date_range(opportunity):
     access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
     UserInviteFactory(opportunity=opportunity, opportunity_access=access, status="accepted")
-    task_type = TaskTypeFactory(opportunity=opportunity, app=opportunity.deliver_app, is_active=True)
-    AssignedTaskFactory(opportunity_access=access, task_type=task_type, due_date=date.today() + timedelta(days=1))
-    AssignedTaskFactory(opportunity_access=access, task_type=task_type, due_date=date.today() + timedelta(days=30))
+    AssignedTaskFactory(opportunity_access=access, due_date=date.today() + timedelta(days=1))
+    AssignedTaskFactory(opportunity_access=access, due_date=date.today() + timedelta(days=30))
 
     result = _filter_worker_tasks(opportunity, {"due_date_to": date.today() + timedelta(days=7)})
     assert len(result) == 1
