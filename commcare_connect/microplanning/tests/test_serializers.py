@@ -1,10 +1,8 @@
 import pytest
+from django.contrib.gis.geos import Point
 
-from commcare_connect.microplanning.serializers import (
-    WORK_AREA_CASE_TYPE,
-    WorkAreaCaseSerializer,
-    _coords_to_lat_lon_string,
-)
+from commcare_connect.microplanning.models import SRID
+from commcare_connect.microplanning.serializers import WORK_AREA_CASE_TYPE, WorkAreaCaseSerializer
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 
 
@@ -23,15 +21,10 @@ def test_work_area_case_serializer():
             "lga": "LGA1",
             "state": "State1",
         },
+        centroid=Point(77, 29, srid=SRID),
     )
 
     data = WorkAreaCaseSerializer(work_area).data
-
-    centroid = _coords_to_lat_lon_string(work_area.centroid.coords)
-    bounding_box = ""
-    if work_area.boundary:
-        lat_lon = [_coords_to_lat_lon_string(coords) for coords in list(work_area.boundary.shell.coords)]
-        bounding_box = " ".join(lat_lon)
 
     assert data == {
         "case_name": "my-area",
@@ -39,10 +32,11 @@ def test_work_area_case_serializer():
         "external_id": str(work_area.id),
         "owner_id": None,
         "properties": {
-            "bounding_box": bounding_box,
+            "bounding_box": "28.00000 77.00000 28.00000 78.00000 29.00000"
+            " 78.00000 29.00000 77.00000 28.00000 77.00000",
             "bounding_box_wkt": str(work_area.boundary),
             "building_count": "5",
-            "centroid": centroid,
+            "centroid": "29.00000 77.00000",
             "centroid_wkt": str(work_area.centroid),
             "expected_visit_count": "10",
             "wa_status": work_area.status,
