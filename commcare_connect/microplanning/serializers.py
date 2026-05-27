@@ -31,8 +31,6 @@ class WorkAreaCaseSerializer(serializers.ModelSerializer):
             "ward": obj.ward,
             "work_area_group": getattr(obj.work_area_group, "name", ""),
             "work_area_group_id": str(obj.work_area_group_id) if obj.work_area_group_id else "",
-            "max_wag": str(obj.case_properties.get("max_wag", "")),
-            "wag_serial_number": str(obj.case_properties.get("wag_serial_number", "")),
             "lga": str(obj.case_properties.get("lga", "")),
             "state": str(obj.case_properties.get("state", "")),
         }

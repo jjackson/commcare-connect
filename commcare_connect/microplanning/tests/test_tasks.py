@@ -27,8 +27,6 @@ class TestWorkAreaCSVImporter:
         "Building Count",
         "Expected Visit Count",
         "Target Population",
-        "Max WAG",
-        "WAG Serial Number",
         "LGA",
         "State",
     ]
@@ -54,8 +52,6 @@ class TestWorkAreaCSVImporter:
                     5,
                     "6",
                     "100",
-                    "3",
-                    "WAG123",
                     "LGA1",
                     "State1",
                 ]
@@ -145,8 +141,6 @@ class TestWorkAreaCSVImporter:
             "Ward",
             "Building Count",
             "Target Population",
-            "Max WAG",
-            "WAG Serial Number",
             "State",
             "LGA",
         ]
@@ -159,8 +153,6 @@ class TestWorkAreaCSVImporter:
             "ward-1",
             "5",
             "50",
-            "7",
-            "WAG456",
             "State2",
             "LGA2",
         ]
@@ -183,7 +175,7 @@ class TestWorkAreaCSVImporter:
         result = WorkAreaCSVImporter(opportunity.id, csv).run()
         assert "errors" in result
         error_keys = " ".join(result["errors"].keys()).lower()
-        expected_error = "Missing values for properties: max_wag, wag_serial_number, lga, state"
+        expected_error = "Missing values for properties: lga, state"
         assert expected_error.lower() in error_keys
 
 

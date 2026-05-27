@@ -37,8 +37,6 @@ class WorkAreaCSVImporter:
         "building_count": "Building Count",
         "visit_count": "Expected Visit Count",
         "target_population": "Target Population",
-        "max_wag": "Max WAG",
-        "wag_serial_number": "WAG Serial Number",
         "lga": "LGA",
         "state": "State",
     }
@@ -84,8 +82,6 @@ class WorkAreaCSVImporter:
                     expected_visit_count=visits,
                     target_population=self.get_target_population(row),
                     case_properties={
-                        "max_wag": extra_props.get("max_wag"),
-                        "wag_serial_number": extra_props.get("wag_serial_number"),
                         "lga": extra_props.get("lga"),
                         "state": extra_props.get("state"),
                     },
@@ -170,13 +166,9 @@ class WorkAreaCSVImporter:
         return self._get_int(row, "target_population")
 
     def get_extra_properties(self, row):
-        max_wag = row.get(self.HEADERS.get("max_wag"))
-        wag_serial_number = row.get(self.HEADERS.get("wag_serial_number"))
         lga = row.get(self.HEADERS.get("lga"))
         state = row.get(self.HEADERS.get("state"))
         return {
-            "max_wag": max_wag,
-            "wag_serial_number": wag_serial_number,
             "lga": lga,
             "state": state,
         }
@@ -287,8 +279,6 @@ class WorkAreaCSVExporter:
         "building_count": lambda wa: wa.building_count,
         "visit_count": lambda wa: wa.expected_visit_count,
         "target_population": lambda wa: wa.target_population,
-        "max_wag": lambda wa: (wa.case_properties or {}).get("max_wag", ""),
-        "wag_serial_number": lambda wa: (wa.case_properties or {}).get("wag_serial_number", ""),
         "lga": lambda wa: (wa.case_properties or {}).get("lga", ""),
         "state": lambda wa: (wa.case_properties or {}).get("state", ""),
         "group_name": lambda wa: wa.group_name or "",

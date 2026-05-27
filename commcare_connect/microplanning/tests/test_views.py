@@ -647,7 +647,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             ward="ward-x",
             building_count=10,
             expected_visit_count=5,
-            case_properties={"max_wag": "3", "wag_serial_number": "42", "lga": "LGA1", "state": "State1"},
+            case_properties={"lga": "LGA1", "state": "State1"},
             work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Group A"),
         )
         client.force_login(org_user_admin)
@@ -668,8 +668,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             "10",
             "5",
             "0",
-            "3",
-            "42",
             "LGA1",
             "State1",
             wa.work_area_group.name,
@@ -693,7 +691,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         WorkAreaFactory(opportunity=opportunity, case_properties=None, work_area_group=None)
         client.force_login(org_user_admin)
         row = self._parse_csv(client.get(self.url(opportunity)))[1]
-        assert row[6:] == ["0", "", "", "", "", ""]
+        assert row[6:] == ["0", "", "", ""]
 
     @pytest.mark.parametrize(
         "login_as, method, expected_status",
@@ -764,7 +762,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             building_count=4,
             expected_visit_count=2,
             work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Rev Group"),
-            case_properties={"max_wag": "1", "wag_serial_number": "77", "lga": "RevLGA", "state": "RevState"},
+            case_properties={"lga": "RevLGA", "state": "RevState"},
         )
         client.force_login(org_user_admin)
 
@@ -781,8 +779,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert row_dict["Ward"] == "ward-rev"
         assert row_dict["Building Count"] == "4"
         assert row_dict["Expected Visit Count"] == "2"
-        assert row_dict["Max WAG"] == "1"
-        assert row_dict["WAG Serial Number"] == "77"
         assert row_dict["LGA"] == "RevLGA"
         assert row_dict["State"] == "RevState"
         assert row_dict["Work Area Group Name"] == "Rev Group"
