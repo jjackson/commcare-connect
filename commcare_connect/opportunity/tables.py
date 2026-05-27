@@ -395,7 +395,6 @@ class PaymentReportTable(tables.Table):
 
 class PaymentInvoiceTable(OpportunityContextTable):
     amount = tables.Column(verbose_name="Amount")
-    payment_status = columns.Column(verbose_name="Payment Status", accessor="payment", empty_values=())
     payment_date = columns.Column(verbose_name="Payment Date", accessor="payment", empty_values=(None))
     actions = tables.Column(empty_values=(), orderable=False, verbose_name="Actions")
     exchange_rate = tables.Column(orderable=False, empty_values=(None,), accessor="exchange_rate__rate")
@@ -424,7 +423,6 @@ class PaymentInvoiceTable(OpportunityContextTable):
             "date",
             "invoice_number",
             "status",
-            "payment_status",
             "last_status_modified_at",
             "payment_date",
             "invoice_type",
@@ -445,17 +443,9 @@ class PaymentInvoiceTable(OpportunityContextTable):
         super().__init__(*args, **kwargs)
         self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency_code})"
         self.columns["date"].column.verbose_name = _("Invoice Generation Date")
-        self.columns.hide("payment_status")
 
     def render_exchange_rate(self, value):
         return f"{round(value, 2)} {self.opportunity.currency_code} per USD"
-
-    def render_payment_status(self, record, value):
-        if record.status == InvoiceStatus.ARCHIVED:
-            return "Archived"
-        if value is not None:
-            return "Paid"
-        return "Pending"
 
     def render_payment_date(self, value):
         if value is not None:
