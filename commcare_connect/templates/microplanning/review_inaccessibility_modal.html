@@ -51,6 +51,8 @@
     <form hx-post="{% url 'microplanning:act_on_inaccessibility_request' request.org.slug request.opportunity.opportunity_id work_area.id %}"
           hx-swap="none"
           hx-indicator="#review-submit-spinner"
+          hx-on:htmx:before-request="reviewFormBeforeRequest(this)"
+          hx-on:htmx:after-request="reviewFormAfterRequest(this)"
           hx-on:htmx:response-error="reviewFormResponseError(event)">
         <div class="mt-6 flex justify-between gap-3">
             <button type="button"
