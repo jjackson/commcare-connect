@@ -803,7 +803,12 @@ def unassign_work_areas(request, org_slug, opp_id):
         raw_ids = data["work_area_ids"]
         if not isinstance(raw_ids, list) or not raw_ids:
             raise ValueError
-        work_area_ids = [int(i) for i in raw_ids]
+        # Reject bool/float/str — JSON ints arrive as `int`, anything else is a client bug.
+        if any(type(i) is not int for i in raw_ids):
+            raise ValueError
+        if len(set(raw_ids)) != len(raw_ids):
+            raise ValueError
+        work_area_ids = raw_ids
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return JsonResponse({"error": _("Invalid request body")}, status=400)
 
@@ -819,7 +824,7 @@ def unassign_work_areas(request, org_slug, opp_id):
     return JsonResponse(
         {
             "status": "ok",
-            "unassigned": len(result["unassigned_ids"]),
+            "unassigned_ids": result["unassigned_ids"],
             "skipped": result["skipped"],
             "failed": result["failed"],
         }

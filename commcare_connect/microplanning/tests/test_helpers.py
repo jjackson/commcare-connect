@@ -399,6 +399,23 @@ class TestUnassignWorkAreas:
         assert chunk_sizes == [HQ_BULK_CHUNK_SIZE, HQ_BULK_CHUNK_SIZE, 25]
 
     @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
+    def test_duplicate_ids_are_deduped(self, mock_bulk_hq, org_user_admin, opportunity):
+        """Passing the same work area ID twice should only unassign + HQ-update it once."""
+        access = OpportunityAccessFactory(opportunity=opportunity)
+        wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED)
+
+        res = unassign_work_areas_for_opportunity(
+            opportunity=opportunity,
+            work_area_ids=[wa.id, wa.id, wa.id],
+            user=org_user_admin,
+        )
+
+        assert res["unassigned_ids"] == [wa.id]
+        assert res["skipped"] == 0
+        assert mock_bulk_hq.call_count == 1
+        assert len(mock_bulk_hq.call_args.args[2]) == 1
+
+    @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
     def test_one_failed_chunk_does_not_block_others(self, mock_bulk_hq, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
         count = HQ_BULK_CHUNK_SIZE * 3

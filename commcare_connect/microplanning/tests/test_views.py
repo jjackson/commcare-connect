@@ -1180,7 +1180,12 @@ class TestUnassignWorkAreas:
         )
 
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "unassigned": 2, "skipped": 0, "failed": 0}
+        assert response.json() == {
+            "status": "ok",
+            "unassigned_ids": [wa1.id, wa2.id],
+            "skipped": 0,
+            "failed": 0,
+        }
         mock_unassign.assert_called_once()
         kwargs = mock_unassign.call_args.kwargs
         assert kwargs["opportunity"].pk == managed_opportunity.pk
@@ -1219,7 +1224,7 @@ class TestUnassignWorkAreas:
 
         response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, [wa.id])
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "unassigned": 0, "skipped": 1, "failed": 0}
+        assert response.json() == {"status": "ok", "unassigned_ids": [], "skipped": 1, "failed": 0}
 
     @pytest.mark.parametrize(
         "payload, expected_status",
@@ -1227,8 +1232,11 @@ class TestUnassignWorkAreas:
             ({}, 400),
             ({"work_area_ids": []}, 400),
             ({"work_area_ids": ["abc"]}, 400),
+            ({"work_area_ids": [1.9]}, 400),
+            ({"work_area_ids": [True]}, 400),
+            ({"work_area_ids": [1, 1]}, 400),
         ],
-        ids=["missing_key", "empty_list", "non_int_ids"],
+        ids=["missing_key", "empty_list", "str_ids", "float_ids", "bool_ids", "duplicate_ids"],
     )
     def test_invalid_payload(
         self,

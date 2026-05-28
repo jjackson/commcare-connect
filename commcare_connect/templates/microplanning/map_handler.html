@@ -444,7 +444,10 @@
                     });
                     if (resp.ok) {
                         const data = await resp.json();
-                        for (const id of eligibleIds) {
+                        // Only repaint work areas the server actually unassigned. On partial HQ failure
+                        // the failed IDs stay assigned in DB and must keep their existing status.
+                        const unassignedIds = data.unassigned_ids || [];
+                        for (const id of unassignedIds) {
                             this.map.setFeatureState(
                                 { source: 'workareas', sourceLayer: 'workareas', id },
                                 { status: 'UNASSIGNED' }
@@ -458,7 +461,7 @@
                         this.showUnassignModal = false;
                         this.clearSelection();
                         const msg = data.skipped || data.failed
-                            ? "{% translate 'Unassigned' %} " + data.unassigned + " " + "{% translate 'work area(s).' %}"
+                            ? "{% translate 'Unassigned' %} " + unassignedIds.length + " " + "{% translate 'work area(s).' %}"
                               + (data.skipped ? " " + data.skipped + " " + "{% translate 'skipped.' %}" : "")
                               + (data.failed ? " " + data.failed + " " + "{% translate 'failed.' %}" : "")
                             : "{% translate 'Work area(s) unassigned successfully.' %}";

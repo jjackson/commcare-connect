@@ -92,7 +92,11 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
     skipped = 0
     failed = 0
 
-    work_areas_map = {wa.id: wa for wa in WorkArea.objects.filter(id__in=work_area_ids, opportunity=opportunity)}
+    # Dedupe while preserving order so we don't process or HQ-update the same work area twice.
+    unique_work_area_ids = list(dict.fromkeys(work_area_ids))
+    work_areas_map = {
+        wa.id: wa for wa in WorkArea.objects.filter(id__in=unique_work_area_ids, opportunity=opportunity)
+    }
 
     api_key = opportunity.api_key
     domain = opportunity.deliver_app.cc_domain if opportunity.deliver_app else None
@@ -100,7 +104,7 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
     needs_hq = []
     db_only = []
 
-    for work_area_id in work_area_ids:
+    for work_area_id in unique_work_area_ids:
         work_area = work_areas_map.get(work_area_id)
         if work_area is None or work_area.opportunity_access_id is None or work_area.status == WorkAreaStatus.EXCLUDED:
             skipped += 1
@@ -135,7 +139,7 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
     logger.info(
         "unassign_work_areas_for_opportunity finished opp=%s requested=%d unassigned=%d skipped=%d failed=%d",
         opportunity.id,
-        len(work_area_ids),
+        len(unique_work_area_ids),
         len(unassigned_ids),
         skipped,
         failed,
