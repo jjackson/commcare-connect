@@ -83,3 +83,10 @@ function initReviewInaccessibilityMap() {
 }
 
 initReviewInaccessibilityMap();
+
+function reviewFormResponseError(event) {
+  const el = document.getElementById('review-inaccessibility-error');
+  if (event.detail.xhr.responseText)
+    el.textContent = event.detail.xhr.responseText;
+  el.classList.remove('hidden');
+}
