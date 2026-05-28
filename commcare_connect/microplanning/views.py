@@ -39,7 +39,10 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
-from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
+from commcare_connect.microplanning.helpers import (
+    exclude_work_areas_for_opportunity,
+    unassign_work_areas_for_opportunity,
+)
 from commcare_connect.microplanning.models import (
     WorkArea,
     WorkAreaGroup,
@@ -276,6 +279,10 @@ def _get_assignment_mode_context(request, opportunity):
         ),
         "assignment_save_url": reverse(
             "microplanning:save_assignment",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
+        ),
+        "assignment_unassign_url": reverse(
+            "microplanning:unassign_work_areas",
             kwargs={"org_slug": org_slug, "opp_id": opp_id},
         ),
         "user_visits_url": reverse(
@@ -784,6 +791,39 @@ def save_assignment(request, org_slug, opp_id):
         transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
 
     return JsonResponse({"status": "ok"})
+
+
+@require_POST
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def unassign_work_areas(request, org_slug, opp_id):
+    try:
+        data = json.loads(request.body)
+        raw_ids = data["work_area_ids"]
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ValueError
+        work_area_ids = [int(i) for i in raw_ids]
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"error": _("Invalid request body")}, status=400)
+
+    result = unassign_work_areas_for_opportunity(
+        opportunity=request.opportunity,
+        work_area_ids=work_area_ids,
+        user=request.user,
+    )
+
+    if result["failed"] and not result["unassigned_ids"]:
+        return JsonResponse({"error": _("Failed to sync with CommCare HQ. Please try again.")}, status=502)
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "unassigned": len(result["unassigned_ids"]),
+            "skipped": result["skipped"],
+            "failed": result["failed"],
+        }
+    )
 
 
 @require_GET
