@@ -93,7 +93,7 @@ class TestCreateHqUserAndLink:
 
 @pytest.mark.django_db
 class TestFetchHqUserUuid:
-    def _list_url(self, opportunity, domain, query="?limit=1000"):
+    def _list_url(self, opportunity, domain, query="?limit=200"):
         return f"{opportunity.api_key.hq_server.url}/a/{domain}/api/v0.5/user/{query}"
 
     def test_returns_uuid_when_username_matches(self, opportunity, httpx_mock):
@@ -129,7 +129,7 @@ class TestFetchHqUserUuid:
     def test_follows_pagination_until_match(self, opportunity, httpx_mock):
         domain = "test-domain"
         hq_user_uuid = "uuid-alice"
-        next_path = f"/a/{domain}/api/v0.5/user/?limit=1000&offset=1000"
+        next_path = f"/a/{domain}/api/v0.5/user/?limit=200&offset=200"
         httpx_mock.add_response(
             url=self._list_url(opportunity, domain),
             method="GET",

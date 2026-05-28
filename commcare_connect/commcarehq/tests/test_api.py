@@ -58,9 +58,14 @@ class TestCreateOrUpdateCaseByWorkArea:
         existing_case_id = uuid.uuid4() if has_case_id else None
         work_area = self._make_work_area(case_id=existing_case_id)
         user = work_area.opportunity_access.user
+        domain = work_area.opportunity_access.opportunity.deliver_app.cc_domain
 
         hq_user_uuid = "stored-uuid"
-        ConnectIDUserLink.objects.create(user=user, commcare_username=user.username.lower(), hq_user_uuid=hq_user_uuid)
+        ConnectIDUserLink.objects.create(
+            user=user,
+            commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org",
+            hq_user_uuid=hq_user_uuid,
+        )
         work_area_case = make_commcare_case(case_id=str(existing_case_id or uuid.uuid4()))
 
         with (
@@ -79,7 +84,10 @@ class TestCreateOrUpdateCaseByWorkArea:
     def test_fetches_and_persists_uuid_when_link_has_none(self):
         work_area = self._make_work_area()
         user = work_area.opportunity_access.user
-        link = ConnectIDUserLink.objects.create(user=user, commcare_username=user.username.lower())
+        domain = work_area.opportunity_access.opportunity.deliver_app.cc_domain
+        link = ConnectIDUserLink.objects.create(
+            user=user, commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org"
+        )
 
         fetched_uuid = "fetched-uuid"
         work_area_case = make_commcare_case()
@@ -155,14 +163,15 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
 
         stored_uuid = "stored-uuid"
         fetched_uuid = "fetched-uuid"
+        domain = opportunity.deliver_app.cc_domain
         ConnectIDUserLink.objects.create(
             user=wa_with_stored.opportunity_access.user,
-            commcare_username=wa_with_stored.opportunity_access.user.username.lower(),
+            commcare_username=(f"{wa_with_stored.opportunity_access.user.username.lower()}@{domain}.commcarehq.org"),
             hq_user_uuid=stored_uuid,
         )
         link_to_backfill = ConnectIDUserLink.objects.create(
             user=access_to_fetch.user,
-            commcare_username=access_to_fetch.user.username.lower(),
+            commcare_username=f"{access_to_fetch.user.username.lower()}@{domain}.commcarehq.org",
         )
 
         returned_cases = [make_commcare_case(), make_commcare_case()]
