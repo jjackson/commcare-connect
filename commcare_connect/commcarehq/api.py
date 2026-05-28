@@ -87,7 +87,8 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
 
 
 def _resolve_hq_user_uuid(user, domain, api_key):
-    link = ConnectIDUserLink.objects.filter(commcare_username__startswith=user.username.lower()).first()
+    commcare_username = f"{user.username.lower()}@{domain}.commcarehq.org"
+    link = ConnectIDUserLink.objects.filter(commcare_username=commcare_username).first()
     if link and link.hq_user_uuid:
         return link.hq_user_uuid
     hq_user_uuid = fetch_hq_user_uuid(user.username, domain, api_key)
