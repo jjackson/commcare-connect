@@ -42,7 +42,7 @@ def create_hq_user_and_link(user, domain, opportunity):
 def fetch_hq_user_uuid(commcare_username, domain, api_key):
     hq_username = f"{commcare_username.lower()}@{domain}.commcarehq.org"
     headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
-    next_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/?limit=1000"
+    next_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/?limit=200"
     while next_url:
         response = httpx.get(next_url, headers=headers, timeout=30)
         try:
