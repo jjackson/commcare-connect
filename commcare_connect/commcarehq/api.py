@@ -73,7 +73,7 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     domain = opp_access.opportunity.deliver_app.cc_domain
     user = opp_access.user
     case_data = WorkAreaCaseSerializer(work_area).data
-    case_data["owner_id"] = _get_hq_user_uuid_for_owner(user, domain, api_key)
+    case_data["owner_id"] = _resolve_hq_user_uuid(user, domain, api_key)
 
     with transaction.atomic():
         # Re-fetch with a row-level lock to prevent a race condition where two
@@ -86,15 +86,10 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     return case
 
 
-def _get_hq_user_uuid_for_owner(user, domain, api_key):
+def _resolve_hq_user_uuid(user, domain, api_key):
     link = ConnectIDUserLink.objects.filter(commcare_username=user.username.lower()).first()
-    return _resolve_hq_user_uuid(user, domain, api_key, link)
-
-
-def _resolve_hq_user_uuid(user, domain, api_key, link):
     if link and link.hq_user_uuid:
         return link.hq_user_uuid
-
     hq_user_uuid = fetch_hq_user_uuid(user.username, domain, api_key)
     if hq_user_uuid is None:
         raise CommCareHQAPIException(f"Failed to find HQ user for {user.username.lower()} on {domain} HQ domain.")
@@ -115,12 +110,8 @@ def bulk_create_or_update_cases_by_work_areas(
     domain = opportunity.deliver_app.cc_domain
 
     wa_by_username: dict[str, WorkArea] = {wa.opportunity_access.user.username.lower(): wa for wa in work_areas}
-    links_by_username: dict[str, ConnectIDUserLink] = {
-        link.commcare_username: link
-        for link in ConnectIDUserLink.objects.filter(commcare_username__in=wa_by_username.keys())
-    }
     owner_id_by_username: dict[str, str] = {
-        username: _resolve_hq_user_uuid(wa.opportunity_access.user, domain, api_key, links_by_username.get(username))
+        username: _resolve_hq_user_uuid(wa.opportunity_access.user, domain, api_key)
         for username, wa in wa_by_username.items()
     }
 
