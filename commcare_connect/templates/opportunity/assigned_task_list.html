@@ -61,7 +61,7 @@
         <div id="task-list-table" class="bg-white rounded-lg shadow-xs p-4">
             <div class="flex gap-x-4 items-center justify-end mb-4">
                 {% if can_manage_tasks %}
-                <button type="button" class="button-icon shadow-sm" @click="showCreateTaskModal = true"
+                <button type="button" class="button-icon shadow-sm" @click.stop="showCreateTaskModal = true"
                     x-tooltip.raw="{% trans 'Create Task' %}">
                     <i class="fa-solid fa-plus text-brand-deep-purple"></i>
                 </button>

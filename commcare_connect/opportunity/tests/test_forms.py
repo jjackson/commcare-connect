@@ -22,12 +22,14 @@ from commcare_connect.opportunity.forms import (
     OpportunityUserInviteForm,
 )
 from commcare_connect.opportunity.models import (
+    AssignedTaskStatus,
     CompletedWork,
     CompletedWorkStatus,
     CredentialConfiguration,
     PaymentUnit,
 )
 from commcare_connect.opportunity.tests.factories import (
+    AssignedTaskFactory,
     CommCareAppFactory,
     CompletedWorkFactory,
     ExchangeRateFactory,
@@ -844,6 +846,24 @@ class TestCreateTaskForm:
         assert form.cleaned_data["task"] == task_type
         assert form.cleaned_data["access"] == access
 
+    @pytest.mark.parametrize(
+        "task_status, provide_access, in_queryset",
+        [
+            (AssignedTaskStatus.ASSIGNED, True, False),
+            (AssignedTaskStatus.COMPLETED, True, True),
+            (AssignedTaskStatus.ASSIGNED, False, True),
+        ],
+        ids=["assigned-excluded", "completed-included", "no-access-unfiltered"],
+    )
+    def test_task_queryset_filtering(self, opportunity, task_type, task_status, provide_access, in_queryset):
+        access = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
+        if task_status is not None:
+            AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=task_status)
+        task_queryset = (
+            CreateTaskForm(opportunity=opportunity, access=access if provide_access else None).fields["task"].queryset
+        )
+        assert (task_type in task_queryset) == in_queryset
+
     def test_flw_queryset_filtering(self, opportunity):
         active = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
         unaccepted = OpportunityAccessFactory(opportunity=opportunity, accepted=False, suspended=False)
@@ -929,6 +949,7 @@ class TestAddTaskTypeForm:
         task_type = form.save()
         assert task_type.slug == "task_1"
         assert task_type.app == opportunity.deliver_app
+        assert task_type.opportunity == opportunity
 
 
 @pytest.mark.django_db

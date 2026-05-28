@@ -352,12 +352,12 @@
 
             getAssigneeUserId() {
                 const a = this.assignees.find(a => String(a.id) === String(this.selectedAssigneeId));
-                return a ? a.user_id : '';
+                return a ? a.user__user_id : '';
             },
 
             getFlwSummaryUserId() {
                 const a = this.assignees.find(a => String(a.id) === String(this.flwSummaryAssigneeId));
-                return a ? a.user_id : '';
+                return a ? a.user__user_id : '';
             },
 
             addToQueue() {

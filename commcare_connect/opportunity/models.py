@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import pghistory
 from django.core.validators import MinValueValidator
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Count, F, Q, Sum
 from django.utils.dateparse import parse_datetime
 from django.utils.functional import cached_property
@@ -17,7 +17,7 @@ from waffle import switch_is_active
 
 from commcare_connect.commcarehq.models import HQServer
 from commcare_connect.flags.switch_names import UPDATES_TO_MARK_AS_PAID_WORKFLOW
-from commcare_connect.opportunity.exceptions import ListTooLongError
+from commcare_connect.opportunity.exceptions import ListTooLongError, TaskAlreadyAssignedError
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import User, UserCredential
 from commcare_connect.utils.db import BaseModel, slugify_uniquely
@@ -454,7 +454,12 @@ class AssignedTask(XFormBaseModel):
         constraints = [
             models.UniqueConstraint(
                 fields=["xform_id", "task_type", "opportunity_access"], name="unique_xform_assigned_task"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["task_type", "opportunity_access"],
+                condition=Q(status=AssignedTaskStatus.ASSIGNED),
+                name="unique_assigned_task_type_per_access",
+            ),
         ]
 
     @classmethod
@@ -463,13 +468,16 @@ class AssignedTask(XFormBaseModel):
         from commcare_connect.opportunity.tasks import send_task_assignment_notification
 
         with transaction.atomic():
-            assigned_task = cls.objects.create(
-                task_type=task_type,
-                opportunity_access=opportunity_access,
-                due_date=due_date,
-                status=AssignedTaskStatus.ASSIGNED,
-                assigned_by=assigned_by,
-            )
+            try:
+                assigned_task = cls.objects.create(
+                    task_type=task_type,
+                    opportunity_access=opportunity_access,
+                    status=AssignedTaskStatus.ASSIGNED,
+                    due_date=due_date,
+                    assigned_by=assigned_by,
+                )
+            except IntegrityError:
+                raise TaskAlreadyAssignedError(f"Task type '{task_type}' could not be assigned.")
             case_property = task_type.case_property
             if case_property:
                 bulk_update_usercases({opportunity_access: {"properties": {case_property: "1"}}})
@@ -924,7 +932,7 @@ class UserVisit(XFormBaseModel):
     def duration(self):
         duration = None
         start = self.form_json["metadata"].get("timeStart")
-        end = self.form_json["metatdata"].get("timeEnd")
+        end = self.form_json["metadata"].get("timeEnd")
         if start and end:
             try:
                 duration = parse_datetime(end) - parse_datetime(start)
