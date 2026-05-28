@@ -25,7 +25,9 @@
             showConfirmModal: false,
             showDiscardModal: false,
             showExcludeModal: false,
+            showUnassignModal: false,
             isSaving: false,
+            isUnassigning: false,
             showOnlyUnassigned: false,
             assignees: [],
             workAreaProperties: new Map(),
@@ -36,6 +38,11 @@
                 if (this.excludedWorkAreaIds.has(id)) return true;
                 const status = this.workAreaProperties.get(id)?.status;
                 return status !== undefined && status !== 'NOT_STARTED';
+            },
+
+            cannotUnassign(id) {
+                const status = this.workAreaProperties.get(id)?.status;
+                return status === 'UNASSIGNED' || status === 'EXCLUDED';
             },
 
             openWorkAreaEditModal(workAreaId) {
@@ -416,6 +423,55 @@
                     this.showToast("{% translate 'Failed to save assignment' %}", true);
                 } finally {
                     this.isSaving = false;
+                }
+            },
+
+            async unassignWorkAreas() {
+                const eligibleIds = Array.from(this.selectedWorkAreas).filter(id => !this.cannotUnassign(id));
+                if (eligibleIds.length === 0) {
+                    this.showUnassignModal = false;
+                    return;
+                }
+                this.isUnassigning = true;
+                try {
+                    const resp = await fetch('{{ assignment_unassign_url|escapejs }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}',
+                        },
+                        body: JSON.stringify({ work_area_ids: eligibleIds }),
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        for (const id of eligibleIds) {
+                            this.map.setFeatureState(
+                                { source: 'workareas', sourceLayer: 'workareas', id },
+                                { status: 'UNASSIGNED' }
+                            );
+                            const props = this.workAreaProperties.get(id);
+                            if (props) {
+                                props.status = 'UNASSIGNED';
+                                props.assignee_name = null;
+                            }
+                        }
+                        this.showUnassignModal = false;
+                        this.clearSelection();
+                        const msg = data.skipped || data.failed
+                            ? "{% translate 'Unassigned' %} " + data.unassigned + " " + "{% translate 'work area(s).' %}"
+                              + (data.skipped ? " " + data.skipped + " " + "{% translate 'skipped.' %}" : "")
+                              + (data.failed ? " " + data.failed + " " + "{% translate 'failed.' %}" : "")
+                            : "{% translate 'Work area(s) unassigned successfully.' %}";
+                        this.showToast(msg, !!data.failed);
+                        if (this.flwSummaryAssigneeId) this.updateFlwSummary();
+                    } else {
+                        const data = await resp.json().catch(() => ({}));
+                        this.showToast(data.error || "{% translate 'Failed to unassign work areas' %}", true);
+                    }
+                } catch (e) {
+                    this.showToast("{% translate 'Failed to unassign work areas' %}", true);
+                } finally {
+                    this.isUnassigning = false;
                 }
             },
 

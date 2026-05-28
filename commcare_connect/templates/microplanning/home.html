@@ -266,11 +266,16 @@
                                 <i class="fa-solid fa-circle-info"></i>
                                 {% translate "Only 'Not Started' work areas can be excluded." %}
                             </p>
-                            <button type="button" disabled
-                                title="{% translate 'Unassign Selected Areas will be available in a future update' %}"
-                                class="button button-sm outline-style text-xs opacity-50 cursor-not-allowed">
+                            <button type="button" @click="showUnassignModal = true"
+                                :disabled="selectedWorkAreas.size === 0 || Array.from(selectedWorkAreas).every(id => cannotUnassign(id))"
+                                class="button button-sm outline-style text-xs">
                                 {% translate "Unassign Selected Areas" %}
                             </button>
+                            <p x-show="selectedWorkAreas.size > 0 && Array.from(selectedWorkAreas).every(id => cannotUnassign(id))"
+                               class="text-xs text-amber-600 text-right max-w-48">
+                                <i class="fa-solid fa-circle-info"></i>
+                                {% translate "Only assigned, non-excluded work areas can be unassigned." %}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -477,6 +482,51 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+            </template>
+
+            <!-- Unassign Selected Areas modal -->
+            <template x-if="showUnassignModal">
+            <div @click.self="if (!isUnassigning) showUnassignModal = false" class="modal-backdrop">
+                <div class="modal relative p-6" @click.stop>
+                    <div class="header flex justify-between items-center">
+                        <h2 class="title">{% translate "Unassign Selected Areas" %}</h2>
+                        <button type="button" @click="showUnassignModal = false"
+                                :disabled="isUnassigning"
+                                class="button-icon" aria-label="{% translate 'Close' %}">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-sm mb-3">
+                            {% translate "The previously assigned FLW(s) will lose access to these work areas. Are you sure you want to continue?" %}
+                        </p>
+                        <div class="mt-3 p-4 rounded-lg border bg-blue-50 border-blue-200">
+                            <p class="text-sm text-gray-800">
+                                <span x-text="Array.from(selectedWorkAreas).filter(id => !cannotUnassign(id)).length"></span> {% translate "work area(s) will be unassigned" %}
+                            </p>
+                            <template x-if="Array.from(selectedWorkAreas).some(id => cannotUnassign(id))">
+                                <p class="text-xs text-amber-700 mt-1">
+                                    <i class="fa-solid fa-circle-info"></i>
+                                    <span x-text="Array.from(selectedWorkAreas).filter(id => cannotUnassign(id)).length"></span> {% translate "area(s) are not eligible for unassignment and will be skipped." %}
+                                </p>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="footer flex justify-end gap-2">
+                        <button type="button" @click="showUnassignModal = false"
+                                :disabled="isUnassigning"
+                                class="button button-md outline-style">
+                            {% translate "Cancel" %}
+                        </button>
+                        <button type="button" @click="unassignWorkAreas()"
+                                :disabled="isUnassigning"
+                                class="button button-md negative-dark">
+                            <i x-show="isUnassigning" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            <span x-text="isUnassigning ? '{% translate "Unassigning..." %}' : '{% translate "Unassign" %}'"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
             </template>
