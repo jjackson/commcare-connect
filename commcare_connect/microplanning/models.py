@@ -121,11 +121,7 @@ class WorkAreaInaccessibilityRequest(geo_models.Model):
     additional_details = geo_models.TextField(blank=True, default="")
 
     class Meta:
-        constraints = [
-            geo_models.UniqueConstraint(
-                fields=["xform_id", "work_area"], name="unique_xform_work_area_inaccessibility"
-            )
-        ]
+        constraints = [geo_models.UniqueConstraint(fields=["work_area"], name="unique_work_area_inaccessibility")]
 
     def __str__(self):
         return f"WorkAreaInaccessibilityRequest {self.xform_id} - {self.work_area}"
