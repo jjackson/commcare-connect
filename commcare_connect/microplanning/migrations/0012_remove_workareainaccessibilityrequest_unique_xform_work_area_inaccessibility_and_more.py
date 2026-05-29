@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("microplanning", "0010_workareainaccessibilityrequest_and_more"),
+        ("microplanning", "0011_alter_workarea_status_and_more"),
     ]
 
     operations = [
