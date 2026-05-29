@@ -68,12 +68,12 @@ class TestCreateOrUpdateCaseByWorkArea:
 
     @pytest.mark.parametrize("has_case_id", [False, True])
     def test_uses_stored_hq_user_uuid_when_available(self, has_case_id):
-        existing_case_id = uuid.uuid4() if has_case_id else None
+        existing_case_id = str(uuid.uuid4()) if has_case_id else None
         work_area = self._make_work_area(case_id=existing_case_id)
 
         hq_user_uuid = "stored-uuid"
         self._make_link(work_area, hq_user_uuid=hq_user_uuid)
-        work_area_case = make_commcare_case(case_id=str(existing_case_id or uuid.uuid4()))
+        work_area_case = make_commcare_case(case_id=str(existing_case_id or str(uuid.uuid4())))
 
         with (
             patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid") as mock_fetch,
