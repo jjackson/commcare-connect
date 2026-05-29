@@ -67,7 +67,7 @@ class WorkArea(geo_models.Model):
         choices=WorkAreaStatus.choices,
         default=WorkAreaStatus.UNASSIGNED,
     )
-    case_id = geo_models.UUIDField(null=True, blank=True, unique=True)
+    case_id = geo_models.CharField(max_length=255, unique=True, null=True)
     case_properties = geo_models.JSONField(default=dict, null=True, blank=True)
     excluded_by = geo_models.ForeignKey(
         settings.AUTH_USER_MODEL,
