@@ -322,14 +322,16 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
         additional_details = block.get("additional_details", "")
         location = _parse_xform_location(xform.metadata.location)
 
-        WorkAreaInaccessibilityRequest.objects.create(
+        WorkAreaInaccessibilityRequest.objects.get_or_create(
             work_area=work_area,
-            opportunity_access=access,
-            xform_id=xform.id,
-            date_of_visit=xform.metadata.timeStart.date(),
-            location=location,
-            reason=reason,
-            additional_details=additional_details,
+            defaults={
+                "opportunity_access": access,
+                "xform_id": xform.id,
+                "date_of_visit": xform.metadata.timeStart.date(),
+                "location": location,
+                "reason": reason,
+                "additional_details": additional_details,
+            },
         )
         all_attachments = xform.raw_form.get("attachments", {})
         photo_attachments = {name: meta for name, meta in all_attachments.items() if name == photo_evidence}
