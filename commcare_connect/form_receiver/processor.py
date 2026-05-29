@@ -297,6 +297,9 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
         except WorkArea.DoesNotExist:
             raise ProcessingError("Work area not found")
 
+        if WorkAreaInaccessibilityRequest.objects.filter(work_area=work_area).exists():
+            raise ProcessingError("Only one inaccessibility request per work area")
+
         if work_area.opportunity_access_id != access.id:
             raise ProcessingError("User is not assigned to this work area")
 
@@ -322,16 +325,14 @@ def process_work_area_update(user: User, opportunity: Opportunity, xform: XForm,
         additional_details = block.get("additional_details", "")
         location = _parse_xform_location(xform.metadata.location)
 
-        WorkAreaInaccessibilityRequest.objects.get_or_create(
+        WorkAreaInaccessibilityRequest.objects.create(
             work_area=work_area,
-            defaults={
-                "opportunity_access": access,
-                "xform_id": xform.id,
-                "date_of_visit": xform.metadata.timeStart.date(),
-                "location": location,
-                "reason": reason,
-                "additional_details": additional_details,
-            },
+            opportunity_access=access,
+            xform_id=xform.id,
+            date_of_visit=xform.metadata.timeStart.date(),
+            location=location,
+            reason=reason,
+            additional_details=additional_details,
         )
         all_attachments = xform.raw_form.get("attachments", {})
         photo_attachments = {name: meta for name, meta in all_attachments.items() if name == photo_evidence}
