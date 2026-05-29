@@ -9,7 +9,7 @@ from commcare_connect.microplanning.models import WorkArea
 from commcare_connect.microplanning.serializers import WorkAreaCaseSerializer
 from commcare_connect.opportunity.models import HQApiKey, Opportunity, OpportunityAccess
 from commcare_connect.users.helpers import fetch_hq_user_uuid
-from commcare_connect.users.models import ConnectIDUserLink
+from commcare_connect.users.models import ConnectIDUserLink, User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 HQ_CASE_BULK_CHUNK_SIZE = 100
@@ -86,17 +86,15 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
     return case
 
 
-def _resolve_hq_user_uuid(user, domain, api_key):
-    commcare_username = f"{user.username.lower()}@{domain}.commcarehq.org"
-    link = ConnectIDUserLink.objects.filter(commcare_username=commcare_username).first()
-    if link and link.hq_user_uuid:
+def _resolve_hq_user_uuid(user: User, domain: str, api_key: HQApiKey) -> str:
+    link = ConnectIDUserLink.objects.get(user=user, domain=domain, hq_server=api_key.hq_server)
+    if link.hq_user_uuid:
         return link.hq_user_uuid
-    hq_user_uuid = fetch_hq_user_uuid(user.username, domain, api_key)
+    hq_user_uuid = fetch_hq_user_uuid(link, api_key)
     if hq_user_uuid is None:
         raise CommCareHQAPIException(f"Failed to find HQ user for {user.username.lower()} on {domain} HQ domain.")
-    if link:
-        link.hq_user_uuid = hq_user_uuid
-        link.save(update_fields=["hq_user_uuid"])
+    link.hq_user_uuid = hq_user_uuid
+    link.save(update_fields=["hq_user_uuid"])
     return hq_user_uuid
 
 
