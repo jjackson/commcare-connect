@@ -14,6 +14,7 @@ from commcare_connect.microplanning.const import WORK_AREA_CASE_TYPE
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.tests.factories import HQApiKeyFactory, OpportunityAccessFactory, OpportunityFactory
 from commcare_connect.users.models import ConnectIDUserLink
+from commcare_connect.users.tests.factories import ConnectIdUserLinkFactory
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
 DOMAIN = "test-domain"
@@ -53,19 +54,25 @@ class TestCreateOrUpdateCaseByWorkArea:
             case_id=case_id,
         )
 
+    def _make_link(self, work_area, hq_user_uuid=None):
+        opp_access = work_area.opportunity_access
+        domain = opp_access.opportunity.deliver_app.cc_domain
+        user = opp_access.user
+        return ConnectIdUserLinkFactory(
+            user=user,
+            commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org",
+            domain=domain,
+            hq_server=opp_access.opportunity.api_key.hq_server,
+            hq_user_uuid=hq_user_uuid,
+        )
+
     @pytest.mark.parametrize("has_case_id", [False, True])
     def test_uses_stored_hq_user_uuid_when_available(self, has_case_id):
         existing_case_id = uuid.uuid4() if has_case_id else None
         work_area = self._make_work_area(case_id=existing_case_id)
-        user = work_area.opportunity_access.user
-        domain = work_area.opportunity_access.opportunity.deliver_app.cc_domain
 
         hq_user_uuid = "stored-uuid"
-        ConnectIDUserLink.objects.create(
-            user=user,
-            commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org",
-            hq_user_uuid=hq_user_uuid,
-        )
+        self._make_link(work_area, hq_user_uuid=hq_user_uuid)
         work_area_case = make_commcare_case(case_id=str(existing_case_id or uuid.uuid4()))
 
         with (
@@ -83,11 +90,7 @@ class TestCreateOrUpdateCaseByWorkArea:
 
     def test_fetches_and_persists_uuid_when_link_has_none(self):
         work_area = self._make_work_area()
-        user = work_area.opportunity_access.user
-        domain = work_area.opportunity_access.opportunity.deliver_app.cc_domain
-        link = ConnectIDUserLink.objects.create(
-            user=user, commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org"
-        )
+        link = self._make_link(work_area)
 
         fetched_uuid = "fetched-uuid"
         work_area_case = make_commcare_case()
@@ -106,28 +109,15 @@ class TestCreateOrUpdateCaseByWorkArea:
         link.refresh_from_db()
         assert link.hq_user_uuid == fetched_uuid
 
-    def test_fetches_uuid_when_no_link_exists(self):
+    def test_raises_when_link_does_not_exist(self):
         work_area = self._make_work_area()
-        user = work_area.opportunity_access.user
-        assert not ConnectIDUserLink.objects.filter(user=user).exists()
 
-        fetched_uuid = "fetched-uuid"
-        work_area_case = make_commcare_case()
-
-        with (
-            patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value=fetched_uuid),
-            patch(
-                "commcare_connect.commcarehq.api.create_or_update_case", return_value=work_area_case
-            ) as mock_create_or_update,
-        ):
+        with pytest.raises(ConnectIDUserLink.DoesNotExist):
             create_or_update_case_by_work_area(work_area)
-
-        call_args, _ = mock_create_or_update.call_args
-        assert call_args[2]["owner_id"] == fetched_uuid
-        assert not ConnectIDUserLink.objects.filter(user=user).exists()
 
     def test_raises_when_user_not_found_on_hq(self):
         work_area = self._make_work_area()
+        self._make_link(work_area)
 
         with patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value=None):
             with pytest.raises(CommCareHQAPIException, match="Failed to find HQ user"):
@@ -153,6 +143,16 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
         )
         return opp_access.opportunity, work_area
 
+    def _make_link(self, opportunity, user, hq_user_uuid=None):
+        domain = opportunity.deliver_app.cc_domain
+        return ConnectIdUserLinkFactory(
+            user=user,
+            commcare_username=f"{user.username.lower()}@{domain}.commcarehq.org",
+            domain=domain,
+            hq_server=opportunity.api_key.hq_server,
+            hq_user_uuid=hq_user_uuid,
+        )
+
     def test_uses_stored_uuid_and_fetches_missing(self):
         opportunity, wa_with_stored = self._make_opportunity_with_work_area()
         wa_group = wa_with_stored.work_area_group
@@ -163,16 +163,8 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
 
         stored_uuid = "stored-uuid"
         fetched_uuid = "fetched-uuid"
-        domain = opportunity.deliver_app.cc_domain
-        ConnectIDUserLink.objects.create(
-            user=wa_with_stored.opportunity_access.user,
-            commcare_username=(f"{wa_with_stored.opportunity_access.user.username.lower()}@{domain}.commcarehq.org"),
-            hq_user_uuid=stored_uuid,
-        )
-        link_to_backfill = ConnectIDUserLink.objects.create(
-            user=access_to_fetch.user,
-            commcare_username=f"{access_to_fetch.user.username.lower()}@{domain}.commcarehq.org",
-        )
+        self._make_link(opportunity, wa_with_stored.opportunity_access.user, hq_user_uuid=stored_uuid)
+        link_to_backfill = self._make_link(opportunity, access_to_fetch.user)
 
         returned_cases = [make_commcare_case(), make_commcare_case()]
         with (
@@ -184,7 +176,6 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
             bulk_create_or_update_cases_by_work_areas([wa_with_stored, wa_to_fetch], opportunity)
 
         mock_fetch.assert_called_once()
-        _, kwargs = mock_fetch.call_args
         sent_cases = mock_bulk.call_args[0][2]
         owners_by_external_id = {c["external_id"]: c["owner_id"] for c in sent_cases}
         assert owners_by_external_id[str(wa_with_stored.id)] == stored_uuid
@@ -194,6 +185,7 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
 
     def test_raises_when_user_not_found_on_hq(self):
         opportunity, work_area = self._make_opportunity_with_work_area()
+        self._make_link(opportunity, work_area.opportunity_access.user)
 
         with patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value=None):
             with pytest.raises(CommCareHQAPIException, match="Failed to find HQ user"):
@@ -218,6 +210,8 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
             )
             for _ in range(3)
         ]
+        for wa in work_areas:
+            self._make_link(opportunity, wa.opportunity_access.user, hq_user_uuid="stored-uuid")
 
         # Build HQ response in reversed order to prove ordering is not assumed.
         expected_case_ids = {str(wa.pk): str(uuid.uuid4()) for wa in work_areas}
@@ -226,12 +220,9 @@ class TestBulkCreateOrUpdateCasesByWorkAreas:
             for wa in reversed(work_areas)
         ]
 
-        with (
-            patch("commcare_connect.commcarehq.api.fetch_hq_user_uuid", return_value="fetched-uuid"),
-            patch(
-                "commcare_connect.commcarehq.api.bulk_create_or_update_cases",
-                return_value=returned_cases,
-            ),
+        with patch(
+            "commcare_connect.commcarehq.api.bulk_create_or_update_cases",
+            return_value=returned_cases,
         ):
             bulk_create_or_update_cases_by_work_areas(work_areas, opportunity)
 
