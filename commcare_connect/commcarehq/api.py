@@ -77,15 +77,18 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
         locked_work_area = WorkArea.objects.select_for_update().get(pk=work_area.pk)
         try:
             case = create_or_update_case(api_key, domain, case_data, case_id=locked_work_area.case_id)
-        except CommCareHQAPIException:
+        except CommCareHQAPIException as e:
             # This code only gets triggered when the case_id that we stored was in the wrong UUID Format.
             # HQ sends case_ids in 2 formats UUID (with dashes) and UUID Hex. HQ only accepts the format
             # that it sent initially. Connect was saving all case_ids as UUID (with dashes) and that caused
             # the case update to fail, so this code updates the UUID format to HEX and tries to refetch
             # the case, it also sets case_id to None so it gets updated.
-            case_id = locked_work_area.case_id.replace("-", "")
-            case = create_or_update_case(api_key, domain, case_data, case_id=case_id)
-            locked_work_area.case_id = None
+            if f"Failed to update case data for {domain} with {locked_work_area.case_id}." in str(e):
+                case_id = locked_work_area.case_id.replace("-", "")
+                case = create_or_update_case(api_key, domain, case_data, case_id=case_id)
+                locked_work_area.case_id = None
+            else:
+                raise
 
         if locked_work_area.case_id is None:
             locked_work_area.case_id = case.case_id
