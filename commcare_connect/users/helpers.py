@@ -1,5 +1,6 @@
 import httpx
 
+from commcare_connect.opportunity.models import HQApiKey
 from commcare_connect.organization.models import Organization
 from commcare_connect.users.models import ConnectIDUserLink
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
@@ -39,8 +40,9 @@ def create_hq_user_and_link(user, domain, opportunity):
     return True
 
 
-def fetch_hq_user_uuid(commcare_username, domain, api_key):
-    hq_username = f"{commcare_username.lower()}@{domain}.commcarehq.org"
+def fetch_hq_user_uuid(link: ConnectIDUserLink, api_key: HQApiKey) -> str | None:
+    hq_username = link.commcare_username
+    domain = link.domain
     headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
     next_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/?limit=200"
     while next_url:
