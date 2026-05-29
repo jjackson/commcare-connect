@@ -75,7 +75,18 @@ def create_or_update_case_by_work_area(work_area: WorkArea) -> CommCareCase:
         # Re-fetch with a row-level lock to prevent a race condition where two
         # concurrent calls both see case_id as None
         locked_work_area = WorkArea.objects.select_for_update().get(pk=work_area.pk)
-        case = create_or_update_case(api_key, domain, case_data, case_id=locked_work_area.case_id)
+        try:
+            case = create_or_update_case(api_key, domain, case_data, case_id=locked_work_area.case_id)
+        except CommCareHQAPIException:
+            # This code only gets triggered when the case_id that we stored was in the wrong UUID Format.
+            # HQ sends case_ids in 2 formats UUID (with dashes) and UUID Hex. HQ only accepts the format
+            # that it sent initially. Connect was saving all case_ids as UUID (with dashes) and that caused
+            # the case update to fail, so this code updates the UUID format to HEX and tries to refetch
+            # the case, it also sets case_id to None so it gets updated.
+            case_id = locked_work_area.case_id.replace("-", "")
+            case = create_or_update_case(api_key, domain, case_data, case_id=case_id)
+            locked_work_area.case_id = None
+
         if locked_work_area.case_id is None:
             locked_work_area.case_id = case.case_id
             locked_work_area.save(update_fields=["case_id"])
