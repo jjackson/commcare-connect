@@ -331,6 +331,27 @@
                 return { buildings, visits };
             },
 
+            getSelectedStatsForSummary() {
+                // Live preview of pending changes for the FLW summary. Only count
+                // selected work areas that are NOT already assigned to this FLW.
+                // selectByAssignee() auto-selects the FLW's existing areas (tracked in
+                // flwFilterWorkAreaIds); those are already reflected in flwSummary, so
+                // including them here would double-count buildings/visits/work areas.
+                let buildings = 0;
+                let visits = 0;
+                let workAreas = 0;
+                for (const id of this.selectedWorkAreas) {
+                    if (this.flwFilterWorkAreaIds.has(id)) continue;
+                    const props = this.workAreaProperties.get(id);
+                    if (props) {
+                        buildings += parseInt(props.building_count) || 0;
+                        visits += parseInt(props.expected_visit_count) || 0;
+                    }
+                    workAreas += 1;
+                }
+                return { buildings, visits, workAreas };
+            },
+
             getQueuedStatsForAssignee() {
                 let buildings = 0;
                 let visits = 0;
