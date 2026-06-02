@@ -152,7 +152,7 @@
                 </form>
             </aside>
 
-            <aside id="lower-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
+            <aside id="lower-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0 overflow-auto">
                 {{ status_meta|json_script:"status-meta-data" }}
                 <h2 class="text-lg font-semibold mb-2">{% translate "Select Work Area" %}</h2>
                 <template x-if="!selectedFeature">
