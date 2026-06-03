@@ -36,7 +36,11 @@ from commcare_connect.commcarehq.api import (
 )
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
-from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
+from commcare_connect.microplanning.const import (
+    MAX_EXCLUDE_WORK_AREAS,
+    MAX_UNASSIGN_WORK_AREAS,
+    WORK_AREA_STATUS_COLORS,
+)
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
 from commcare_connect.microplanning.helpers import (
@@ -811,6 +815,13 @@ def unassign_work_areas(request, org_slug, opp_id):
         work_area_ids = raw_ids
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
         return JsonResponse({"error": _("Invalid request body")}, status=400)
+
+    # Unassignment is a synchronous HQ sync; cap the request size to keep it bounded.
+    if len(work_area_ids) > MAX_UNASSIGN_WORK_AREAS:
+        return JsonResponse(
+            {"error": _("Work Area IDs must contain at most %(max)d items") % {"max": MAX_UNASSIGN_WORK_AREAS}},
+            status=400,
+        )
 
     result = unassign_work_areas_for_opportunity(
         opportunity=request.opportunity,

@@ -1264,6 +1264,27 @@ class TestUnassignWorkAreas:
         )
         assert response.status_code == 400
 
+    @patch("commcare_connect.microplanning.views.unassign_work_areas_for_opportunity")
+    def test_too_many_work_area_ids_returns_400(
+        self,
+        mock_unassign,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        from commcare_connect.microplanning.views import MAX_UNASSIGN_WORK_AREAS
+
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id),
+            data=json.dumps({"work_area_ids": list(range(1, MAX_UNASSIGN_WORK_AREAS + 2))}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert str(MAX_UNASSIGN_WORK_AREAS) in response.json()["error"]
+        mock_unassign.assert_not_called()
+
     def test_non_program_manager_blocked(self, client, organization, org_user_admin, managed_opportunity):
         wa = WorkAreaFactory(opportunity=managed_opportunity)
         client.force_login(org_user_admin)
