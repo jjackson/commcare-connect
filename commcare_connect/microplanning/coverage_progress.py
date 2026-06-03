@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.utils.timezone import localdate
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
+from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
 LAST_WEEK_DAYS = 7
 
@@ -31,6 +32,12 @@ class StatusAggregate(TypedDict):
     WAs_evc_reached: int
     Buildings_covered_in_WAs_visited: int
     Buildings_covered_in_WAs_evc_reached: int
+
+
+class VisitsAggregate(TypedDict):
+    """Approved-visit count for one group, as emitted by ``visits_approved_aggregates``."""
+
+    visits_approved: int
 
 
 @dataclass(frozen=True)
@@ -145,3 +152,23 @@ def status_aggregates(opportunity, group_field, window) -> dict[GroupKey, Status
         Buildings_covered_in_WAs_evc_reached=Coalesce(Sum("building_count", filter=evc_filter), 0),
     )
     return {row[group_field]: row for row in rows}
+
+
+def visits_approved_aggregates(opportunity, group_field, window) -> dict[GroupKey, VisitsAggregate]:
+    """Approved-visit counts per group via work_area, dropping EXCLUDED WAs.
+
+    group_field is "ward" or "work_area_group_id"; the join path through work_area
+    is "work_area__<group_field>".
+    """
+    qs = UserVisit.objects.filter(
+        opportunity=opportunity,
+        status=VisitValidationStatus.approved,
+        work_area__isnull=False,
+    ).exclude(work_area__status=WorkAreaStatus.EXCLUDED)
+    if window is not None:
+        start_dt, end_dt = _window_datetime_bounds(window)
+        qs = qs.filter(visit_date__gte=start_dt, visit_date__lt=end_dt)
+
+    group_expr = f"work_area__{group_field}"
+    rows = qs.values(group_expr).annotate(visits_approved=Count("id"))
+    return {row[group_expr]: {group_field: row[group_expr], "visits_approved": row["visits_approved"]} for row in rows}

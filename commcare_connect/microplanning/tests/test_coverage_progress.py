@@ -10,9 +10,12 @@ from commcare_connect.microplanning.coverage_progress import (
     status_aggregates,
     status_event_model,
     target_aggregates,
+    visits_approved_aggregates,
 )
 from commcare_connect.microplanning.models import WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
+from commcare_connect.opportunity.models import VisitValidationStatus
+from commcare_connect.opportunity.tests.factories import UserVisitFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -171,3 +174,37 @@ def test_target_aggregates_by_wag_excludes_excluded(opportunity):
         "num_work_areas": 1,
         "expected_visit_total": 5,
     }
+
+
+def _approved_visit(opportunity, work_area, when):
+    return UserVisitFactory(
+        opportunity=opportunity,
+        work_area=work_area,
+        status=VisitValidationStatus.approved,
+        visit_date=timezone.make_aware(datetime.datetime.combine(when, datetime.time(9, 0))),
+    )
+
+
+def test_visits_approved_overall_excludes_excluded_and_unapproved(opportunity):
+    wa = WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+    excluded = WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.EXCLUDED)
+    _approved_visit(opportunity, wa, datetime.date(2026, 3, 10))
+    _approved_visit(opportunity, wa, datetime.date(2026, 3, 12))
+    _approved_visit(opportunity, excluded, datetime.date(2026, 3, 12))  # dropped: EXCLUDED WA
+    UserVisitFactory(
+        opportunity=opportunity,
+        work_area=wa,
+        status=VisitValidationStatus.pending,
+        visit_date=timezone.make_aware(datetime.datetime(2026, 3, 12, 9, 0)),
+    )  # dropped: not approved
+
+    result = visits_approved_aggregates(opportunity, "ward", window=None)
+    assert result["w1"]["visits_approved"] == 2
+
+
+def test_visits_approved_window_filters_visit_date(opportunity):
+    wa = WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+    _approved_visit(opportunity, wa, datetime.date(2026, 3, 10))
+    _approved_visit(opportunity, wa, datetime.date(2026, 4, 10))
+    window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
+    assert visits_approved_aggregates(opportunity, "ward", window=window)["w1"]["visits_approved"] == 1
