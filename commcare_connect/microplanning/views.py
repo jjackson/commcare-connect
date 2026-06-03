@@ -829,7 +829,7 @@ def unassign_work_areas(request, org_slug, opp_id):
         user=request.user,
     )
 
-    if result["failed"] and not result["unassigned_ids"]:
+    if result["failed_ids"] and not result["unassigned_ids"]:
         return JsonResponse({"error": _("Failed to sync with CommCare HQ. Please try again.")}, status=502)
 
     return JsonResponse(
@@ -837,7 +837,7 @@ def unassign_work_areas(request, org_slug, opp_id):
             "status": "ok",
             "unassigned_ids": result["unassigned_ids"],
             "skipped": result["skipped"],
-            "failed": result["failed"],
+            "failed_ids": result["failed_ids"],
         }
     )
 

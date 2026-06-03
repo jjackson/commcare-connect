@@ -224,7 +224,7 @@ class TestUnassignWorkAreas:
             2,
             opportunity=opportunity,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
             work_area_group=group,
         )
 
@@ -235,7 +235,7 @@ class TestUnassignWorkAreas:
         )
         assert set(res["unassigned_ids"]) == {wa.id for wa in work_areas}
         assert res["skipped"] == 0
-        assert res["failed"] == 0
+        assert res["failed_ids"] == []
 
         for wa in work_areas:
             wa.refresh_from_db()
@@ -283,15 +283,15 @@ class TestUnassignWorkAreas:
         mock_bulk_hq.assert_not_called()
 
     @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
-    def test_only_not_started_assigned_areas_are_unassigned(self, mock_bulk_hq, org_user_admin, opportunity):
+    def test_only_not_visited_assigned_areas_are_unassigned(self, mock_bulk_hq, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        wa_not_started = WorkAreaFactory(
-            opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED
-        )
         wa_not_visited = WorkAreaFactory(
             opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
         )
         wa_visited = WorkAreaFactory(opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.VISITED)
+        wa_reached = WorkAreaFactory(
+            opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.EXPECTED_VISIT_REACHED
+        )
         wa_unassigned = WorkAreaFactory(
             opportunity=opportunity, opportunity_access=None, status=WorkAreaStatus.UNASSIGNED
         )
@@ -301,20 +301,20 @@ class TestUnassignWorkAreas:
 
         res = unassign_work_areas_for_opportunity(
             opportunity=opportunity,
-            work_area_ids=[wa_not_started.id, wa_not_visited.id, wa_visited.id, wa_unassigned.id, wa_excluded.id],
+            work_area_ids=[wa_not_visited.id, wa_visited.id, wa_reached.id, wa_unassigned.id, wa_excluded.id],
             user=org_user_admin,
         )
-        # Only the not-started assigned area is unassigned; started/terminal areas are skipped.
-        assert res["unassigned_ids"] == [wa_not_started.id]
+        # Only the assigned, not-yet-visited area is unassigned; started/terminal areas are skipped.
+        assert res["unassigned_ids"] == [wa_not_visited.id]
         assert res["skipped"] == 4
 
-        wa_not_started.refresh_from_db()
-        assert wa_not_started.status == WorkAreaStatus.UNASSIGNED
-        assert wa_not_started.opportunity_access is None
+        wa_not_visited.refresh_from_db()
+        assert wa_not_visited.status == WorkAreaStatus.UNASSIGNED
+        assert wa_not_visited.opportunity_access is None
 
         for wa, expected_status in [
-            (wa_not_visited, WorkAreaStatus.NOT_VISITED),
             (wa_visited, WorkAreaStatus.VISITED),
+            (wa_reached, WorkAreaStatus.EXPECTED_VISIT_REACHED),
         ]:
             wa.refresh_from_db()
             assert wa.status == expected_status
@@ -327,7 +327,7 @@ class TestUnassignWorkAreas:
             2,
             opportunity=opportunity,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
         )
         mock_bulk_hq.side_effect = CommCareHQAPIException("HQ down")
 
@@ -337,11 +337,11 @@ class TestUnassignWorkAreas:
             user=org_user_admin,
         )
         assert res["unassigned_ids"] == []
-        assert res["failed"] == 2
+        assert set(res["failed_ids"]) == {wa.id for wa in work_areas}
 
         for wa in work_areas:
             wa.refresh_from_db()
-            assert wa.status == WorkAreaStatus.NOT_STARTED
+            assert wa.status == WorkAreaStatus.NOT_VISITED
             assert wa.opportunity_access == access
 
     @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
@@ -350,7 +350,7 @@ class TestUnassignWorkAreas:
         wa = WorkAreaFactory(
             opportunity=opportunity,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
             case_id=None,
         )
 
@@ -371,7 +371,7 @@ class TestUnassignWorkAreas:
         other_wa = WorkAreaFactory(
             opportunity=other_access.opportunity,
             opportunity_access=other_access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
         )
 
         unassign_work_areas_for_opportunity(
@@ -381,7 +381,7 @@ class TestUnassignWorkAreas:
         )
 
         other_wa.refresh_from_db()
-        assert other_wa.status == WorkAreaStatus.NOT_STARTED
+        assert other_wa.status == WorkAreaStatus.NOT_VISITED
         assert other_wa.opportunity_access == other_access
         mock_bulk_hq.assert_not_called()
 
@@ -395,7 +395,7 @@ class TestUnassignWorkAreas:
             count,
             opportunity=opportunity,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
         )
 
         unassign_work_areas_for_opportunity(
@@ -412,7 +412,7 @@ class TestUnassignWorkAreas:
     def test_duplicate_ids_are_deduped(self, mock_bulk_hq, org_user_admin, opportunity):
         """Passing the same work area ID twice should only unassign + HQ-update it once."""
         access = OpportunityAccessFactory(opportunity=opportunity)
-        wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED)
+        wa = WorkAreaFactory(opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED)
 
         res = unassign_work_areas_for_opportunity(
             opportunity=opportunity,
@@ -427,8 +427,8 @@ class TestUnassignWorkAreas:
 
     @patch("commcare_connect.microplanning.helpers.HQ_UNASSIGN_BULK_CHUNK_SIZE", 50)
     @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
-    def test_hq_failure_rolls_back_all_unassignments(self, mock_bulk_hq, org_user_admin, opportunity):
-        """A single HQ batch failure must roll back every unassignment (all-or-nothing)."""
+    def test_failed_batch_does_not_block_other_batches(self, mock_bulk_hq, org_user_admin, opportunity):
+        """A failed HQ batch rolls back only its own chunk; other batches still succeed."""
         chunk_size = 50
         access = OpportunityAccessFactory(opportunity=opportunity)
         count = chunk_size * 3
@@ -436,8 +436,9 @@ class TestUnassignWorkAreas:
             count,
             opportunity=opportunity,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
         )
+        # Second of three chunks fails; the first and third commit independently.
         mock_bulk_hq.side_effect = [None, CommCareHQAPIException("HQ down"), None]
 
         result = unassign_work_areas_for_opportunity(
@@ -446,10 +447,14 @@ class TestUnassignWorkAreas:
             user=org_user_admin,
         )
 
+        assert len(result["unassigned_ids"]) == 2 * chunk_size
+        assert len(result["failed_ids"]) == chunk_size
+        # The failed batch's areas stay assigned; nothing leaks between the success/failure sets.
+        assert set(result["unassigned_ids"]).isdisjoint(result["failed_ids"])
+
         for wa in work_areas:
             wa.refresh_from_db()
-
-        assert all(wa.status == WorkAreaStatus.NOT_STARTED for wa in work_areas)
-        assert all(wa.opportunity_access == access for wa in work_areas)
-        assert result["unassigned_ids"] == []
-        assert result["failed"] == count
+        unassigned = {wa.id for wa in work_areas if wa.status == WorkAreaStatus.UNASSIGNED}
+        still_assigned = {wa.id for wa in work_areas if wa.status == WorkAreaStatus.NOT_VISITED}
+        assert unassigned == set(result["unassigned_ids"])
+        assert still_assigned == set(result["failed_ids"])

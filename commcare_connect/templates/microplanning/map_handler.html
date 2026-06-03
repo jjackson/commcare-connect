@@ -42,7 +42,7 @@
 
             cannotUnassign(id) {
                 const status = this.workAreaProperties.get(id)?.status;
-                return status !== undefined && status !== 'NOT_STARTED';
+                return status !== undefined && status !== 'NOT_VISITED';
             },
 
             openWorkAreaEditModal(workAreaId) {
@@ -466,9 +466,10 @@
                     });
                     if (resp.ok) {
                         const data = await resp.json();
-                        // Only repaint work areas the server actually unassigned. On partial HQ failure
-                        // the failed IDs stay assigned in DB and must keep their existing status.
+                        // Only repaint work areas the server actually unassigned. On a partial HQ
+                        // failure the failed IDs stay assigned in DB and must keep their existing status.
                         const unassignedIds = data.unassigned_ids || [];
+                        const failedIds = data.failed_ids || [];
                         for (const id of unassignedIds) {
                             this.map.setFeatureState(
                                 { source: 'workareas', sourceLayer: 'workareas', id },
@@ -481,13 +482,22 @@
                             }
                         }
                         this.showUnassignModal = false;
+                        // Clear the selection, then re-select any failed areas so they stay highlighted
+                        // on the map for the user to inspect and retry.
                         this.clearSelection();
-                        const msg = data.skipped || data.failed
+                        for (const id of failedIds) {
+                            this.selectedWorkAreas.add(id);
+                            this.map.setFeatureState(
+                                { source: 'workareas', sourceLayer: 'workareas', id },
+                                { assignment_selected: true }
+                            );
+                        }
+                        const msg = data.skipped || failedIds.length
                             ? "{% translate 'Unassigned' %} " + unassignedIds.length + " " + "{% translate 'work area(s).' %}"
                               + (data.skipped ? " " + data.skipped + " " + "{% translate 'skipped.' %}" : "")
-                              + (data.failed ? " " + data.failed + " " + "{% translate 'failed.' %}" : "")
+                              + (failedIds.length ? " " + failedIds.length + " " + "{% translate 'failed to sync and remain selected for retry.' %}" : "")
                             : "{% translate 'Work area(s) unassigned successfully.' %}";
-                        this.showToast(msg, !!data.failed);
+                        this.showToast(msg, failedIds.length > 0);
                         if (this.flwSummaryAssigneeId) this.updateFlwSummary();
                     } else {
                         const data = await resp.json().catch(() => ({}));

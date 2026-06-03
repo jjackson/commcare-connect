@@ -1163,12 +1163,12 @@ class TestUnassignWorkAreas:
     ):
         access = OpportunityAccessFactory(opportunity=managed_opportunity)
         wa1 = WorkAreaFactory(
-            opportunity=managed_opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED
+            opportunity=managed_opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
         )
         wa2 = WorkAreaFactory(
             opportunity=managed_opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
         )
-        mock_unassign.return_value = {"unassigned_ids": [wa1.id, wa2.id], "skipped": 0, "failed": 0}
+        mock_unassign.return_value = {"unassigned_ids": [wa1.id, wa2.id], "skipped": 0, "failed_ids": []}
         client.force_login(program_manager_org_user_admin)
 
         response = self._post(
@@ -1183,7 +1183,7 @@ class TestUnassignWorkAreas:
             "status": "ok",
             "unassigned_ids": [wa1.id, wa2.id],
             "skipped": 0,
-            "failed": 0,
+            "failed_ids": [],
         }
         mock_unassign.assert_called_once()
         kwargs = mock_unassign.call_args.kwargs
@@ -1201,7 +1201,7 @@ class TestUnassignWorkAreas:
         managed_opportunity,
     ):
         wa = WorkAreaFactory(opportunity=managed_opportunity)
-        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 0, "failed": 1}
+        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 0, "failed_ids": [wa.id]}
         client.force_login(program_manager_org_user_admin)
 
         response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, [wa.id])
@@ -1218,12 +1218,12 @@ class TestUnassignWorkAreas:
         managed_opportunity,
     ):
         wa = WorkAreaFactory(opportunity=managed_opportunity)
-        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 1, "failed": 0}
+        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 1, "failed_ids": []}
         client.force_login(program_manager_org_user_admin)
 
         response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, [wa.id])
         assert response.status_code == 200
-        assert response.json() == {"status": "ok", "unassigned_ids": [], "skipped": 1, "failed": 0}
+        assert response.json() == {"status": "ok", "unassigned_ids": [], "skipped": 1, "failed_ids": []}
 
     @pytest.mark.parametrize(
         "payload, expected_status",

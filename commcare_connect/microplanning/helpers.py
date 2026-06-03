@@ -86,10 +86,12 @@ def _bulk_exclude(work_areas, user, exclusion_reason):
 
 def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
     """Unassign work areas and set their HQ case owner_id to '-'.
-    The whole operation runs in a single transaction: HQ calls are batched by
-    HQ_UNASSIGN_BULK_CHUNK_SIZE, and if any batch fails the DB changes roll back so
-    the caller never sees a partial (some-but-not-all) unassignment.
+    HQ calls are batched by HQ_UNASSIGN_BULK_CHUNK_SIZE and each batch commits in its own
+    transaction, so a batch failure rolls back only that batch (its IDs are returned in
+    `failed_ids`) while the other batches still succeed.
     """
+    unassigned_ids = []
+    failed_ids = []
     skipped = 0
 
     # Dedupe while preserving order so we don't process or HQ-update the same work area twice.
@@ -106,12 +108,12 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
 
     for work_area_id in unique_work_area_ids:
         work_area = work_areas_map.get(work_area_id)
-        # Only assigned, not-yet-started areas can be unassigned; anything that's progressed
-        # (NOT_VISITED, VISITED, INACCESSIBLE, …) or is already unassigned/excluded is skipped.
+        # Only assigned, not-yet-visited areas can be unassigned; anything that's progressed
+        # (VISITED, INACCESSIBLE, …) or is already unassigned/excluded is skipped.
         if (
             work_area is None
             or work_area.opportunity_access_id is None
-            or work_area.status != WorkAreaStatus.NOT_STARTED
+            or work_area.status != WorkAreaStatus.NOT_VISITED
         ):
             skipped += 1
             continue
@@ -122,23 +124,25 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
             db_only.append(work_area)
 
     pghistory_ctx = dict(reason="unassigned", username=user.username, user_email=user.email)
-    to_unassign = needs_hq + db_only
 
-    try:
-        with transaction.atomic(), pghistory.context(**pghistory_ctx):
-            _bulk_unassign(to_unassign)
-            for chunk in batched(needs_hq, HQ_UNASSIGN_BULK_CHUNK_SIZE):
-                # HQ's "unassigned" convention is "-"; empty string falls back to the submitting user.
-                updates = [{"case_id": str(wa.case_id), "owner_id": "-", "create": False} for wa in chunk]
+    for chunk in batched(needs_hq, HQ_UNASSIGN_BULK_CHUNK_SIZE):
+        # HQ's "unassigned" convention is "-"; empty string falls back to the submitting user.
+        updates = [{"case_id": str(wa.case_id), "owner_id": "-", "create": False} for wa in chunk]
+        try:
+            with transaction.atomic(), pghistory.context(**pghistory_ctx):
+                _bulk_unassign(chunk)
                 bulk_create_or_update_cases(api_key, domain, updates)
-    except CommCareHQAPIException as e:
-        # All-or-nothing: a failed HQ batch rolls back every DB change above.
-        logger.warning("Failed to unassign HQ cases (count=%d): %s", len(needs_hq), e)
-        unassigned_ids = []
-        failed = len(to_unassign)
-    else:
-        unassigned_ids = [wa.id for wa in to_unassign]
-        failed = 0
+        except CommCareHQAPIException as e:
+            # Per-batch transaction: a failed HQ batch rolls back only this chunk's DB changes.
+            logger.warning("Failed to unassign HQ case chunk (size=%d): %s", len(chunk), e)
+            failed_ids.extend(wa.id for wa in chunk)
+            continue
+        unassigned_ids.extend(wa.id for wa in chunk)
+
+    if db_only:
+        with transaction.atomic(), pghistory.context(**pghistory_ctx):
+            _bulk_unassign(db_only)
+        unassigned_ids.extend(wa.id for wa in db_only)
 
     logger.info(
         "unassign_work_areas_for_opportunity finished opp=%s requested=%d unassigned=%d skipped=%d failed=%d",
@@ -146,9 +150,9 @@ def unassign_work_areas_for_opportunity(opportunity, work_area_ids, user):
         len(unique_work_area_ids),
         len(unassigned_ids),
         skipped,
-        failed,
+        len(failed_ids),
     )
-    return {"unassigned_ids": unassigned_ids, "skipped": skipped, "failed": failed}
+    return {"unassigned_ids": unassigned_ids, "skipped": skipped, "failed_ids": failed_ids}
 
 
 def _bulk_unassign(work_areas):
