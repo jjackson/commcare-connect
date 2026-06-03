@@ -591,7 +591,9 @@ def exclude_work_areas(request, org_slug, opp_id):
         exclusion_reason=exclusion_reason,
     )
     response = HttpResponse('<div id="exclude-progress"></div>')
-    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": result["excluded_ids"]}})
+    response.headers["HX-Trigger"] = json.dumps(
+        {"work_areas_excluded": {"excluded": result["excluded_ids"], "skipped": result["skipped"]}}
+    )
     return response
 
 
