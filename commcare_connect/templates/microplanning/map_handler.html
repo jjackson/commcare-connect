@@ -42,7 +42,7 @@
 
             cannotUnassign(id) {
                 const status = this.workAreaProperties.get(id)?.status;
-                return status === 'UNASSIGNED' || status === 'EXCLUDED';
+                return status !== undefined && status !== 'NOT_STARTED';
             },
 
             openWorkAreaEditModal(workAreaId) {
@@ -430,6 +430,7 @@
                 const eligibleIds = Array.from(this.selectedWorkAreas).filter(id => !this.cannotUnassign(id));
                 if (eligibleIds.length === 0) {
                     this.showUnassignModal = false;
+                    this.showToast("{% translate 'No eligible work areas to unassign.' %}");
                     return;
                 }
                 this.isUnassigning = true;
