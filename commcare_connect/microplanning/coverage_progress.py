@@ -114,7 +114,7 @@ def _window_datetime_bounds(window):
     return start_dt, end_dt
 
 
-def target_aggregates(opportunity, group_field) -> dict[GroupKey, TargetAggregate]:
+def get_target_aggregates(opportunity, group_field) -> dict[GroupKey, TargetAggregate]:
     """Static, filter-independent denominators grouped by ward or work_area_group_id."""
     rows = (
         non_excluded_workareas(opportunity)
@@ -129,7 +129,7 @@ def target_aggregates(opportunity, group_field) -> dict[GroupKey, TargetAggregat
     return {row[group_field]: row for row in rows}
 
 
-def status_aggregates(opportunity, group_field, window) -> dict[GroupKey, StatusAggregate]:
+def get_status_aggregates(opportunity, group_field, window) -> dict[GroupKey, StatusAggregate]:
     """WA-status counts + building sums per group, strict on current status.
 
     window=None -> Overall (all current-status WAs). A window applies the
@@ -156,7 +156,7 @@ def status_aggregates(opportunity, group_field, window) -> dict[GroupKey, Status
     return {row[group_field]: row for row in rows}
 
 
-def visits_approved_aggregates(opportunity, group_field, window) -> dict[GroupKey, VisitsAggregate]:
+def get_visits_approved_aggregates(opportunity, group_field, window) -> dict[GroupKey, VisitsAggregate]:
     """Approved-visit counts per group via work_area, dropping EXCLUDED WAs.
 
     group_field is "ward" or "work_area_group_id"; the join path through work_area
@@ -239,8 +239,8 @@ def _get_or_compute(key, compute):
 def _static_slot(opportunity):
     def compute():
         return {
-            "ward": target_aggregates(opportunity, "ward"),
-            "wag": target_aggregates(opportunity, "work_area_group_id"),
+            "ward": get_target_aggregates(opportunity, "ward"),
+            "wag": get_target_aggregates(opportunity, "work_area_group_id"),
             "wag_display": _wag_display_lookup(opportunity),
         }
 
@@ -251,10 +251,10 @@ def _last_week_slot(opportunity):
     def compute():
         window = last_week_window()
         return {
-            "ward_status": status_aggregates(opportunity, "ward", window=window),
-            "ward_visits": visits_approved_aggregates(opportunity, "ward", window=window),
-            "wag_status": status_aggregates(opportunity, "work_area_group_id", window=window),
-            "wag_visits": visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
+            "ward_status": get_status_aggregates(opportunity, "ward", window=window),
+            "ward_visits": get_visits_approved_aggregates(opportunity, "ward", window=window),
+            "wag_status": get_status_aggregates(opportunity, "work_area_group_id", window=window),
+            "wag_visits": get_visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
         }
 
     return _get_or_compute(f"coverage:last_week:opp={opportunity.id}", compute)
@@ -262,10 +262,10 @@ def _last_week_slot(opportunity):
 
 def _compute_filtered(opportunity, window):
     return {
-        "ward_status": status_aggregates(opportunity, "ward", window=window),
-        "ward_visits": visits_approved_aggregates(opportunity, "ward", window=window),
-        "wag_status": status_aggregates(opportunity, "work_area_group_id", window=window),
-        "wag_visits": visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
+        "ward_status": get_status_aggregates(opportunity, "ward", window=window),
+        "ward_visits": get_visits_approved_aggregates(opportunity, "ward", window=window),
+        "wag_status": get_status_aggregates(opportunity, "work_area_group_id", window=window),
+        "wag_visits": get_visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
     }
 
 

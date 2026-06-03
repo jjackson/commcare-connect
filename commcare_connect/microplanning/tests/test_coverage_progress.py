@@ -12,11 +12,11 @@ from commcare_connect.microplanning.coverage_progress import (
     annotate_status_timestamps,
     build_wag_rows,
     build_ward_rows,
+    get_status_aggregates,
+    get_target_aggregates,
+    get_visits_approved_aggregates,
     non_excluded_workareas,
-    status_aggregates,
     status_event_model,
-    target_aggregates,
-    visits_approved_aggregates,
     ward_saturation_goal,
 )
 from commcare_connect.microplanning.models import WorkAreaStatus
@@ -73,7 +73,7 @@ def test_status_aggregates_overall_strict_and_exclusive(opportunity):
     WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.NOT_VISITED, building_count=3)
     WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.EXCLUDED, building_count=99)
 
-    result = status_aggregates(opportunity, "ward", window=None)
+    result = get_status_aggregates(opportunity, "ward", window=None)
 
     assert result["w1"]["WAs_visited"] == 1
     assert result["w1"]["WAs_evc_reached"] == 1
@@ -87,8 +87,8 @@ def test_status_aggregates_window_filters_by_transition_date(opportunity):
     in_window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
     out_window = (datetime.date(2026, 4, 1), datetime.date(2026, 4, 30))
 
-    assert status_aggregates(opportunity, "ward", window=in_window)["w1"]["WAs_visited"] == 1
-    assert status_aggregates(opportunity, "ward", window=out_window).get("w1", {}).get("WAs_visited", 0) == 0
+    assert get_status_aggregates(opportunity, "ward", window=in_window)["w1"]["WAs_visited"] == 1
+    assert get_status_aggregates(opportunity, "ward", window=out_window).get("w1", {}).get("WAs_visited", 0) == 0
 
 
 def test_status_aggregates_window_filters_by_transition_date_for_wag(opportunity):
@@ -100,8 +100,8 @@ def test_status_aggregates_window_filters_by_transition_date_for_wag(opportunity
     in_window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
     out_window = (datetime.date(2026, 4, 1), datetime.date(2026, 4, 30))
 
-    in_result = status_aggregates(opportunity, "work_area_group_id", window=in_window)
-    out_result = status_aggregates(opportunity, "work_area_group_id", window=out_window)
+    in_result = get_status_aggregates(opportunity, "work_area_group_id", window=in_window)
+    out_result = get_status_aggregates(opportunity, "work_area_group_id", window=out_window)
     assert in_result[group.id]["WAs_visited"] == 1
     assert out_result.get(group.id, {}).get("WAs_visited", 0) == 0
 
@@ -140,7 +140,7 @@ def test_target_aggregates_by_ward_excludes_excluded(opportunity):
         expected_visit_count=1,
     )
 
-    result = target_aggregates(opportunity, "ward")
+    result = get_target_aggregates(opportunity, "ward")
 
     assert result["w1"] == {
         "ward": "w1",
@@ -172,7 +172,7 @@ def test_target_aggregates_by_wag_excludes_excluded(opportunity):
         expected_visit_count=99,
     )
 
-    result = target_aggregates(opportunity, "work_area_group_id")
+    result = get_target_aggregates(opportunity, "work_area_group_id")
 
     assert result[group.id] == {
         "work_area_group_id": group.id,
@@ -205,7 +205,7 @@ def test_visits_approved_overall_excludes_excluded_and_unapproved(opportunity):
         visit_date=timezone.make_aware(datetime.datetime(2026, 3, 12, 9, 0)),
     )  # dropped: not approved
 
-    result = visits_approved_aggregates(opportunity, "ward", window=None)
+    result = get_visits_approved_aggregates(opportunity, "ward", window=None)
     assert result["w1"]["visits_approved"] == 2
 
 
@@ -214,7 +214,7 @@ def test_visits_approved_window_filters_visit_date(opportunity):
     _approved_visit(opportunity, wa, datetime.date(2026, 3, 10))
     _approved_visit(opportunity, wa, datetime.date(2026, 4, 10))
     window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
-    assert visits_approved_aggregates(opportunity, "ward", window=window)["w1"]["visits_approved"] == 1
+    assert get_visits_approved_aggregates(opportunity, "ward", window=window)["w1"]["visits_approved"] == 1
 
 
 def test_build_ward_rows_merges_and_derives():
