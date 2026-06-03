@@ -7,10 +7,11 @@ from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
     annotate_status_timestamps,
     non_excluded_workareas,
+    status_aggregates,
     status_event_model,
 )
 from commcare_connect.microplanning.models import WorkAreaStatus
-from commcare_connect.microplanning.tests.factories import WorkAreaFactory
+from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -53,3 +54,42 @@ def test_annotate_status_timestamps_uses_earliest_transition(opportunity):
     annotated = annotate_status_timestamps(non_excluded_workareas(opportunity)).get(pk=wa.pk)
     assert annotated.visited_at == early
     assert annotated.evc_reached_at == late
+
+
+def test_status_aggregates_overall_strict_and_exclusive(opportunity):
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED, building_count=10)
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.EXPECTED_VISIT_REACHED, building_count=7)
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.NOT_VISITED, building_count=3)
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.EXCLUDED, building_count=99)
+
+    result = status_aggregates(opportunity, "ward", window=None)
+
+    assert result["w1"]["WAs_visited"] == 1
+    assert result["w1"]["WAs_evc_reached"] == 1
+    assert result["w1"]["Buildings_covered_in_WAs_visited"] == 10
+    assert result["w1"]["Buildings_covered_in_WAs_evc_reached"] == 7
+
+
+def test_status_aggregates_window_filters_by_transition_date(opportunity):
+    wa = WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED, building_count=10)
+    _stamp_transition(wa, WorkAreaStatus.VISITED, timezone.make_aware(datetime.datetime(2026, 3, 15, 9, 0)))
+    in_window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
+    out_window = (datetime.date(2026, 4, 1), datetime.date(2026, 4, 30))
+
+    assert status_aggregates(opportunity, "ward", window=in_window)["w1"]["WAs_visited"] == 1
+    assert status_aggregates(opportunity, "ward", window=out_window).get("w1", {}).get("WAs_visited", 0) == 0
+
+
+def test_status_aggregates_window_filters_by_transition_date_for_wag(opportunity):
+    group = WorkAreaGroupFactory(opportunity=opportunity)
+    wa = WorkAreaFactory(
+        opportunity=opportunity, work_area_group=group, status=WorkAreaStatus.VISITED, building_count=10
+    )
+    _stamp_transition(wa, WorkAreaStatus.VISITED, timezone.make_aware(datetime.datetime(2026, 3, 15, 9, 0)))
+    in_window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
+    out_window = (datetime.date(2026, 4, 1), datetime.date(2026, 4, 30))
+
+    in_result = status_aggregates(opportunity, "work_area_group_id", window=in_window)
+    out_result = status_aggregates(opportunity, "work_area_group_id", window=out_window)
+    assert in_result[group.id]["WAs_visited"] == 1
+    assert out_result.get(group.id, {}).get("WAs_visited", 0) == 0

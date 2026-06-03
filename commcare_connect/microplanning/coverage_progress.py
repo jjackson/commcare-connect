@@ -1,12 +1,27 @@
 import datetime
 from dataclasses import dataclass
+from typing import TypedDict
 
-from django.db.models import Min, OuterRef, Subquery
+from django.db.models import Count, Min, OuterRef, Q, Subquery, Sum
+from django.db.models.functions import Coalesce
+from django.utils import timezone
 from django.utils.timezone import localdate
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 
 LAST_WEEK_DAYS = 7
+
+# A group key is a ward slug (str) or a work_area_group_id (int); aggregate dicts are keyed by it.
+GroupKey = str | int
+
+
+class StatusAggregate(TypedDict):
+    """WA-status counts + building sums for one group, as emitted by ``status_aggregates``."""
+
+    WAs_visited: int
+    WAs_evc_reached: int
+    Buildings_covered_in_WAs_visited: int
+    Buildings_covered_in_WAs_evc_reached: int
 
 
 @dataclass(frozen=True)
@@ -66,3 +81,43 @@ def annotate_status_timestamps(qs):
         visited_at=_earliest_transition_subquery(WorkAreaStatus.VISITED),
         evc_reached_at=_earliest_transition_subquery(WorkAreaStatus.EXPECTED_VISIT_REACHED),
     )
+
+
+def _window_datetime_bounds(window):
+    """Convert an inclusive (start, end) *date* window to a half-open [start, end-exclusive) datetime range.
+
+    Callers use ``__gte=start_dt`` AND ``__lt=end_dt``. Because visit_date / pgh_created_at are
+    timestamps with sub-second precision, the upper bound is midnight of the day AFTER ``end`` (not
+    ``end 23:59:59``) so every instant on the ``end`` day is included.
+    """
+    start, end = window
+    start_dt = timezone.make_aware(datetime.datetime.combine(start, datetime.time.min))
+    end_dt = timezone.make_aware(datetime.datetime.combine(end + datetime.timedelta(days=1), datetime.time.min))
+    return start_dt, end_dt
+
+
+def status_aggregates(opportunity, group_field, window) -> dict[GroupKey, StatusAggregate]:
+    """WA-status counts + building sums per group, strict on current status.
+
+    window=None -> Overall (all current-status WAs). A window applies the
+    visited-at / evc-reached-at transition-date filter.
+    """
+    qs = non_excluded_workareas(opportunity)
+    if window is None:
+        visited_filter = Q(status=WorkAreaStatus.VISITED)
+        evc_filter = Q(status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+    else:
+        qs = annotate_status_timestamps(qs)
+        start_dt, end_dt = _window_datetime_bounds(window)
+        visited_filter = Q(status=WorkAreaStatus.VISITED, visited_at__gte=start_dt, visited_at__lt=end_dt)
+        evc_filter = Q(
+            status=WorkAreaStatus.EXPECTED_VISIT_REACHED, evc_reached_at__gte=start_dt, evc_reached_at__lt=end_dt
+        )
+
+    rows = qs.values(group_field).annotate(
+        WAs_visited=Count("id", filter=visited_filter),
+        WAs_evc_reached=Count("id", filter=evc_filter),
+        Buildings_covered_in_WAs_visited=Coalesce(Sum("building_count", filter=visited_filter), 0),
+        Buildings_covered_in_WAs_evc_reached=Coalesce(Sum("building_count", filter=evc_filter), 0),
+    )
+    return {row[group_field]: row for row in rows}
