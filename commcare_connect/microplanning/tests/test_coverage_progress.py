@@ -6,6 +6,7 @@ from django.utils import timezone
 from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
     annotate_status_timestamps,
+    build_ward_rows,
     non_excluded_workareas,
     status_aggregates,
     status_event_model,
@@ -208,3 +209,71 @@ def test_visits_approved_window_filters_visit_date(opportunity):
     _approved_visit(opportunity, wa, datetime.date(2026, 4, 10))
     window = (datetime.date(2026, 3, 1), datetime.date(2026, 3, 31))
     assert visits_approved_aggregates(opportunity, "ward", window=window)["w1"]["visits_approved"] == 1
+
+
+def test_build_ward_rows_merges_and_derives():
+    target_aggregates = {
+        "w1": {
+            "ward": "w1",
+            "target_population": 200,
+            "building_count": 50,
+            "num_work_areas": 10,
+            "expected_visit_total": 40,
+        }
+    }
+    filtered_status = {
+        "w1": {
+            "ward": "w1",
+            "WAs_visited": 4,
+            "WAs_evc_reached": 2,
+            "Buildings_covered_in_WAs_visited": 20,
+            "Buildings_covered_in_WAs_evc_reached": 8,
+        }
+    }
+    filtered_visits = {"w1": {"ward": "w1", "visits_approved": 20}}
+    last_week_status = {
+        "w1": {
+            "ward": "w1",
+            "WAs_visited": 1,
+            "WAs_evc_reached": 0,
+            "Buildings_covered_in_WAs_visited": 5,
+            "Buildings_covered_in_WAs_evc_reached": 0,
+        }
+    }
+    last_week_visits = {"w1": {"ward": "w1", "visits_approved": 5}}
+
+    rows = build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_week_status, last_week_visits)
+    row = next(r for r in rows if r["ward"] == "w1")
+
+    assert row["num_work_areas"] == 10
+    assert row["visits_approved"] == 20
+    assert row["WAs_visited"] == 4
+    assert row["pct_visits_approved"] == 50.0  # 20 / 40
+    assert row["pct_WAs_visited"] == 40.0  # 4 / 10
+    assert row["pct_WAs_evc_reached"] == 20.0  # 2 / 10
+    assert row["pct_Buildings_covered_in_WAs_visited"] == 40.0  # 20 / 50
+    assert row["pct_WA_visited_to_pct_visits"] == 80.0  # 40 / 50 * 100
+    assert row["pct_WA_evc_reached_to_pct_visit"] == 40.0  # 20 / 50 * 100
+    assert row["WAs_visited_last_week"] == 1
+    assert row["pct_WAs_visited_last_week"] == 10.0  # 1 / 10
+    # last-week ratio = pct_WAs_visited_last_week / pct_visits_approved_last_week * 100
+    #                 = 10.0 / (5/40*100 = 12.5) * 100 = 80.0
+    assert row["pct_WA_visited_to_pct_visits_last_week"] == 80.0
+
+
+def test_build_ward_rows_zero_denominator_yields_none():
+    target_aggregates = {
+        "w1": {
+            "ward": "w1",
+            "target_population": 0,
+            "building_count": 0,
+            "num_work_areas": 0,
+            "expected_visit_total": 0,
+        }
+    }
+    rows = build_ward_rows(target_aggregates, {}, {}, {}, {})
+    row = rows[0]
+    assert row["visits_approved"] == 0
+    assert row["pct_visits_approved"] is None
+    assert row["pct_WAs_visited"] is None
+    assert row["pct_WA_visited_to_pct_visits"] is None

@@ -7,6 +7,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.timezone import localdate
 
+from commcare_connect.microplanning.helpers import pct
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
@@ -172,3 +173,96 @@ def visits_approved_aggregates(opportunity, group_field, window) -> dict[GroupKe
     group_expr = f"work_area__{group_field}"
     rows = qs.values(group_expr).annotate(visits_approved=Count("id"))
     return {row[group_expr]: {group_field: row[group_expr], "visits_approved": row["visits_approved"]} for row in rows}
+
+
+# Straight percentages: (output column, value key in ``row``, denominator key in ``target``).
+_WARD_PCT_OF_TARGET = (
+    ("pct_visits_approved", "visits_approved", "expected_visit_total"),
+    ("pct_WAs_visited", "WAs_visited", "num_work_areas"),
+    ("pct_WAs_visited_last_week", "WAs_visited_last_week", "num_work_areas"),
+    ("pct_WAs_evc_reached", "WAs_evc_reached", "num_work_areas"),
+    ("pct_WAs_evc_reached_last_week", "WAs_evc_reached_last_week", "num_work_areas"),
+    ("pct_Buildings_covered_in_WAs_evc_reached", "Buildings_covered_in_WAs_evc_reached", "building_count"),
+    (
+        "pct_buildings_covered_in_WAs_evc_reached_last_week",
+        "Buildings_covered_in_WAs_evc_reached_last_week",
+        "building_count",
+    ),
+    ("pct_Buildings_covered_in_WAs_visited", "Buildings_covered_in_WAs_visited", "building_count"),
+    (
+        "pct_buildings_covered_in_WAs_visited_last_week",
+        "Buildings_covered_in_WAs_visited_last_week",
+        "building_count",
+    ),
+)
+
+# Ratios of two percentages: (output column, numerator pct column, which visits-pct is the denominator).
+# "filtered" -> row["pct_visits_approved"]; "last_week" -> the pinned 7-day visits pct.
+_WARD_PCT_RATIOS = (
+    ("pct_WA_visited_to_pct_visits", "pct_WAs_visited", "filtered"),
+    ("pct_WA_visited_to_pct_visits_last_week", "pct_WAs_visited_last_week", "last_week"),
+    ("pct_WA_evc_reached_to_pct_visit", "pct_WAs_evc_reached", "filtered"),
+    ("pct_WA_evc_reached_to_pct_visits_last_week", "pct_WAs_evc_reached_last_week", "last_week"),
+    ("pct_buildings_covered_in_WA_evc_reached_to_pct_visit", "pct_Buildings_covered_in_WAs_evc_reached", "filtered"),
+    (
+        "pct_buildings_covered_in_WA_evc_reached_to_pct_visits_last_week",
+        "pct_buildings_covered_in_WAs_evc_reached_last_week",
+        "last_week",
+    ),
+    ("pct_buildings_covered_in_WA_visited_to_pct_visit", "pct_Buildings_covered_in_WAs_visited", "filtered"),
+    (
+        "pct_buildings_covered_in_WA_visited_to_pct_visits_last_week",
+        "pct_buildings_covered_in_WAs_visited_last_week",
+        "last_week",
+    ),
+)
+
+
+def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_week_status, last_week_visits):
+    """Merge the per-ward aggregate dicts into top-table rows (one row per ward, ~30 columns).
+
+    Each argument is a dict keyed by ward slug -> that ward's aggregate dict:
+      - target_aggregates: static targets (target_population, building_count, num_work_areas, expected_visit_total)
+      - filtered_status / last_week_status: WA-status counts + building sums (active filter / pinned 7 days)
+      - filtered_visits / last_week_visits: approved-visit counts (active filter / pinned 7 days)
+    Derived columns are driven by _WARD_PCT_OF_TARGET / _WARD_PCT_RATIOS so the numerator/denominator
+    pairing for each column lives in one scannable table. pct/ratio columns are None on a 0 denominator.
+    """
+    rows = []
+    for ward, target in target_aggregates.items():
+        status = filtered_status.get(ward, {})
+        visits = filtered_visits.get(ward, {})
+        lw_status = last_week_status.get(ward, {})
+        lw_visits = last_week_visits.get(ward, {})
+
+        # raw counts/sums (default 0 when this ward is absent from an aggregate)
+        row = {
+            "ward": ward,
+            "target_population": target["target_population"],
+            "building_count": target["building_count"],
+            "num_work_areas": target["num_work_areas"],
+            "visits_approved": visits.get("visits_approved", 0),
+            "WAs_visited": status.get("WAs_visited", 0),
+            "WAs_visited_last_week": lw_status.get("WAs_visited", 0),
+            "WAs_evc_reached": status.get("WAs_evc_reached", 0),
+            "WAs_evc_reached_last_week": lw_status.get("WAs_evc_reached", 0),
+            "Buildings_covered_in_WAs_evc_reached": status.get("Buildings_covered_in_WAs_evc_reached", 0),
+            "Buildings_covered_in_WAs_evc_reached_last_week": lw_status.get("Buildings_covered_in_WAs_evc_reached", 0),
+            "Buildings_covered_in_WAs_visited": status.get("Buildings_covered_in_WAs_visited", 0),
+            "Buildings_covered_in_WAs_visited_last_week": lw_status.get("Buildings_covered_in_WAs_visited", 0),
+        }
+
+        # percentages — denominators come from the static targets; numerators read back from the row
+        for out_key, value_key, target_key in _WARD_PCT_OF_TARGET:
+            row[out_key] = pct(row[value_key], target[target_key])
+
+        # ratios divide one percentage by the matching % visits approved (active filter or pinned 7-day)
+        ratio_denominator = {
+            "filtered": row["pct_visits_approved"],
+            "last_week": pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"]),
+        }
+        for out_key, pct_key, denom in _WARD_PCT_RATIOS:
+            row[out_key] = pct(row[pct_key], ratio_denominator[denom])
+
+        rows.append(row)
+    return rows

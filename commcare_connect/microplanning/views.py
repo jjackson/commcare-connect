@@ -39,7 +39,7 @@ from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
-from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
+from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity, pct
 from commcare_connect.microplanning.models import (
     WorkArea,
     WorkAreaGroup,
@@ -205,11 +205,6 @@ def get_metrics_for_microplanning(opportunity):
     non_excluded_count = agg["non_excluded"] or 0
     total = agg["total"] or 0
 
-    def pct(numerator, denominator):
-        if not denominator:
-            return None
-        return round(numerator / denominator * 100)
-
     total_expected = agg["total_expected_visits"] or 0
     if non_excluded_count and total_expected:
         total_approved_visits = agg["total_approved_visits"] or 0
@@ -226,27 +221,27 @@ def get_metrics_for_microplanning(opportunity):
         {
             "name": _("Unvisited Work Areas"),
             "value": agg["unvisited"],
-            "percentage": pct(agg["unvisited"], non_excluded_count),
+            "percentage": pct(agg["unvisited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Visited Work Areas"),
             "value": agg["visited"],
-            "percentage": pct(agg["visited"], non_excluded_count),
+            "percentage": pct(agg["visited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("EVC Reached"),
             "value": agg["evc_reached"],
-            "percentage": pct(agg["evc_reached"], non_excluded_count),
+            "percentage": pct(agg["evc_reached"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Inaccessible Work Areas"),
             "value": agg["inaccessible"],
-            "percentage": pct(agg["inaccessible"], non_excluded_count),
+            "percentage": pct(agg["inaccessible"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Excluded Work Areas"),
             "value": agg["excluded"],
-            "percentage": pct(agg["excluded"], total),
+            "percentage": pct(agg["excluded"], total, ndigits=None),
         },
         {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
     ]
