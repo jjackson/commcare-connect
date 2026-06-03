@@ -1,10 +1,14 @@
 import datetime
+from unittest.mock import patch
 
 import pytest
+from django.core.cache import cache
 from django.utils import timezone
 
 from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
+    CoverageProgressReport,
+    _get_or_compute,
     annotate_status_timestamps,
     build_wag_rows,
     build_ward_rows,
@@ -337,3 +341,62 @@ def test_ward_saturation_goal_rolls_up_opportunity_wide():
 
 def test_ward_saturation_goal_zero_denominator_is_none():
     assert ward_saturation_goal({}, {}) is None
+
+
+def test_report_exposes_header_ward_and_wag_rows(opportunity):
+    group = WorkAreaGroupFactory(opportunity=opportunity, ward="w1", name="G1")
+    wa = WorkAreaFactory(
+        opportunity=opportunity,
+        ward="w1",
+        work_area_group=group,
+        status=WorkAreaStatus.EXPECTED_VISIT_REACHED,
+        expected_visit_count=2,
+        building_count=5,
+        target_population=100,
+    )
+    _approved_visit(opportunity, wa, datetime.date(2026, 5, 30))
+
+    report = CoverageProgressReport(opportunity, CoverageDateFilter.overall())
+
+    assert "ward_saturation_goal" in report.header()
+    assert any(r["ward"] == "w1" for r in report.ward_rows())
+    assert any(r["work_area_group_id"] == group.id for r in report.wag_rows())
+
+
+def test_header_saturation_goal_ignores_date_filter(opportunity):
+    # Two work areas in one ward; one currently EVC-reached, its transition stamped in March.
+    evc = WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.NOT_VISITED)
+    _stamp_transition(
+        evc, WorkAreaStatus.EXPECTED_VISIT_REACHED, timezone.make_aware(datetime.datetime(2026, 3, 15, 9, 0))
+    )
+
+    # An April window excludes the March transition, so the *windowed* EVC count would be 0. The
+    # header is cumulative, though: 1 of 2 work areas has reached EVC -> 50%, regardless of filter.
+    april = CoverageDateFilter(start=datetime.date(2026, 4, 1), end=datetime.date(2026, 4, 30))
+    assert CoverageProgressReport(opportunity, april).header()["ward_saturation_goal"] == 50.0
+
+
+def test_custom_range_bypasses_filtered_cache_slot(opportunity):
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+    custom = CoverageDateFilter(start=datetime.date(2026, 1, 1), end=datetime.date(2026, 1, 31))
+    with patch("commcare_connect.microplanning.coverage_progress._filtered_overall_slot") as overall_slot:
+        CoverageProgressReport(opportunity, custom).ward_rows()
+        overall_slot.assert_not_called()
+
+
+def test_get_or_compute_computes_once_then_serves_cache():
+    key = "coverage:test:get_or_compute"
+    cache.delete(key)
+    calls = []
+
+    def compute():
+        calls.append(1)
+        return {"value": 7}
+
+    try:
+        assert _get_or_compute(key, compute) == {"value": 7}  # cold slot -> computes
+        assert _get_or_compute(key, compute) == {"value": 7}  # warm slot -> served from cache
+        assert len(calls) == 1  # second call hit the cache, did not recompute
+    finally:
+        cache.delete(key)

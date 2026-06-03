@@ -2,6 +2,7 @@ import datetime
 from dataclasses import dataclass
 from typing import TypedDict
 
+from django.core.cache import cache
 from django.db.models import Count, Min, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
@@ -216,6 +217,112 @@ _WARD_PCT_RATIOS = (
         "last_week",
     ),
 )
+
+# How long a computed coverage slot stays cached.
+COVERAGE_CACHE_TTL_SECONDS = 15 * 60
+
+
+def _get_or_compute(key, compute):
+    """Return the cached value at ``key``, computing and caching it on a miss.
+
+    No single-flight lock: this is an admin-only, per-opportunity report, so a cache stampede on a
+    cold/expired slot is both rare and cheap, and ``compute`` is idempotent (read-only aggregates),
+    so a redundant concurrent compute is harmless.
+    """
+    cached = cache.get(key)
+    if cached is None:
+        cached = compute()
+        cache.set(key, cached, timeout=COVERAGE_CACHE_TTL_SECONDS)
+    return cached
+
+
+def _static_slot(opportunity):
+    def compute():
+        return {
+            "ward": target_aggregates(opportunity, "ward"),
+            "wag": target_aggregates(opportunity, "work_area_group_id"),
+            "wag_display": _wag_display_lookup(opportunity),
+        }
+
+    return _get_or_compute(f"coverage:static:opp={opportunity.id}", compute)
+
+
+def _last_week_slot(opportunity):
+    def compute():
+        window = last_week_window()
+        return {
+            "ward_status": status_aggregates(opportunity, "ward", window=window),
+            "ward_visits": visits_approved_aggregates(opportunity, "ward", window=window),
+            "wag_status": status_aggregates(opportunity, "work_area_group_id", window=window),
+            "wag_visits": visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
+        }
+
+    return _get_or_compute(f"coverage:last_week:opp={opportunity.id}", compute)
+
+
+def _compute_filtered(opportunity, window):
+    return {
+        "ward_status": status_aggregates(opportunity, "ward", window=window),
+        "ward_visits": visits_approved_aggregates(opportunity, "ward", window=window),
+        "wag_status": status_aggregates(opportunity, "work_area_group_id", window=window),
+        "wag_visits": visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
+    }
+
+
+def _filtered_overall_slot(opportunity):
+    return _get_or_compute(
+        f"coverage:filtered:opp={opportunity.id}",
+        lambda: _compute_filtered(opportunity, window=None),
+    )
+
+
+class CoverageProgressReport:
+    """Thin public entry point: holds (opportunity, date_filter), memoizes the 3 cache slots,
+    and exposes header()/ward_rows()/wag_rows() returning plain row dicts."""
+
+    def __init__(self, opportunity, date_filter):
+        self.opportunity = opportunity
+        self.date_filter = date_filter
+        self._slots_cache = None
+
+    def _slots(self):
+        if self._slots_cache is None:
+            static = _static_slot(self.opportunity)
+            last_week = _last_week_slot(self.opportunity)
+            if self.date_filter.is_overall:
+                filtered = _filtered_overall_slot(self.opportunity)
+            else:
+                filtered = _compute_filtered(self.opportunity, window=self.date_filter.window)
+            self._slots_cache = (static, last_week, filtered)
+        return self._slots_cache
+
+    def header(self):
+        # The saturation goal is an all-time, cumulative figure, so it always uses the overall
+        # (unfiltered) status — independent of the page's date filter, which only scopes the rows.
+        static, _last_week, _filtered = self._slots()
+        overall_status = _filtered_overall_slot(self.opportunity)["ward_status"]
+        return {"ward_saturation_goal": ward_saturation_goal(static["ward"], overall_status)}
+
+    def ward_rows(self):
+        static, last_week, filtered = self._slots()
+        return build_ward_rows(
+            static["ward"],
+            filtered["ward_status"],
+            filtered["ward_visits"],
+            last_week["ward_status"],
+            last_week["ward_visits"],
+        )
+
+    def wag_rows(self):
+        static, last_week, filtered = self._slots()
+        return build_wag_rows(
+            static["wag_display"],
+            static["wag"],
+            filtered["wag_status"],
+            filtered["wag_visits"],
+            last_week["wag_status"],
+            last_week["wag_visits"],
+        )
 
 
 def ward_saturation_goal(target_aggregates, status_aggregates):
