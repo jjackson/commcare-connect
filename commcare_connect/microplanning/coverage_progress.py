@@ -218,6 +218,17 @@ _WARD_PCT_RATIOS = (
 )
 
 
+def ward_saturation_goal(target_aggregates, status_aggregates):
+    """Opportunity-wide pct_WAs_evc_reached for the page header: SUM(WAs_evc_reached) / SUM(num_work_areas) * 100.
+
+    target_aggregates / status_aggregates: dicts keyed by ward -> that ward's target / status-count dict.
+    Returns None when there are no (non-EXCLUDED) work areas.
+    """
+    total_work_areas = sum(t["num_work_areas"] for t in target_aggregates.values())
+    total_evc_reached = sum(s.get("WAs_evc_reached", 0) for s in status_aggregates.values())
+    return pct(total_evc_reached, total_work_areas)
+
+
 def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_week_status, last_week_visits):
     """Merge the per-ward aggregate dicts into top-table rows (one row per ward, ~30 columns).
 

@@ -13,6 +13,7 @@ from commcare_connect.microplanning.coverage_progress import (
     status_event_model,
     target_aggregates,
     visits_approved_aggregates,
+    ward_saturation_goal,
 )
 from commcare_connect.microplanning.models import WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
@@ -326,3 +327,13 @@ def test_build_wag_rows_reduced_columns(opportunity):
     assert row["pct_WA_visited_to_pct_visits"] == 100.0  # (6/12=50) / (25/50=50) * 100
     # reduced set: building-coverage columns are NOT present
     assert "pct_Buildings_covered_in_WAs_visited" not in row
+
+
+def test_ward_saturation_goal_rolls_up_opportunity_wide():
+    target_aggregates = {"w1": {"num_work_areas": 10}, "w2": {"num_work_areas": 10}}
+    status_aggregates = {"w1": {"WAs_evc_reached": 3}, "w2": {"WAs_evc_reached": 2}}
+    assert ward_saturation_goal(target_aggregates, status_aggregates) == 25.0  # 5 / 20 * 100
+
+
+def test_ward_saturation_goal_zero_denominator_is_none():
+    assert ward_saturation_goal({}, {}) is None
