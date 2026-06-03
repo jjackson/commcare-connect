@@ -1,6 +1,7 @@
 import datetime
 from dataclasses import dataclass
 
+from django.db.models import Min, OuterRef, Subquery
 from django.utils.timezone import localdate
 
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
@@ -43,3 +44,25 @@ def last_week_window() -> tuple[datetime.date, datetime.date]:
 
 def non_excluded_workareas(opportunity):
     return WorkArea.objects.filter(opportunity=opportunity).exclude(status=WorkAreaStatus.EXCLUDED)
+
+
+def status_event_model():
+    return WorkArea.pgh_event_model
+
+
+def _earliest_transition_subquery(status):
+    events = status_event_model().objects
+    return Subquery(
+        events.filter(pgh_obj_id=OuterRef("pk"), status=status)
+        .order_by()
+        .values("pgh_obj_id")
+        .annotate(earliest=Min("pgh_created_at"))
+        .values("earliest")[:1]
+    )
+
+
+def annotate_status_timestamps(qs):
+    return qs.annotate(
+        visited_at=_earliest_transition_subquery(WorkAreaStatus.VISITED),
+        evc_reached_at=_earliest_transition_subquery(WorkAreaStatus.EXPECTED_VISIT_REACHED),
+    )
