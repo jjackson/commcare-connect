@@ -6,6 +6,7 @@ from django.utils import timezone
 from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
     annotate_status_timestamps,
+    build_wag_rows,
     build_ward_rows,
     non_excluded_workareas,
     status_aggregates,
@@ -277,3 +278,51 @@ def test_build_ward_rows_zero_denominator_yields_none():
     assert row["pct_visits_approved"] is None
     assert row["pct_WAs_visited"] is None
     assert row["pct_WA_visited_to_pct_visits"] is None
+
+
+def test_build_wag_rows_reduced_columns(opportunity):
+    group = WorkAreaGroupFactory(opportunity=opportunity, ward="w1", name="G1")
+    target_aggregates = {
+        group.id: {
+            "work_area_group_id": group.id,
+            "target_population": 300,
+            "building_count": 60,
+            "num_work_areas": 12,
+            "expected_visit_total": 50,
+        }
+    }
+    filtered_status = {
+        group.id: {
+            "work_area_group_id": group.id,
+            "WAs_visited": 6,
+            "WAs_evc_reached": 3,
+            "Buildings_covered_in_WAs_visited": 30,
+            "Buildings_covered_in_WAs_evc_reached": 12,
+        }
+    }
+    filtered_visits = {group.id: {"work_area_group_id": group.id, "visits_approved": 25}}
+    last_week_status = {
+        group.id: {
+            "work_area_group_id": group.id,
+            "WAs_visited": 2,
+            "WAs_evc_reached": 1,
+            "Buildings_covered_in_WAs_visited": 10,
+            "Buildings_covered_in_WAs_evc_reached": 4,
+        }
+    }
+    last_week_visits = {group.id: {"work_area_group_id": group.id, "visits_approved": 10}}
+    display = {group.id: {"work_area_group": "G1", "ward": "w1"}}
+
+    rows = build_wag_rows(
+        display, target_aggregates, filtered_status, filtered_visits, last_week_status, last_week_visits
+    )
+    row = next(r for r in rows if r["work_area_group_id"] == group.id)
+
+    assert row["work_area_group"] == "G1"
+    assert row["ward"] == "w1"
+    assert row["target_population"] == 300
+    assert row["pct_visits_approved"] == 50.0  # 25 / 50
+    assert row["pct_WAs_evc_reached"] == 25.0  # 3 / 12
+    assert row["pct_WA_visited_to_pct_visits"] == 100.0  # (6/12=50) / (25/50=50) * 100
+    # reduced set: building-coverage columns are NOT present
+    assert "pct_Buildings_covered_in_WAs_visited" not in row

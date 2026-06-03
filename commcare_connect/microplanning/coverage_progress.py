@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.utils.timezone import localdate
 
 from commcare_connect.microplanning.helpers import pct
-from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
+from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
 LAST_WEEK_DAYS = 7
@@ -264,5 +264,52 @@ def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_we
         for out_key, pct_key, denom in _WARD_PCT_RATIOS:
             row[out_key] = pct(row[pct_key], ratio_denominator[denom])
 
+        rows.append(row)
+    return rows
+
+
+def _wag_display_lookup(opportunity):
+    return {
+        g["id"]: {"work_area_group": g["name"], "ward": g["ward"]}
+        for g in WorkAreaGroup.objects.filter(opportunity=opportunity).values("id", "name", "ward")
+    }
+
+
+def build_wag_rows(display, target_aggregates, filtered_status, filtered_visits, last_week_status, last_week_visits):
+    """Merge the per-work-area-group aggregate dicts into bottom-table rows (one per WAG, reduced columns).
+
+    The five aggregate args are dicts keyed by ``work_area_group_id`` -> that group's aggregate dict (same
+    shapes as build_ward_rows). ``display`` maps work_area_group_id -> {"work_area_group", "ward"} for labels
+    (see _wag_display_lookup); it is passed in rather than queried here so the lookup can be computed once and
+    cached with the other filter-independent data. Returns row dicts (WAGs with no group are skipped); pct
+    columns are None on a 0 denominator.
+    """
+    rows = []
+    for wag_id, target in target_aggregates.items():
+        if wag_id is None:  # WAs with no group are not shown in the bottom table
+            continue
+        status = filtered_status.get(wag_id, {})
+        visits = filtered_visits.get(wag_id, {})
+        lw_status = last_week_status.get(wag_id, {})
+        lw_visits = last_week_visits.get(wag_id, {})
+        meta = display.get(wag_id, {"work_area_group": None, "ward": None})
+
+        row = {
+            "work_area_group_id": wag_id,
+            "work_area_group": meta["work_area_group"],
+            "ward": meta["ward"],
+            "target_population": target["target_population"],
+        }
+        row["pct_visits_approved"] = pct(visits.get("visits_approved", 0), target["expected_visit_total"])
+        row["pct_visits_approved_last_week"] = pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"])
+        row["pct_WAs_evc_reached"] = pct(status.get("WAs_evc_reached", 0), target["num_work_areas"])
+        row["pct_WAs_evc_reached_last_week"] = pct(lw_status.get("WAs_evc_reached", 0), target["num_work_areas"])
+        # pct_WAs_visited is not a bottom-table column; compute inline as the ratio numerator
+        row["pct_WA_visited_to_pct_visits"] = pct(
+            pct(status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved"]
+        )
+        row["pct_WA_visited_to_pct_visits_last_week"] = pct(
+            pct(lw_status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved_last_week"]
+        )
         rows.append(row)
     return rows
