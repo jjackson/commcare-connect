@@ -9,6 +9,7 @@ from commcare_connect.microplanning.coverage_progress import (
     non_excluded_workareas,
     status_aggregates,
     status_event_model,
+    target_aggregates,
 )
 from commcare_connect.microplanning.models import WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
@@ -93,3 +94,80 @@ def test_status_aggregates_window_filters_by_transition_date_for_wag(opportunity
     out_result = status_aggregates(opportunity, "work_area_group_id", window=out_window)
     assert in_result[group.id]["WAs_visited"] == 1
     assert out_result.get(group.id, {}).get("WAs_visited", 0) == 0
+
+
+def test_target_aggregates_by_ward_excludes_excluded(opportunity):
+    WorkAreaFactory(
+        opportunity=opportunity,
+        ward="w1",
+        status=WorkAreaStatus.VISITED,
+        target_population=100,
+        building_count=10,
+        expected_visit_count=5,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        ward="w1",
+        status=WorkAreaStatus.INACCESSIBLE,
+        target_population=50,
+        building_count=4,
+        expected_visit_count=3,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        ward="w1",
+        status=WorkAreaStatus.EXCLUDED,
+        target_population=999,
+        building_count=99,
+        expected_visit_count=99,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        ward="w2",
+        status=WorkAreaStatus.NOT_VISITED,
+        target_population=20,
+        building_count=2,
+        expected_visit_count=1,
+    )
+
+    result = target_aggregates(opportunity, "ward")
+
+    assert result["w1"] == {
+        "ward": "w1",
+        "target_population": 150,
+        "building_count": 14,
+        "num_work_areas": 2,
+        "expected_visit_total": 8,
+    }
+    assert result["w2"]["num_work_areas"] == 1
+    assert "999" not in str(result["w1"])  # excluded WA not summed
+
+
+def test_target_aggregates_by_wag_excludes_excluded(opportunity):
+    group = WorkAreaGroupFactory(opportunity=opportunity)
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group,
+        status=WorkAreaStatus.VISITED,
+        target_population=100,
+        building_count=10,
+        expected_visit_count=5,
+    )
+    WorkAreaFactory(
+        opportunity=opportunity,
+        work_area_group=group,
+        status=WorkAreaStatus.EXCLUDED,
+        target_population=999,
+        building_count=99,
+        expected_visit_count=99,
+    )
+
+    result = target_aggregates(opportunity, "work_area_group_id")
+
+    assert result[group.id] == {
+        "work_area_group_id": group.id,
+        "target_population": 100,
+        "building_count": 10,
+        "num_work_areas": 1,
+        "expected_visit_total": 5,
+    }

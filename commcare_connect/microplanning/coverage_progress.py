@@ -15,6 +15,15 @@ LAST_WEEK_DAYS = 7
 GroupKey = str | int
 
 
+class TargetAggregate(TypedDict):
+    """Static, filter-independent denominators for one group, as emitted by ``target_aggregates``."""
+
+    target_population: int
+    building_count: int
+    num_work_areas: int
+    expected_visit_total: int
+
+
 class StatusAggregate(TypedDict):
     """WA-status counts + building sums for one group, as emitted by ``status_aggregates``."""
 
@@ -94,6 +103,21 @@ def _window_datetime_bounds(window):
     start_dt = timezone.make_aware(datetime.datetime.combine(start, datetime.time.min))
     end_dt = timezone.make_aware(datetime.datetime.combine(end + datetime.timedelta(days=1), datetime.time.min))
     return start_dt, end_dt
+
+
+def target_aggregates(opportunity, group_field) -> dict[GroupKey, TargetAggregate]:
+    """Static, filter-independent denominators grouped by ward or work_area_group_id."""
+    rows = (
+        non_excluded_workareas(opportunity)
+        .values(group_field)
+        .annotate(
+            target_population=Sum("target_population"),
+            building_count=Sum("building_count"),
+            num_work_areas=Count("id"),
+            expected_visit_total=Sum("expected_visit_count"),
+        )
+    )
+    return {row[group_field]: row for row in rows}
 
 
 def status_aggregates(opportunity, group_field, window) -> dict[GroupKey, StatusAggregate]:
