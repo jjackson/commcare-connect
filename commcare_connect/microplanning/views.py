@@ -706,19 +706,19 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
     if not assignee_id:
         return JsonResponse({"error": "assignee_id required"}, status=400)
 
-    qs = WorkArea.objects.filter(
+    stats = WorkArea.objects.filter(
         opportunity=request.opportunity,
         opportunity_access_id=assignee_id,
-    )
-    stats = qs.aggregate(
+    ).aggregate(
         buildings=Sum("building_count"),
         visits=Sum("expected_visit_count"),
+        work_areas=Count("id"),
     )
     return JsonResponse(
         {
             "assigned_buildings": stats["buildings"] or 0,
             "assigned_visits": stats["visits"] or 0,
-            "assigned_work_areas": qs.count(),
+            "assigned_work_areas": stats["work_areas"],
         }
     )
 
@@ -780,7 +780,7 @@ def save_assignment(request, org_slug, opp_id):
     for work_area in all_work_areas:
         work_area.opportunity_access = work_area_to_access[work_area.id]
         if work_area.status == WorkAreaStatus.UNASSIGNED:
-            work_area.status = WorkAreaStatus.NOT_STARTED
+            work_area.status = WorkAreaStatus.NOT_VISITED
 
     WorkArea.objects.bulk_update(all_work_areas, ["opportunity_access", "status"])
 
