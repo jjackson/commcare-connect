@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.utils import OperationalError
 from django.test import Client
 from django.urls import reverse
 
@@ -1452,3 +1453,42 @@ class TestGetMetricsForMicroplanningWorkAreas:
         metrics = get_metrics_for_microplanning(opp)
         m = self._get_metric(metrics, "Days Remaining")
         assert m["value"] == expected
+
+
+@pytest.mark.django_db
+class TestCoverageProgressView(BaseMicroplanningFlagTest):
+    def url(self, org_slug, opp_id):
+        return reverse("microplanning:coverage_progress", args=(org_slug, opp_id))
+
+    def test_renders_page_with_rows_in_context(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 200
+        assert "microplanning/coverage_progress.html" in {t.name for t in resp.templates}
+        assert set(resp.context["header"].keys()) == {"ward_saturation_goal"}
+        assert any(r["ward"] == "w1" for r in resp.context["ward_rows"])
+
+    def test_statement_timeout_degrades_gracefully(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+        cause = Exception()
+        cause.pgcode = "57014"  # QueryCanceled — what statement_timeout raises
+        timeout_error = OperationalError("canceling statement due to statement timeout")
+        timeout_error.__cause__ = cause
+        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls, patch(
+            "commcare_connect.microplanning.views.transaction.set_rollback"
+        ) as set_rollback:
+            report_cls.return_value.header.side_effect = timeout_error
+            resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 503
+        # The degraded response must be query-free: a base.html render would re-hit the aborted txn.
+        assert resp["Content-Type"].startswith("text/plain")
+        assert b"timed out" in resp.content
+        set_rollback.assert_called_once_with(True)
+
+    def test_non_timeout_operational_error_is_not_masked(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls:
+            report_cls.return_value.header.side_effect = OperationalError("connection lost")  # no pgcode 57014
+            with pytest.raises(OperationalError):
+                client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
