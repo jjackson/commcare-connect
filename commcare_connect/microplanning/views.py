@@ -669,7 +669,7 @@ def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             work_area_group_id=group_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 
@@ -683,7 +683,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             opportunity_access_id=assignee_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 
