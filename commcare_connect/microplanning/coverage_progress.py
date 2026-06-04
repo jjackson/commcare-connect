@@ -72,7 +72,7 @@ class CoverageDateFilter:
 
 def last_week_window() -> tuple[datetime.date, datetime.date]:
     today = localdate()
-    return (today - datetime.timedelta(days=LAST_WEEK_DAYS), today)
+    return (today - datetime.timedelta(days=LAST_WEEK_DAYS - 1), today)
 
 
 def non_excluded_workareas(opportunity):
