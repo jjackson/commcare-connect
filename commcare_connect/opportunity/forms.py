@@ -1965,10 +1965,11 @@ class CreateTaskForm(forms.Form):
         if opportunity is not None:
             task_qs = TaskType.objects.filter(app=opportunity.deliver_app, is_active=True)
             if access is not None:
-                task_qs = task_qs.exclude(
-                    assignedtask__opportunity_access=access,
-                    assignedtask__status=AssignedTaskStatus.ASSIGNED,
-                )
+                already_assigned = AssignedTask.objects.filter(
+                    opportunity_access=access,
+                    status=AssignedTaskStatus.ASSIGNED,
+                ).values_list("task_type_id", flat=True)
+                task_qs = task_qs.exclude(pk__in=already_assigned)
             self.fields["task"].queryset = task_qs
             self.fields["access"].queryset = OpportunityAccess.objects.filter(
                 opportunity=opportunity,
