@@ -914,6 +914,20 @@ class TestCreateTaskForm:
         )
         assert (task_type in task_queryset) == in_queryset
 
+    def test_task_queryset_excludes_only_assigned_to_worker(self, opportunity, task_type):
+        """Worker B's completed tasks should not hide a task type when another worker currently has it assigned."""
+        worker_b_access = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
+        worker_a_access = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
+        AssignedTaskFactory(
+            task_type=task_type, opportunity_access=worker_b_access, status=AssignedTaskStatus.COMPLETED
+        )
+        AssignedTaskFactory(
+            task_type=task_type, opportunity_access=worker_a_access, status=AssignedTaskStatus.ASSIGNED
+        )
+
+        task_queryset = CreateTaskForm(opportunity=opportunity, access=worker_b_access).fields["task"].queryset
+        assert task_type in task_queryset
+
     def test_flw_queryset_filtering(self, opportunity):
         active = OpportunityAccessFactory(opportunity=opportunity, accepted=True, suspended=False)
         unaccepted = OpportunityAccessFactory(opportunity=opportunity, accepted=False, suspended=False)
