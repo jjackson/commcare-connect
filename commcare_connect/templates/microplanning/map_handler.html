@@ -25,7 +25,9 @@
             showConfirmModal: false,
             showDiscardModal: false,
             showExcludeModal: false,
+            showUnassignModal: false,
             isSaving: false,
+            isUnassigning: false,
             showOnlyUnassigned: false,
             assignees: [],
             workAreaProperties: new Map(),
@@ -34,6 +36,11 @@
 
             cannotExclude(id) {
                 if (this.excludedWorkAreaIds.has(id)) return true;
+                const status = this.workAreaProperties.get(id)?.status;
+                return status !== undefined && status !== 'NOT_VISITED';
+            },
+
+            cannotUnassign(id) {
                 const status = this.workAreaProperties.get(id)?.status;
                 return status !== undefined && status !== 'NOT_VISITED';
             },
@@ -437,6 +444,69 @@
                     this.showToast("{% translate 'Failed to save assignment' %}", true);
                 } finally {
                     this.isSaving = false;
+                }
+            },
+
+            async unassignWorkAreas() {
+                const eligibleIds = Array.from(this.selectedWorkAreas).filter(id => !this.cannotUnassign(id));
+                if (eligibleIds.length === 0) {
+                    this.showUnassignModal = false;
+                    this.showToast("{% translate 'No eligible work areas to unassign.' %}");
+                    return;
+                }
+                this.isUnassigning = true;
+                try {
+                    const resp = await fetch('{{ assignment_unassign_url|escapejs }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}',
+                        },
+                        body: JSON.stringify({ work_area_ids: eligibleIds }),
+                    });
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        // Only repaint work areas the server actually unassigned. On a partial HQ
+                        // failure the failed IDs stay assigned in DB and must keep their existing status.
+                        const unassignedIds = data.unassigned_ids || [];
+                        const failedIds = data.failed_ids || [];
+                        for (const id of unassignedIds) {
+                            this.map.setFeatureState(
+                                { source: 'workareas', sourceLayer: 'workareas', id },
+                                { status: 'UNASSIGNED' }
+                            );
+                            const props = this.workAreaProperties.get(id);
+                            if (props) {
+                                props.status = 'UNASSIGNED';
+                                props.assignee_name = null;
+                            }
+                        }
+                        this.showUnassignModal = false;
+                        // Clear the selection, then re-select any failed areas so they stay highlighted
+                        // on the map for the user to inspect and retry.
+                        this.clearSelection();
+                        for (const id of failedIds) {
+                            this.selectedWorkAreas.add(id);
+                            this.map.setFeatureState(
+                                { source: 'workareas', sourceLayer: 'workareas', id },
+                                { assignment_selected: true }
+                            );
+                        }
+                        const msg = data.skipped || failedIds.length
+                            ? "{% translate 'Unassigned' %} " + unassignedIds.length + " " + "{% translate 'work area(s).' %}"
+                              + (data.skipped ? " " + data.skipped + " " + "{% translate 'skipped.' %}" : "")
+                              + (failedIds.length ? " " + failedIds.length + " " + "{% translate 'failed to sync and remain selected for retry.' %}" : "")
+                            : "{% translate 'Work area(s) unassigned successfully.' %}";
+                        this.showToast(msg, failedIds.length > 0);
+                        if (this.flwSummaryAssigneeId) this.updateFlwSummary();
+                    } else {
+                        const data = await resp.json().catch(() => ({}));
+                        this.showToast(data.error || "{% translate 'Failed to unassign work areas' %}", true);
+                    }
+                } catch (e) {
+                    this.showToast("{% translate 'Failed to unassign work areas' %}", true);
+                } finally {
+                    this.isUnassigning = false;
                 }
             },
 
