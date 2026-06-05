@@ -1,0 +1,36 @@
+{% extends "email/base.html" %}
+{% load i18n %}
+
+{% block content %}
+<p>{% trans "Hi," %}</p>
+
+<p>
+    {% trans "The following invoices for your workspace" %} <strong>{{ organization.name }}</strong>
+    {% trans "require your attention." %}
+</p>
+
+<table style="border-collapse: collapse; width: 100%; max-width: 600px;">
+    <thead>
+        <tr>
+            <th style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{% trans "Program" %}</th>
+            <th style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{% trans "Opportunity" %}</th>
+            <th style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{% trans "Invoice Number" %}</th>
+            <th style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{% trans "Status" %}</th>
+            <th style="border: 1px solid #dddddd; text-align: left; padding: 8px;"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in invoice_items %}
+        <tr>
+            <td style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{{ item.program.name }}</td>
+            <td style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{{ item.opportunity.name }}</td>
+            <td style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{{ item.invoice.invoice_number }}</td>
+            <td style="border: 1px solid #dddddd; text-align: left; padding: 8px;">{{ item.status_label }}</td>
+            <td style="border: 1px solid #dddddd; text-align: left; padding: 8px;">
+                <a href="{{ item.invoice_url }}">{% trans "Review" %}</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

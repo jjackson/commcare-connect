@@ -1,0 +1,12 @@
+{% extends "email/base.txt" %}
+{% block content %}Hi,
+
+The following invoices for your workspace {{ organization.name }} require your attention.
+
+{% for item in invoice_items %}
+    Program: {{ item.program.name }}
+    Opportunity: {{ item.opportunity.name }}
+    Invoice Number: {{ item.invoice.invoice_number }}
+    Status: {{ item.status_label }}
+    Review Invoice: {{ item.invoice_url }}
+{% endfor %}{% endblock %}
