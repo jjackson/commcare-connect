@@ -39,7 +39,7 @@ class Organization(BaseModel):
         return self.slug
 
     def get_member_emails(self):
-        return list(self.memberships.values_list("user__email", flat=True))
+        return list(self.memberships.exclude(user__email__isnull=True).values_list("user__email", flat=True))
 
 
 class UserOrganizationMembership(models.Model):
