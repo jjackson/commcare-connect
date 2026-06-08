@@ -947,7 +947,6 @@ def coverage_progress(request, *args, **kwargs):
     # the two tables to the template, consuming the context built below.
     opportunity = request.opportunity
     date_filter = _get_coverage_date_filter(request)
-    template_name = "microplanning/coverage_progress.html"
     try:
         with connection.cursor() as cursor:
             cursor.execute("SET LOCAL statement_timeout = %s", [STATEMENT_TIMEOUT])
@@ -972,7 +971,7 @@ def coverage_progress(request, *args, **kwargs):
             status=503,
             content_type="text/plain",
         )
-    return render(request, template_name, context)
+    return render(request, "microplanning/coverage_progress.html", context)
 
 
 def _get_coverage_date_filter(request):

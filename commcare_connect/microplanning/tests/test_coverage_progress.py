@@ -8,7 +8,7 @@ from django.utils import timezone
 from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
     CoverageProgressReport,
-    _get_or_compute,
+    _static_slot,
     _window_datetime_bounds,
     annotate_status_timestamps,
     build_wag_rows,
@@ -393,18 +393,16 @@ def test_custom_range_bypasses_filtered_cache_slot(opportunity):
         overall_slot.assert_not_called()
 
 
-def test_get_or_compute_computes_once_then_serves_cache():
-    key = "coverage:test:get_or_compute"
+def test_slot_computes_once_then_serves_cache(opportunity):
+    key = f"coverage:static:opp={opportunity.id}"
     cache.delete(key)
-    calls = []
-
-    def compute():
-        calls.append(1)
-        return {"value": 7}
-
     try:
-        assert _get_or_compute(key, compute) == {"value": 7}  # cold slot -> computes
-        assert _get_or_compute(key, compute) == {"value": 7}  # warm slot -> served from cache
-        assert len(calls) == 1  # second call hit the cache, did not recompute
+        with patch(
+            "commcare_connect.microplanning.coverage_progress.get_target_aggregates",
+            return_value={},
+        ) as get_target:
+            _static_slot(opportunity)  # cold slot -> computes (ward + wag aggregates)
+            _static_slot(opportunity)  # warm slot -> served from cache
+            assert get_target.call_count == 2  # only the cold call recomputed
     finally:
         cache.delete(key)

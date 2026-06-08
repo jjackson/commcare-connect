@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import TypedDict
 
 from django.core.cache import cache
-from django.db.models import Count, Min, OuterRef, Q, Subquery, Sum
+from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.timezone import localdate
@@ -86,11 +86,7 @@ def status_event_model():
 def _earliest_transition_subquery(status):
     events = status_event_model().objects
     return Subquery(
-        events.filter(pgh_obj_id=OuterRef("pk"), status=status)
-        .order_by()
-        .values("pgh_obj_id")
-        .annotate(earliest=Min("pgh_created_at"))
-        .values("earliest")[:1]
+        events.filter(pgh_obj_id=OuterRef("pk"), status=status).order_by("pgh_created_at").values("pgh_created_at")[:1]
     )
 
 
@@ -222,20 +218,6 @@ _WARD_PCT_RATIOS = (
 COVERAGE_CACHE_TTL_SECONDS = 15 * 60
 
 
-def _get_or_compute(key, compute):
-    """Return the cached value at ``key``, computing and caching it on a miss.
-
-    No single-flight lock: this is an admin-only, per-opportunity report, so a cache stampede on a
-    cold/expired slot is both rare and cheap, and ``compute`` is idempotent (read-only aggregates),
-    so a redundant concurrent compute is harmless.
-    """
-    cached = cache.get(key)
-    if cached is None:
-        cached = compute()
-        cache.set(key, cached, timeout=COVERAGE_CACHE_TTL_SECONDS)
-    return cached
-
-
 def _static_slot(opportunity):
     def compute():
         return {
@@ -244,7 +226,7 @@ def _static_slot(opportunity):
             "wag_display": _wag_display_lookup(opportunity),
         }
 
-    return _get_or_compute(f"coverage:static:opp={opportunity.id}", compute)
+    return cache.get_or_set(f"coverage:static:opp={opportunity.id}", compute, timeout=COVERAGE_CACHE_TTL_SECONDS)
 
 
 def _last_week_slot(opportunity):
@@ -257,7 +239,7 @@ def _last_week_slot(opportunity):
             "wag_visits": get_visits_approved_aggregates(opportunity, "work_area_group_id", window=window),
         }
 
-    return _get_or_compute(f"coverage:last_week:opp={opportunity.id}", compute)
+    return cache.get_or_set(f"coverage:last_week:opp={opportunity.id}", compute, timeout=COVERAGE_CACHE_TTL_SECONDS)
 
 
 def _compute_filtered(opportunity, window):
@@ -270,9 +252,10 @@ def _compute_filtered(opportunity, window):
 
 
 def _filtered_overall_slot(opportunity):
-    return _get_or_compute(
+    return cache.get_or_set(
         f"coverage:filtered:opp={opportunity.id}",
         lambda: _compute_filtered(opportunity, window=None),
+        timeout=COVERAGE_CACHE_TTL_SECONDS,
     )
 
 
