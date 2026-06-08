@@ -62,10 +62,10 @@
                 @click="open = false">{% trans "Cancel" %}</button>
         <button type="button"
                 class="button button-md outline-style"
-                @click="action='none'; confirm=true;">{% trans "No Action Needed" %}</button>
+                @click="action='none'; confirm = true;">{% trans "No Action Needed" %}</button>
         <button type="button"
                 class="button button-md primary-dark"
-                @click="action='tasks_assigned'; confirm=true;">{% trans "Complete Review" %}</button>
+                @click="action='tasks_assigned'; confirm = true;">{% trans "Complete Review" %}</button>
       </div>
       <!-- Confirmation overlay -->
       <div x-show="confirm"

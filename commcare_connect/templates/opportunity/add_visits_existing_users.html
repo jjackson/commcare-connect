@@ -104,10 +104,13 @@
 
     </script>
   {% endblock extra_js %}
+  {# H025: djlint flags the root content div as an orphan in {% extends %} templates; it is properly closed within this file #}
+  {# djlint:off H025 #}
   <div class="md:max-w-screen-lg mx-auto flex flex-col gap-6"
-       x-data="opportunityBudgetComponent('{{ request.GET.active_tab|default:"existing_workers" }}', {{ tabs|safe }})"
-       x-clock
-       x-effect="setTab(selectedTab)">
+    {# djlint:on #}
+    x-data="opportunityBudgetComponent('{{ request.GET.active_tab|default:"existing_workers" }}', {{ tabs|safe }})"
+    x-clock
+    x-effect="setTab(selectedTab)">
     {% include "components/breadcrumbs.html" with path=path %}
     <div class="flex relative mx-auto items-center justify-between w-full px-4 bg-slate-50 rounded-lg shadow-sm h-14">
       <ul class="tabs">
@@ -260,7 +263,6 @@
               <div class="footer flex justify-end gap-4">
                 <button type="button"
                         @click="closeModal()"
-                        type="button"
                         class="button button-md outline-style">{% trans "Close" %}</button>
                 <button type="submit"
                         class="button button-md primary-dark"

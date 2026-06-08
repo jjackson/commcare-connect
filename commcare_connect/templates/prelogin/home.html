@@ -344,7 +344,10 @@
             </svg>
           </div>
         </div>
+        {# H025: djlint misidentifies this closing tag as orphaned due to the complexity of the surrounding SVG/div nesting #}
+        {# djlint:off H025 #}
       </div>
+      {# djlint:on #}
       <!-- Programs &amp; Locations (hidden, replaced by Explore section above) -->
       <div class="section warm" style="display: none;" aria-hidden="true">
         <div class="wrap">
@@ -1791,7 +1794,7 @@
                         flex-grow: 1">
                 Vitamin A is one of the cheapest ways to save a child's life: roughly $1 per capsule, with an estimated 4-12% reduction in under-five mortality. The hard part isn't the capsule — it's reaching the children. That's what Connect campaigns are built to do.
               </p>
-              <a href="http://givewell.org/international/technical/programs/vitamin-A"
+              <a href="https://givewell.org/international/technical/programs/vitamin-A"
                  target="_blank"
                  rel="noopener"
                  style="display: block;

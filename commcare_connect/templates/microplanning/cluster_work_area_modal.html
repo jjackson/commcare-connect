@@ -15,8 +15,8 @@
       </p>
       <div>
         {% if request.GET.clustering_task_id %}
-          <div id='clustering-status'
-               class='mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center'
+          <div id="clustering-status"
+               class="mt-4 py-3 px-8 bg-gray-200 flex gap-4 items-center"
                hx-get="{% url 'microplanning:clustering_status' request.org.slug request.opportunity.opportunity_id %}?clustering_task_id={{ request.GET.clustering_task_id }}"
                hx-trigger="every 2s"
                hx-swap="outerHTML">

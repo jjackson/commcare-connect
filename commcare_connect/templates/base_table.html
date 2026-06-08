@@ -2,7 +2,10 @@
 {% load i18n %}
 {% block table-wrapper %}
   {% load sort_link %}
+  {# H025: this is a template partial; the root div is an intentional fragment with no surrounding HTML #}
+  {# djlint:off H025 #}
   <div class="table-container flex flex-col gap-2 mb-1">
+    {# djlint:on #}
     {% block table %}
       <div class="w-full overflow-x-auto overflow-y-auto block max-h-[70vh]">
         <table class="base-table" {% render_attrs table.attrs %}>
