@@ -426,8 +426,8 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
         value, _ = self.compute(access)
         assert value < 0.6
 
-    def test_excluded_and_inaccessible_was_not_counted_in_eligible(self):
-        """EXCLUDED/INACCESSIBLE WAs must not count in eligible denominator or expected visits."""
+    def test_excluded_wa_not_counted_in_eligible_but_inaccessible_is(self):
+        """EXCLUDED WAs must not count in eligible denominator; INACCESSIBLE WAs are included."""
         access, wag = make_access_and_wag()
         wa = WorkAreaFactory(
             opportunity=wag.opportunity,
@@ -451,7 +451,8 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             expected_visit_count=10,
         )
         make_visits(10, access, work_area=wa)
-        self.assert_compute_result(access, sample=1, value=1.0)  # only VISITED WA is eligible
+        # VISITED + INACCESSIBLE = 2 eligible; coverage=1/2, visit_ratio=10/20 → ratio=1.0
+        self.assert_compute_result(access, sample=2, value=1.0)
 
     def test_no_actual_visits_returns_insufficient_data(self):
         access, wag = make_access_and_wag()

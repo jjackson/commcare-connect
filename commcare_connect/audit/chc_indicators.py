@@ -244,7 +244,7 @@ class WACoverageToVisitRatio(AuditCalculation):
     """Detect imbalance between work area coverage progress and visit progress.
 
     Ratio = (VISITED WAs / eligible WAs) / (actual visits / expected visits).
-    Eligible WAs exclude those marked EXCLUDED or INACCESSIBLE.
+    Eligible WAs exclude only those marked EXCLUDED; INACCESSIBLE WAs are included.
     Uses cumulative totals from campaign start, not just the report week.
     """
 
@@ -255,7 +255,7 @@ class WACoverageToVisitRatio(AuditCalculation):
     upper_bound = 1.4
 
     def compute(self, opportunity_access, period_start, period_end):
-        _eligible = ~Q(status__in=[WorkAreaStatus.EXCLUDED, WorkAreaStatus.INACCESSIBLE])
+        _eligible = ~Q(status__in=[WorkAreaStatus.EXCLUDED])
         wa_stats = WorkArea.objects.filter(opportunity_access=opportunity_access).aggregate(
             total_eligible=Count("id", filter=_eligible),
             visited_count=Count(
