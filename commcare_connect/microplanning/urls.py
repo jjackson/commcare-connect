@@ -63,4 +63,9 @@ urlpatterns = [
         views.save_assignment,
         name="save_assignment",
     ),
+    path(
+        "<slug:opp_id>/assignment/unassign/",
+        views.unassign_work_areas,
+        name="unassign_work_areas",
+    ),
 ]

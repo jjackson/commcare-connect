@@ -32,7 +32,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set release identifier
-        run: echo "APP_RELEASE=${GITHUB_REF_NAME}.${GITHUB_SHA}" >> "$GITHUB_ENV"
+        run: |
+          # Sentry release versions cannot contain slashes, so sanitize the ref name
+          SAFE_REF_NAME="${GITHUB_REF_NAME//\//-}"
+          echo "APP_RELEASE=${SAFE_REF_NAME}.${GITHUB_SHA}" >> "$GITHUB_ENV"
 
       - name: Set up Ruby
         uses: actions/setup-ruby@v1
@@ -61,7 +64,7 @@ jobs:
         name: Notify Deploy Start
         uses: slackapi/slack-github-action@v1.24.0
         with:
-          channel-id: 'C09TVKX4N2C'
+          channel-id: ${{ inputs.environment == 'production' && 'C09HWCJSVJ6' || 'C09TVKX4N2C' }}
           payload: |
             {
               "blocks": [
@@ -130,7 +133,7 @@ jobs:
         uses: slackapi/slack-github-action@v1.24.0
         if: always()
         with:
-          channel-id: 'C09TVKX4N2C'
+          channel-id: ${{ inputs.environment == 'production' && 'C09HWCJSVJ6' || 'C09TVKX4N2C' }}
           update-ts: ${{ steps.slack.outputs.ts }}
           payload: |
             {
