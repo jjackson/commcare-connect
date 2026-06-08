@@ -17,6 +17,7 @@ from waffle.testutils import override_switch
 from commcare_connect.connect_id_client.models import ConnectIdUser
 from commcare_connect.flags.switch_names import INVOICE_REVIEW, UPDATES_TO_MARK_AS_PAID_WORKFLOW, WORKER_VISITS_TASKS
 from commcare_connect.microplanning.tests.factories import WorkAreaInaccessibilityRequestFactory
+from commcare_connect.opportunity.exceptions import TaskAlreadyAssignedError
 from commcare_connect.opportunity.forms import AddBudgetExistingUsersForm, AutomatedPaymentInvoiceForm, PaymentUnitForm
 from commcare_connect.opportunity.helpers import OpportunityData, TieredQueryset
 from commcare_connect.opportunity.models import (
@@ -2320,10 +2321,9 @@ class TestAssignedTaskListView:
         self, organization: Organization, org_user_member: User, opportunity: Opportunity, client: Client
     ):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task_type = TaskTypeFactory(app=opportunity.deliver_app)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
-        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+        AssignedTaskFactory(opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2366,9 +2366,8 @@ class TestAssignedTaskListView:
 
     def test_page_size_param_is_respected(self, organization, org_user_member, opportunity, client):
         access = OpportunityAccessFactory(opportunity=opportunity, accepted=True)
-        task = TaskTypeFactory(app=opportunity.deliver_app)
         for _ in range(30):
-            AssignedTaskFactory(task_type=task, opportunity_access=access)
+            AssignedTaskFactory(opportunity_access=access)
 
         client.force_login(org_user_member)
         url = reverse("opportunity:assigned_task_list", args=(organization.slug, opportunity.opportunity_id))
@@ -2716,6 +2715,21 @@ class TestCreateTask:
         msgs = list(get_messages(response.wsgi_request))
         assert any("successfully" in str(m) for m in msgs)
 
+    def test_create_task_already_assigned_shows_error(self, client, org_user_member, opportunity, access):
+        client.force_login(org_user_member)
+        task = TaskTypeFactory(app=opportunity.deliver_app)
+        due_date = date.today() + timedelta(days=7)
+
+        with mock.patch.object(AssignedTask, "assign", side_effect=TaskAlreadyAssignedError):
+            response = client.post(
+                self._url(opportunity),
+                data={"task": task.pk, "access": access.pk, "due_date": due_date.isoformat()},
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        msgs = list(get_messages(response.wsgi_request))
+        assert any("already assigned" in str(m) for m in msgs)
+
     def test_create_task_hq_failure_shows_error_and_no_row(self, client, org_user_member, opportunity, access):
         client.force_login(org_user_member)
         task = TaskTypeFactory(app=opportunity.deliver_app, case_property="some_prop")
@@ -2780,12 +2794,7 @@ class TestDeleteTasks:
     @pytest.fixture
     def assigned_tasks(self, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
-        return AssignedTaskFactory.create_batch(
-            3,
-            opportunity_access=access,
-            task_type=TaskTypeFactory(app=opportunity.deliver_app),
-            status=AssignedTaskStatus.ASSIGNED,
-        )
+        return AssignedTaskFactory.create_batch(3, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
 
     def _url(self, opportunity):
         return reverse("opportunity:delete_tasks", args=(opportunity.organization.slug, opportunity.opportunity_id))

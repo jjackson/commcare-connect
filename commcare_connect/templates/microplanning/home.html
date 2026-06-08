@@ -152,11 +152,11 @@
                 </form>
             </aside>
 
-            <aside id="lower-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0">
+            <aside id="lower-sidebar" class="bg-white shadow-md p-4 xl:flex-1 min-h-0 overflow-auto">
                 {{ status_meta|json_script:"status-meta-data" }}
                 <h2 class="text-lg font-semibold mb-2">{% translate "Select Work Area" %}</h2>
                 <template x-if="!selectedFeature">
-                    <div class="flex flex-col items-center justify-center h-full text-center text-gray-400 gap-2 py-8">
+                    <div class="flex flex-col items-center justify-center h-[80%] text-center text-gray-400 gap-2 py-8">
                         <i class="fa-regular fa-map text-3xl"></i>
                         <p class="text-sm">{% translate "Click a work area on the map to view details." %}</p>
                     </div>
@@ -264,13 +264,18 @@
                             <p x-show="selectedWorkAreas.size > 0 && Array.from(selectedWorkAreas).every(id => cannotExclude(id))"
                                class="text-xs text-amber-600 text-right max-w-48">
                                 <i class="fa-solid fa-circle-info"></i>
-                                {% translate "Only 'Not Started' work areas can be excluded." %}
+                                {% translate "Only 'Not Visited' work areas can be excluded." %}
                             </p>
-                            <button type="button" disabled
-                                title="{% translate 'Unassign Selected Areas will be available in a future update' %}"
-                                class="button button-sm outline-style text-xs opacity-50 cursor-not-allowed">
+                            <button type="button" @click="showUnassignModal = true"
+                                :disabled="selectedWorkAreas.size === 0 || Array.from(selectedWorkAreas).every(id => cannotUnassign(id))"
+                                class="button button-sm outline-style text-xs">
                                 {% translate "Unassign Selected Areas" %}
                             </button>
+                            <p x-show="selectedWorkAreas.size > 0 && Array.from(selectedWorkAreas).every(id => cannotUnassign(id))"
+                               class="text-xs text-amber-600 text-right max-w-48">
+                                <i class="fa-solid fa-circle-info"></i>
+                                {% translate "Only assigned, non-excluded work areas can be unassigned." %}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -338,13 +343,13 @@
                                 <div class="grid grid-cols-2 items-center gap-2 text-sm">
                                     <dt class="text-gray-500">{% translate "Count of Assigned Buildings" %}</dt>
                                     <dd class="font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                                        x-text="flwSummary.assigned_buildings + getQueuedStatsForAssignee().buildings + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? getSelectedStats().buildings : 0)"></dd>
+                                        x-text="flwSummary.assigned_buildings + getQueuedStatsForAssignee().buildings + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? getSelectedStatsForSummary().buildings : 0)"></dd>
                                     <dt class="text-gray-500">{% translate "Count of Assigned Visits" %}</dt>
                                     <dd class="font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                                        x-text="flwSummary.assigned_visits + getQueuedStatsForAssignee().visits + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? getSelectedStats().visits : 0)"></dd>
+                                        x-text="flwSummary.assigned_visits + getQueuedStatsForAssignee().visits + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? getSelectedStatsForSummary().visits : 0)"></dd>
                                     <dt class="text-gray-500">{% translate "Count of Assigned Work Areas" %}</dt>
                                     <dd class="font-medium text-right border border-gray-200 rounded-lg px-3 py-2 bg-gray-50"
-                                        x-text="flwSummary.assigned_work_areas + getQueuedStatsForAssignee().workAreas + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? selectedWorkAreas.size : 0)"></dd>
+                                        x-text="flwSummary.assigned_work_areas + getQueuedStatsForAssignee().workAreas + (String(flwSummaryAssigneeId) === String(selectedAssigneeId) ? getSelectedStatsForSummary().workAreas : 0)"></dd>
                                 </div>
                             </dl>
                             <div class="flex gap-2 mt-3">
@@ -477,6 +482,51 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+            </template>
+
+            <!-- Unassign Selected Areas modal -->
+            <template x-if="showUnassignModal">
+            <div @click.self="if (!isUnassigning) showUnassignModal = false" class="modal-backdrop">
+                <div class="modal relative p-6" @click.stop>
+                    <div class="header flex justify-between items-center">
+                        <h2 class="title">{% translate "Unassign Selected Areas" %}</h2>
+                        <button type="button" @click="showUnassignModal = false"
+                                :disabled="isUnassigning"
+                                class="button-icon" aria-label="{% translate 'Close' %}">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-sm mb-3">
+                            {% translate "The previously assigned FLW(s) will lose access to these work areas. Are you sure you want to continue?" %}
+                        </p>
+                        <div class="mt-3 p-4 rounded-lg border bg-blue-50 border-blue-200">
+                            <p class="text-sm text-gray-800">
+                                <span x-text="Array.from(selectedWorkAreas).filter(id => !cannotUnassign(id)).length"></span> {% translate "work area(s) will be unassigned" %}
+                            </p>
+                            <template x-if="Array.from(selectedWorkAreas).some(id => cannotUnassign(id))">
+                                <p class="text-xs text-amber-700 mt-1">
+                                    <i class="fa-solid fa-circle-info"></i>
+                                    <span x-text="Array.from(selectedWorkAreas).filter(id => cannotUnassign(id)).length"></span> {% translate "area(s) are not eligible for unassignment and will be skipped." %}
+                                </p>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="footer flex justify-end gap-2">
+                        <button type="button" @click="showUnassignModal = false"
+                                :disabled="isUnassigning"
+                                class="button button-md outline-style">
+                            {% translate "Cancel" %}
+                        </button>
+                        <button type="button" @click="unassignWorkAreas()"
+                                :disabled="isUnassigning"
+                                class="button button-md negative-dark">
+                            <i x-show="isUnassigning" class="fa-solid fa-spinner fa-spin mr-1"></i>
+                            <span x-text="isUnassigning ? '{% translate "Unassigning..." %}' : '{% translate "Unassign" %}'"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
             </template>

@@ -36,10 +36,17 @@ from commcare_connect.commcarehq.api import (
 )
 from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
-from commcare_connect.microplanning.const import MAX_EXCLUDE_WORK_AREAS, WORK_AREA_STATUS_COLORS
+from commcare_connect.microplanning.const import (
+    MAX_EXCLUDE_WORK_AREAS,
+    MAX_UNASSIGN_WORK_AREAS,
+    WORK_AREA_STATUS_COLORS,
+)
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
-from commcare_connect.microplanning.helpers import exclude_work_areas_for_opportunity
+from commcare_connect.microplanning.helpers import (
+    exclude_work_areas_for_opportunity,
+    unassign_work_areas_for_opportunity,
+)
 from commcare_connect.microplanning.models import (
     WorkArea,
     WorkAreaGroup,
@@ -260,7 +267,7 @@ def _get_assignment_mode_context(request, opportunity):
         "assignees_json": list(
             OpportunityAccess.objects.filter(opportunity=opportunity, accepted=True, suspended=False)
             .select_related("user")
-            .values("id", "user__name", "user_id")
+            .values("id", "user__name", "user__user_id")
         ),
         "group_work_areas_url": reverse(
             "microplanning:get_work_areas_for_assignment",
@@ -276,6 +283,10 @@ def _get_assignment_mode_context(request, opportunity):
         ),
         "assignment_save_url": reverse(
             "microplanning:save_assignment",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
+        ),
+        "assignment_unassign_url": reverse(
+            "microplanning:unassign_work_areas",
             kwargs={"org_slug": org_slug, "opp_id": opp_id},
         ),
         "user_visits_url": reverse(
@@ -591,7 +602,9 @@ def exclude_work_areas(request, org_slug, opp_id):
         exclusion_reason=exclusion_reason,
     )
     response = HttpResponse('<div id="exclude-progress"></div>')
-    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": result["excluded_ids"]}})
+    response.headers["HX-Trigger"] = json.dumps(
+        {"work_areas_excluded": {"excluded": result["excluded_ids"], "skipped": result["skipped"]}}
+    )
     return response
 
 
@@ -667,7 +680,7 @@ def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             work_area_group_id=group_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 
@@ -681,7 +694,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             opportunity_access_id=assignee_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 
@@ -695,19 +708,19 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
     if not assignee_id:
         return JsonResponse({"error": "assignee_id required"}, status=400)
 
-    qs = WorkArea.objects.filter(
+    stats = WorkArea.objects.filter(
         opportunity=request.opportunity,
         opportunity_access_id=assignee_id,
-    )
-    stats = qs.aggregate(
+    ).aggregate(
         buildings=Sum("building_count"),
         visits=Sum("expected_visit_count"),
+        work_areas=Count("id"),
     )
     return JsonResponse(
         {
             "assigned_buildings": stats["buildings"] or 0,
             "assigned_visits": stats["visits"] or 0,
-            "assigned_work_areas": qs.count(),
+            "assigned_work_areas": stats["work_areas"],
         }
     )
 
@@ -769,7 +782,7 @@ def save_assignment(request, org_slug, opp_id):
     for work_area in all_work_areas:
         work_area.opportunity_access = work_area_to_access[work_area.id]
         if work_area.status == WorkAreaStatus.UNASSIGNED:
-            work_area.status = WorkAreaStatus.NOT_STARTED
+            work_area.status = WorkAreaStatus.NOT_VISITED
 
     WorkArea.objects.bulk_update(all_work_areas, ["opportunity_access", "status"])
 
@@ -784,6 +797,51 @@ def save_assignment(request, org_slug, opp_id):
         transaction.on_commit(lambda aid=access_id: send_work_area_assignment_notification.delay(aid))
 
     return JsonResponse({"status": "ok"})
+
+
+@require_POST
+@org_program_manager_required
+@opportunity_required
+@require_flag_for_opp(MICROPLANNING)
+def unassign_work_areas(request, org_slug, opp_id):
+    try:
+        data = json.loads(request.body)
+        raw_ids = data["work_area_ids"]
+        if not isinstance(raw_ids, list) or not raw_ids:
+            raise ValueError
+        # Reject bool/float/str — JSON ints arrive as `int`, anything else is a client bug.
+        if any(type(i) is not int for i in raw_ids):
+            raise ValueError
+        if len(set(raw_ids)) != len(raw_ids):
+            raise ValueError
+        work_area_ids = raw_ids
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return JsonResponse({"error": _("Invalid request body")}, status=400)
+
+    # Unassignment is a synchronous HQ sync; cap the request size to keep it bounded.
+    if len(work_area_ids) > MAX_UNASSIGN_WORK_AREAS:
+        return JsonResponse(
+            {"error": _("Work Area IDs must contain at most %(max)d items") % {"max": MAX_UNASSIGN_WORK_AREAS}},
+            status=400,
+        )
+
+    result = unassign_work_areas_for_opportunity(
+        opportunity=request.opportunity,
+        work_area_ids=work_area_ids,
+        user=request.user,
+    )
+
+    if result["failed_ids"] and not result["unassigned_ids"]:
+        return JsonResponse({"error": _("Failed to sync with CommCare HQ. Please try again.")}, status=502)
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "unassigned_ids": result["unassigned_ids"],
+            "skipped": result["skipped"],
+            "failed_ids": result["failed_ids"],
+        }
+    )
 
 
 @require_GET

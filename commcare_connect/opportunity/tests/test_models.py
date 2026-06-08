@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 
+from commcare_connect.opportunity.exceptions import TaskAlreadyAssignedError
 from commcare_connect.opportunity.models import OpportunityActiveEvent  # added via pghistory
 from commcare_connect.opportunity.models import PaymentInvoiceStatusEvent  # added via pghistory
 from commcare_connect.opportunity.models import (
@@ -265,6 +266,28 @@ class TestAssignedTaskAssign:
         mock_update.assert_not_called()
         assert AssignedTask.objects.filter(pk=assigned.pk).exists()
 
+    def test_raises_when_task_type_already_assigned(self):
+        access = OpportunityAccessFactory()
+        task_type = TaskTypeFactory(app=access.opportunity.deliver_app)
+        due_date = date.today() + timedelta(days=7)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.ASSIGNED)
+
+        with pytest.raises(TaskAlreadyAssignedError):
+            AssignedTask.assign(task_type=task_type, opportunity_access=access, due_date=due_date)
+
+        assert AssignedTask.objects.filter(task_type=task_type, opportunity_access=access).count() == 1
+
+    def test_allows_reassign_after_completion(self):
+        access = OpportunityAccessFactory()
+        task_type = TaskTypeFactory(app=access.opportunity.deliver_app)
+        due_date = date.today() + timedelta(days=7)
+        AssignedTaskFactory(task_type=task_type, opportunity_access=access, status=AssignedTaskStatus.COMPLETED)
+
+        assigned = AssignedTask.assign(task_type=task_type, opportunity_access=access, due_date=due_date)
+
+        assert AssignedTask.objects.filter(task_type=task_type, opportunity_access=access).count() == 2
+        assert assigned.status == AssignedTaskStatus.ASSIGNED
+
     def test_does_not_create_row_when_hq_call_fails(self):
         access = OpportunityAccessFactory()
         task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
@@ -360,6 +383,7 @@ class TestAssignedTaskDeleteAndResetHQ:
     def test_skips_hq_when_other_assigned_task_remains(self):
         access = OpportunityAccessFactory()
         task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
+        task_type2 = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
         task_to_delete = AssignedTaskFactory(
             task_type=task_type,
             opportunity_access=access,
@@ -367,7 +391,7 @@ class TestAssignedTaskDeleteAndResetHQ:
             due_date=date.today() + timedelta(days=7),
         )
         AssignedTaskFactory(
-            task_type=task_type,
+            task_type=task_type2,
             opportunity_access=access,
             status=AssignedTaskStatus.ASSIGNED,
             due_date=date.today() + timedelta(days=7),
@@ -382,11 +406,11 @@ class TestAssignedTaskDeleteAndResetHQ:
 
     def test_deduplicates_hq_calls(self):
         access = OpportunityAccessFactory()
-        task_type = TaskTypeFactory(app=access.opportunity.deliver_app, case_property="needs_assessment")
         due_date = date.today() + timedelta(days=7)
         tasks = AssignedTaskFactory.create_batch(
             2,
-            task_type=task_type,
+            task_type__app=access.opportunity.deliver_app,
+            task_type__case_property="needs_assessment",
             opportunity_access=access,
             status=AssignedTaskStatus.ASSIGNED,
             due_date=due_date,

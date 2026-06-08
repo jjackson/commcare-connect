@@ -134,7 +134,7 @@ class TestUserTasksFilterSet:
 
     def test_date_assigned_range(self):
         old_task = AssignedTaskFactory(opportunity_access=self.access, task_type=self.task_type)
-        recent_task = AssignedTaskFactory(opportunity_access=self.access, task_type=self.task_type)
+        recent_task = AssignedTaskFactory(opportunity_access=self.access)
 
         now = timezone.now()
         AssignedTask.objects.filter(pk=old_task.pk).update(date_created=now - timedelta(days=10))
@@ -152,9 +152,7 @@ class TestUserTasksFilterSet:
         soon_task = AssignedTaskFactory(
             opportunity_access=self.access, task_type=self.task_type, due_date=today + timedelta(days=3)
         )
-        AssignedTaskFactory(
-            opportunity_access=self.access, task_type=self.task_type, due_date=today + timedelta(days=30)
-        )
+        AssignedTaskFactory(opportunity_access=self.access, due_date=today + timedelta(days=30))
 
         filterset = self._filterset({"due_date_to": (today + timedelta(days=7)).isoformat()})
 
