@@ -91,10 +91,10 @@ class WorkArea(geo_models.Model):
     }
 
     def update_status(self):
-        if self.status not in self.VISIT_TRACKABLE_STATUSES:
+        if self.status not in self.VISIT_TRACKABLE_STATUSES or self.opportunity_access is None:
             return
 
-        counts = UserVisit.objects.filter(work_area=self).aggregate(
+        counts = UserVisit.objects.filter(opportunity_access=self.opportunity_access, work_area=self).aggregate(
             total=Count("id"),
             approved=Count("id", filter=Q(status=VisitValidationStatus.approved)),
         )
