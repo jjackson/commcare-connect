@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from allauth.account.models import transaction
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -135,6 +137,18 @@ def start_learn_app(request):
         user_invite.status = UserInviteStatus.accepted
         user_invite.save()
     return Response()
+
+
+class InviteRedirectView(View):
+    def get(self, request, opportunity_uuid):
+        params = urlencode(
+            {
+                "id": "org.commcare.dalvik",
+                "hl": "en_US",
+                "referrer": f"opp={opportunity_uuid}",
+            }
+        )
+        return redirect(f"https://play.google.com/store/apps/details?{params}")
 
 
 class AcceptInviteView(View):
