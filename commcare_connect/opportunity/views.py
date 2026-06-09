@@ -1067,7 +1067,8 @@ def approve_visits(request, org_slug, opp_id):
         UserVisit.objects.filter(id__in=visit_ids, opportunity=request.opportunity)
         .filter(~Q(status=VisitValidationStatus.approved) | Q(review_status=VisitReviewStatus.disagree))
         .prefetch_related("opportunity")
-        .only("status", "review_status", "flagged", "justification", "review_created_on")
+        .select_related("work_area", "work_area__opportunity_access")
+        .only("status", "review_status", "flagged", "justification", "review_created_on", "work_area")
     )
 
     if len(visits) > max(PAGE_SIZE_OPTIONS):
