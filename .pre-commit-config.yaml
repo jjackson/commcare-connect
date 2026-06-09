@@ -30,7 +30,9 @@ repos:
     rev: v1.36.4
     hooks:
       - id: djlint-reformat-django
+        exclude: commcare_connect/templates/prelogin/home.html
       - id: djlint-django
+        exclude: commcare_connect/templates/prelogin/home.html
 
   - repo: https://github.com/adamchainz/django-upgrade
     rev: '1.13.0'
