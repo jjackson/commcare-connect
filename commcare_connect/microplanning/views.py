@@ -602,7 +602,9 @@ def exclude_work_areas(request, org_slug, opp_id):
         exclusion_reason=exclusion_reason,
     )
     response = HttpResponse('<div id="exclude-progress"></div>')
-    response.headers["HX-Trigger"] = json.dumps({"work_areas_excluded": {"excluded": result["excluded_ids"]}})
+    response.headers["HX-Trigger"] = json.dumps(
+        {"work_areas_excluded": {"excluded": result["excluded_ids"], "skipped": result["skipped"]}}
+    )
     return response
 
 
@@ -678,7 +680,7 @@ def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             work_area_group_id=group_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 
@@ -692,7 +694,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
         WorkArea.objects.filter(
             opportunity=request.opportunity,
             opportunity_access_id=assignee_id,
-        ).values("id", "building_count", "expected_visit_count")
+        ).values("id", "building_count", "expected_visit_count", "status")
     )
     return JsonResponse({"work_areas": work_areas})
 

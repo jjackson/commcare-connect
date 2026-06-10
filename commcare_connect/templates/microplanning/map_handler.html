@@ -1,5 +1,4 @@
 {% load i18n %}
-
 <script>
     document.addEventListener("alpine:init", () => {
         Alpine.data("mapController", () => ({
@@ -590,6 +589,7 @@
 
                 document.addEventListener('work_areas_excluded', (e) => {
                     const excluded = e.detail?.excluded ?? [];
+                    const skipped = e.detail?.skipped ?? 0;
                     for (const id of excluded) {
                         this.map.setFeatureState(
                             { source: 'workareas', sourceLayer: 'workareas', id },
@@ -599,7 +599,13 @@
                     }
                     this.showExcludeModal = false;
                     this.clearSelection();
-                    this.showToast(`{% translate "Work area(s) excluded successfully." %}`);
+                    if (excluded.length > 0 && skipped === 0) {
+                        this.showToast(`{% translate "Work area(s) excluded successfully." %}`);
+                    } else if (excluded.length > 0 && skipped > 0) {
+                        this.showToast(`${excluded.length} {% translate "excluded" %}, ${skipped} {% translate "skipped (already excluded or not 'Not Visited')." %}`);
+                    } else if (skipped > 0) {
+                        this.showToast(`{% translate "No work areas were excluded. Only 'Not Visited' work areas can be excluded." %}`, true);
+                    }
                 });
             },
 
