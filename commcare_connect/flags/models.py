@@ -130,6 +130,22 @@ class Flag(AbstractUserFlag):
         cache.add(cache_key, ids)
         return ids
 
+    def is_active(self, request, read_only: bool = False) -> bool:
+        if super().is_active(request, read_only):
+            return True
+
+        opportunity = getattr(request, "opportunity", None)
+        if opportunity and self.is_active_for(opportunity):
+            return True
+        program = _get_program_for_opportunity(opportunity)
+        if program and self.is_active_for(program):
+            return True
+        org = getattr(request, "org", None)
+        if org and self.is_active_for(org):
+            return True
+
+        return False
+
 
 def _get_program_for_opportunity(opportunity):
     if not (opportunity and opportunity.managed):
