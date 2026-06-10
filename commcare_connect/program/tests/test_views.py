@@ -229,7 +229,7 @@ class TestNetworkManagerPendingPayments:
 
         # accrued (100 + 50) - paid (30 + 30 + 20) = 70.
         # The fan-out bug would instead report (100 + 100 + 50) - (30 + 30 + 20) = 170.
-        assert self._pending_payment_count(opportunity) == f"{opportunity.currency_code} 70"
+        assert self._pending_payment_count(opportunity) == f"{opportunity.currency_code} 70.00"
 
     def test_pending_payment_with_no_payments(self):
         """No payments yet: the full accrued amount is still pending."""
