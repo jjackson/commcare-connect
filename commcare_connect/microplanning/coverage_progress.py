@@ -12,7 +12,7 @@ from commcare_connect.microplanning.helpers import pct
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
-LAST_WEEK_DAYS = 7
+WEEK_DAYS = 7
 
 # A group key is a ward slug (str) or a work_area_group_id (int); aggregate dicts are keyed by it.
 GroupKey = str | int
@@ -63,16 +63,26 @@ class CoverageDateFilter:
     def is_overall(self) -> bool:
         return self.start is None and self.end is None
 
+    @classmethod
+    def last_week(cls) -> "CoverageDateFilter":
+        today = localdate()
+        return cls(start=today - datetime.timedelta(days=WEEK_DAYS - 1), end=today)
+
     @property
-    def window(self) -> tuple[datetime.date, datetime.date] | None:
+    def window(self) -> tuple[datetime.datetime, datetime.datetime] | None:
+        """Half-open ``[start, end)`` datetime range for this inclusive date filter, or None for overall.
+
+        The upper bound is midnight of the day *after* ``end`` so that every instant on the ``end``
+        day is included when filtered with ``__lt=end_dt`` against sub-second visit / transition
+        timestamps.
+        """
         if self.is_overall:
             return None
-        return (self.start, self.end)
-
-
-def last_week_window() -> tuple[datetime.date, datetime.date]:
-    today = localdate()
-    return (today - datetime.timedelta(days=LAST_WEEK_DAYS - 1), today)
+        start_dt = timezone.make_aware(datetime.datetime.combine(self.start, datetime.time.min))
+        end_dt = timezone.make_aware(
+            datetime.datetime.combine(self.end + datetime.timedelta(days=1), datetime.time.min)
+        )
+        return (start_dt, end_dt)
 
 
 def non_excluded_workareas(opportunity):
@@ -95,19 +105,6 @@ def annotate_status_timestamps(qs):
         visited_at=_earliest_transition_subquery(WorkAreaStatus.VISITED),
         evc_reached_at=_earliest_transition_subquery(WorkAreaStatus.EXPECTED_VISIT_REACHED),
     )
-
-
-def _window_datetime_bounds(window):
-    """Convert an inclusive (start, end) *date* window to a half-open [start, end-exclusive) datetime range.
-
-    Callers use ``__gte=start_dt`` AND ``__lt=end_dt``. Because visit_date / pgh_created_at are
-    timestamps with sub-second precision, the upper bound is midnight of the day AFTER ``end`` (not
-    ``end 23:59:59``) so every instant on the ``end`` day is included.
-    """
-    start, end = window
-    start_dt = timezone.make_aware(datetime.datetime.combine(start, datetime.time.min))
-    end_dt = timezone.make_aware(datetime.datetime.combine(end + datetime.timedelta(days=1), datetime.time.min))
-    return start_dt, end_dt
 
 
 def get_target_aggregates(opportunity, group_field) -> dict[GroupKey, TargetAggregate]:
@@ -137,7 +134,7 @@ def get_status_aggregates(opportunity, group_field, window) -> dict[GroupKey, St
         evc_filter = Q(status=WorkAreaStatus.EXPECTED_VISIT_REACHED)
     else:
         qs = annotate_status_timestamps(qs)
-        start_dt, end_dt = _window_datetime_bounds(window)
+        start_dt, end_dt = window
         visited_filter = Q(status=WorkAreaStatus.VISITED, visited_at__gte=start_dt, visited_at__lt=end_dt)
         evc_filter = Q(
             status=WorkAreaStatus.EXPECTED_VISIT_REACHED, evc_reached_at__gte=start_dt, evc_reached_at__lt=end_dt
@@ -164,7 +161,7 @@ def get_visits_approved_aggregates(opportunity, group_field, window) -> dict[Gro
         work_area__isnull=False,
     ).exclude(work_area__status=WorkAreaStatus.EXCLUDED)
     if window is not None:
-        start_dt, end_dt = _window_datetime_bounds(window)
+        start_dt, end_dt = window
         qs = qs.filter(visit_date__gte=start_dt, visit_date__lt=end_dt)
 
     group_expr = f"work_area__{group_field}"
@@ -231,7 +228,7 @@ def _static_slot(opportunity):
 
 def _last_week_slot(opportunity):
     def compute():
-        window = last_week_window()
+        window = CoverageDateFilter.last_week().window
         return {
             "ward_status": get_status_aggregates(opportunity, "ward", window=window),
             "ward_visits": get_visits_approved_aggregates(opportunity, "ward", window=window),

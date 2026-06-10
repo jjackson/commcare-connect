@@ -9,14 +9,12 @@ from commcare_connect.microplanning.coverage_progress import (
     CoverageDateFilter,
     CoverageProgressReport,
     _static_slot,
-    _window_datetime_bounds,
     annotate_status_timestamps,
     build_wag_rows,
     build_ward_rows,
     get_status_aggregates,
     get_target_aggregates,
     get_visits_approved_aggregates,
-    last_week_window,
     non_excluded_workareas,
     status_event_model,
     ward_saturation_goal,
@@ -38,12 +36,15 @@ def test_date_filter_overall_has_no_window():
 def test_date_filter_custom_range_window():
     f = CoverageDateFilter(start=datetime.date(2026, 1, 1), end=datetime.date(2026, 1, 31))
     assert f.is_overall is False
-    assert f.window == (datetime.date(2026, 1, 1), datetime.date(2026, 1, 31))
+    # Inclusive date range -> half-open [start midnight, day-after-end midnight) datetime range.
+    assert f.window == (
+        timezone.make_aware(datetime.datetime(2026, 1, 1, 0, 0)),
+        timezone.make_aware(datetime.datetime(2026, 2, 1, 0, 0)),
+    )
 
 
 def test_last_week_window_spans_exactly_seven_days():
-    start, end = last_week_window()
-    start_dt, end_dt = _window_datetime_bounds((start, end))
+    start_dt, end_dt = CoverageDateFilter.last_week().window
     assert (end_dt - start_dt) == datetime.timedelta(days=7)
 
 
