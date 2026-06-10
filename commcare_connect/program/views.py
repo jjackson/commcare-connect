@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import CharField, Count, F, IntegerField, Max, OuterRef, Prefetch, Q, Subquery, Sum, Value
+from django.db.models import CharField, Count, DecimalField, F, Max, OuterRef, Prefetch, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce, Concat
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -407,8 +407,8 @@ def network_manager_home(request, org):
     pending_payments_data_opps = (
         Opportunity.objects.filter(managed=True, organization=org)
         .annotate(
-            pending_payment=Coalesce(Subquery(payment_accrued_sum_sq), 0, output_field=IntegerField())
-            - Coalesce(Subquery(payment_amount_sum_sq), 0, output_field=IntegerField())
+            pending_payment=Coalesce(Subquery(payment_accrued_sum_sq), 0, output_field=DecimalField())
+            - Coalesce(Subquery(payment_amount_sum_sq), 0, output_field=DecimalField())
         )
         .filter(pending_payment__gte=0)
     )
