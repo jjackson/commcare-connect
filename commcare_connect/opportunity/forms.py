@@ -248,8 +248,10 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
                             heading=_("Manage Credentials"),
                             hint=format_html(
                                 _(
-                                    "Configure credential requirements for learning and delivery. For more "
-                                    "information, please refer to the {link_start}following documentation{link_end}."
+                                    "Configure credential requirements for learning and delivery."
+                                    " Disabling this section means no credential requirements will"
+                                    " be set for the opportunity. For more information,"
+                                    " please refer to the {link_start}following documentation{link_end}."
                                 ),
                                 link_start=format_html(
                                     '<a href="{}" target="_blank" class="text-blue-600 hover:underline">',
@@ -1965,10 +1967,11 @@ class CreateTaskForm(forms.Form):
         if opportunity is not None:
             task_qs = TaskType.objects.filter(app=opportunity.deliver_app, is_active=True)
             if access is not None:
-                task_qs = task_qs.exclude(
-                    assignedtask__opportunity_access=access,
-                    assignedtask__status=AssignedTaskStatus.ASSIGNED,
-                )
+                already_assigned = AssignedTask.objects.filter(
+                    opportunity_access=access,
+                    status=AssignedTaskStatus.ASSIGNED,
+                ).values_list("task_type_id", flat=True)
+                task_qs = task_qs.exclude(pk__in=already_assigned)
             self.fields["task"].queryset = task_qs
             self.fields["access"].queryset = OpportunityAccess.objects.filter(
                 opportunity=opportunity,
