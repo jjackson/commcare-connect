@@ -408,6 +408,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
     )
     status = tables.Column(verbose_name="Invoice Status")
     invoice_type = tables.Column(verbose_name="Invoice Type", accessor="service_delivery", empty_values=())
+    date = tables.Column(verbose_name=gettext_lazy("Invoice Generation Date"))
     last_status_modified_at = tables.Column(
         verbose_name=gettext_lazy("Invoice Last Updated Date"), accessor="last_status_modified_at"
     )
@@ -442,7 +443,6 @@ class PaymentInvoiceTable(OpportunityContextTable):
         self.is_pm = kwargs.pop("is_pm", False)
         super().__init__(*args, **kwargs)
         self.base_columns["amount"].verbose_name = f"Amount ({self.opportunity.currency_code})"
-        self.columns["date"].column.verbose_name = _("Invoice Generation Date")
 
     def render_exchange_rate(self, value):
         return f"{round(value, 2)} {self.opportunity.currency_code} per USD"
