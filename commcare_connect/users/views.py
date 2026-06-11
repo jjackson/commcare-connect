@@ -140,16 +140,18 @@ def start_learn_app(request):
     return Response()
 
 
-class InviteRedirectView(View):
-    def get(self, request, opportunity_uuid):
-        # The <uuid:> URL converter already rejects non-UUIDs with a 404, so this
-        # try/except is unreachable in practice. It's kept to satisfy CodeQL's
-        # py/url-redirection rule, which doesn't model Django URL converters as
-        # sanitizers.
+class InviteRedirectView(RedirectView):
+    permanent = False
+
+    def get_redirect_url(self, *args, **kwargs):
+        # The <uuid:> URL converter already rejects non-UUIDs with a 404, so
+        # this try/except is unreachable in practice. It's kept to satisfy
+        # CodeQL's py/url-redirection rule, which doesn't model Django URL
+        # converters as sanitizers.
         try:
-            opportunity_uuid = str(uuid.UUID(str(opportunity_uuid)))
+            opportunity_uuid = str(uuid.UUID(str(kwargs["opportunity_uuid"])))
         except (ValueError, TypeError):
-            return HttpResponse("Invalid opportunity id", status=400)
+            return None
         params = urlencode(
             {
                 "id": "org.commcare.dalvik",
@@ -157,7 +159,7 @@ class InviteRedirectView(View):
                 "referrer": f"opp={opportunity_uuid}",
             }
         )
-        return redirect(f"https://play.google.com/store/apps/details?{params}")
+        return f"https://play.google.com/store/apps/details?{params}"
 
 
 class AcceptInviteView(View):
