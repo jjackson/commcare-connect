@@ -940,7 +940,7 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def coverage_progress(request, *args, **kwargs):
     # Renders an empty page shell for now, but fetches the report data (and exercises the safeguard)
     # so the endpoint is live. CCCT-2268 (https://dimagi.atlassian.net/browse/CCCT-2268) adds
