@@ -1646,6 +1646,26 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert "Ward Population Target" in body
         assert "w1" in body
 
+    def test_export_returns_xlsx_of_wag_table(self, client, org_user_admin, opportunity):
+        group = WorkAreaGroupFactory(opportunity=opportunity, ward="w1", name="G1")
+        WorkAreaFactory(opportunity=opportunity, ward="w1", work_area_group=group, status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"_export": "xlsx", "_table": "wag"},
+        )
+        assert resp.status_code == 200
+        assert "spreadsheetml" in resp["Content-Type"]  # .xlsx
+        assert "metrics_by_work_area_group.xlsx" in resp["Content-Disposition"]
+
+    def test_export_unknown_table_returns_400(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"_export": "csv", "_table": "bogus"},
+        )
+        assert resp.status_code == 400
+
     def test_statement_timeout_degrades_gracefully(self, client, org_user_admin, opportunity):
         client.force_login(org_user_admin)
         cause = Exception()
