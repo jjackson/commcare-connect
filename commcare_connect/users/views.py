@@ -1,3 +1,4 @@
+import uuid
 from urllib.parse import urlencode
 
 from allauth.account.models import transaction
@@ -141,6 +142,14 @@ def start_learn_app(request):
 
 class InviteRedirectView(View):
     def get(self, request, opportunity_uuid):
+        # The <uuid:> URL converter already rejects non-UUIDs with a 404, so this
+        # try/except is unreachable in practice. It's kept to satisfy CodeQL's
+        # py/url-redirection rule, which doesn't model Django URL converters as
+        # sanitizers.
+        try:
+            opportunity_uuid = str(uuid.UUID(str(opportunity_uuid)))
+        except (ValueError, TypeError):
+            return HttpResponse("Invalid opportunity id", status=400)
         params = urlencode(
             {
                 "id": "org.commcare.dalvik",
