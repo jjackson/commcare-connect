@@ -1632,6 +1632,38 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert any(row.get_cell_value("ward") == "w1" for row in ward_table.rows)
         assert "wag_table" in resp.context
 
+    def test_context_exposes_date_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"range": "last_week"},
+        )
+        assert resp.status_code == 200
+        assert "filter_form" in resp.context
+        assert resp.context["selected_range"] == "last_week"
+        assert resp.context["filter_query"] == "range=last_week"
+
+    def test_export_link_carries_active_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        # The download button hrefs must embed the active filter so a download matches the filtered view.
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"range": "last_week"},
+        )
+        assert b"?range=last_week&_export=csv&_table=ward" in resp.content
+
+    def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"range": "last_week", "_export": "csv", "_table": "ward"},
+        )
+        assert resp.status_code == 200
+        assert resp["Content-Type"].startswith("text/csv")
+
     def test_export_returns_csv_of_requested_table(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
