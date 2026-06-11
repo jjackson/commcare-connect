@@ -1642,17 +1642,32 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert resp.status_code == 200
         assert "filter_form" in resp.context
         assert resp.context["selected_range"] == "last_week"
-        assert resp.context["filter_query"] == "range=last_week"
+        # The download links embed the active filter so a download matches the filtered view.
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?range=last_week&_export=csv&_table=ward"
 
-    def test_export_link_carries_active_filter(self, client, org_user_admin, opportunity):
+    def test_export_links_carry_custom_range(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
-        # The download button hrefs must embed the active filter so a download matches the filtered view.
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "last_week"},
+            {"range": "custom", "start": "2026-01-01", "end": "2026-01-31"},
         )
-        assert b"?range=last_week&_export=csv&_table=ward" in resp.content
+        assert resp.context["export_hrefs"]["wag"]["xlsx"] == (
+            "?range=custom&start=2026-01-01&end=2026-01-31&_export=xlsx&_table=wag"
+        )
+
+    def test_invalid_range_is_not_reflected_into_page(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        # A crafted range must not reach the Alpine x-data expression or the download links.
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"range": "'+alert(1)+'"},
+        )
+        assert resp.status_code == 200
+        assert resp.context["selected_range"] == "overall"
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?_export=csv&_table=ward"
+        assert b"alert(1)" not in resp.content
 
     def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)

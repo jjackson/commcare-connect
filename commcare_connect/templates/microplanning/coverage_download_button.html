@@ -1,5 +1,6 @@
 {% load i18n %}
-{# Per-table download button. ``table_key`` is "ward" or "wag"; it picks which table the view exports. #}
+{# Per-table download button. ``hrefs`` is the export-URL pair {csv, xlsx} the view built for this
+   table (already carrying the active filter). #}
 <span x-data="{ open: false }" class="relative inline-block" @click.outside="open = false">
   <button type="button"
           class="button button-outline-rounded button-sm py-2"
@@ -10,9 +11,9 @@
        x-cloak
        x-transition
        class="absolute right-0 z-40 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-2 shadow-lg">
-    <a href="?{{ filter_query }}{% if filter_query %}&{% endif %}_export=csv&_table={{ table_key }}"
+    <a href="{{ hrefs.csv }}"
        class="block px-4 py-1 text-sm hover:bg-slate-100">{% translate "CSV" %}</a>
-    <a href="?{{ filter_query }}{% if filter_query %}&{% endif %}_export=xlsx&_table={{ table_key }}"
+    <a href="{{ hrefs.xlsx }}"
        class="block px-4 py-1 text-sm hover:bg-slate-100">{% translate "Excel (.xlsx)" %}</a>
   </div>
 </span>

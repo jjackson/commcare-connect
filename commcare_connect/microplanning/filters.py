@@ -1,5 +1,6 @@
 import django_filters
 from django import forms
+from django.utils.http import urlencode
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.microplanning.coverage_progress import CoverageDateFilter
@@ -22,6 +23,7 @@ COVERAGE_RANGE_CHOICES = (
     (RANGE_LAST_WEEK, _("Last week")),
     (RANGE_CUSTOM, _("Custom range")),
 )
+VALID_RANGES = frozenset(value for value, _label in COVERAGE_RANGE_CHOICES)
 
 
 class CoverageProgressFilterSet(django_filters.FilterSet):
@@ -72,6 +74,28 @@ class CoverageProgressFilterSet(django_filters.FilterSet):
         if cd.get("range") == RANGE_CUSTOM and cd.get("start") and cd.get("end") and cd["start"] <= cd["end"]:
             return CoverageDateFilter(start=cd["start"], end=cd["end"])
         return CoverageDateFilter.overall()
+
+    @property
+    def selected_range(self) -> str:
+        """The submitted range mode, whitelisted to a valid choice. Safe to echo into the page
+        (e.g. an Alpine ``x-data`` expression); an unknown value collapses to ``overall``."""
+        submitted = self.data.get("range")
+        return submitted if submitted in VALID_RANGES else RANGE_OVERALL
+
+    def active_params(self) -> dict:
+        """The active filter as a plain dict. Param names come from the declared filters (single
+        source of truth); an unknown range is dropped to stay consistent with ``selected_range``."""
+        params = {}
+        for name in self.filters:
+            value = self.data.get(name)
+            if value and not (name == "range" and value not in VALID_RANGES):
+                params[name] = value
+        return params
+
+    def export_querystring(self, **extra) -> str:
+        """URL-encoded querystring for a download link: the active filter plus the given export
+        params (e.g. ``_export``/``_table``), so the download matches the on-screen filtered view."""
+        return urlencode({**self.active_params(), **extra})
 
 
 class WorkAreaMapFilterSet(django_filters.FilterSet):

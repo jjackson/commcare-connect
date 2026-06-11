@@ -23,7 +23,6 @@ from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, Stre
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.http import urlencode
 from django.utils.text import slugify
 from django.utils.timezone import localdate
 from django.utils.translation import gettext as _
@@ -982,9 +981,12 @@ def coverage_progress(request, *args, **kwargs):
     if export_response is not None:
         return export_response
 
-    # Carry the active filter onto the per-table download links so a download matches the on-screen,
-    # filtered view rather than silently exporting the overall report.
-    filter_query = urlencode({k: request.GET[k] for k in ("range", "start", "end") if request.GET.get(k)})
+    # Pre-build the per-table download links so each carries the active filter (a download then
+    # matches the on-screen filtered view rather than silently exporting the overall report).
+    export_hrefs = {
+        table: {fmt: "?" + filterset.export_querystring(_export=fmt, _table=table) for fmt in ("csv", "xlsx")}
+        for table in ("ward", "wag")
+    }
 
     context = {
         "opportunity": opportunity,
@@ -992,8 +994,8 @@ def coverage_progress(request, *args, **kwargs):
         "ward_table": ward_table,
         "wag_table": wag_table,
         "filter_form": filterset.form,
-        "selected_range": request.GET.get("range") or "overall",
-        "filter_query": filter_query,
+        "selected_range": filterset.selected_range,
+        "export_hrefs": export_hrefs,
         "path": [
             {
                 "title": _("Progress Map"),
