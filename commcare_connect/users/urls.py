@@ -4,6 +4,7 @@ from commcare_connect.users import views
 from commcare_connect.users.views import (
     AcceptInviteView,
     CheckInvitedUserView,
+    InviteRedirectView,
     ResendInvitesView,
     RetrieveUserOTPView,
     SMSStatusCallbackView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path("create_user_link/", view=create_user_link_view, name="create_user_link"),
     path("start_learn_app/", view=start_learn_app, name="start_learn_app"),
     path("accept_invite/<slug:invite_id>/", view=AcceptInviteView.as_view(), name="accept_invite"),
+    path("invite_redirect/<uuid:opportunity_uuid>/", view=InviteRedirectView.as_view(), name="invite_redirect"),
     path("demo_users/", view=demo_user_tokens, name="demo_users"),
     path("sms_status_callback/", SMSStatusCallbackView.as_view(), name="sms_status_callback"),
     path("api_keys/", views.get_api_keys, name="get_api_keys"),

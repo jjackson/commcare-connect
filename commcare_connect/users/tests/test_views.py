@@ -109,6 +109,21 @@ class TestCreateUserLinkView:
         assert user_link.commcare_username == "abc"
 
 
+class TestInviteRedirectView:
+    def test_redirects_to_play_store_with_opp_referrer(self, opportunity, client):
+        opportunity_uuid = opportunity.opportunity_id
+        url = reverse("users:invite_redirect", args=(opportunity_uuid,))
+
+        response = client.get(url)
+
+        expected = (
+            "https://play.google.com/store/apps/details"
+            f"?id=org.commcare.dalvik&hl=en_US&referrer=opp%3D{opportunity_uuid}"
+        )
+        assert response.status_code == 302
+        assert response.url == expected
+
+
 class TestRetrieveUserOTPView:
     @property
     def url(self):

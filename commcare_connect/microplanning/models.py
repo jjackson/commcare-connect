@@ -3,7 +3,7 @@ from functools import cached_property
 import pghistory
 from django.conf import settings
 from django.contrib.gis.db import models as geo_models
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Index, Q, Sum
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
@@ -14,7 +14,6 @@ SRID = 4326
 
 
 class WorkAreaStatus(geo_models.TextChoices):
-    NOT_STARTED = "NOT_STARTED", _("Not Started")
     UNASSIGNED = "UNASSIGNED", _("Unassigned")
     NOT_VISITED = "NOT_VISITED", _("Not Visited")
     VISITED = "VISITED", _("Visited")
@@ -43,7 +42,14 @@ class WorkAreaGroup(geo_models.Model):
         )
 
 
-@pghistory.track(fields=["expected_visit_count", "work_area_group", "status", "opportunity_access", "excluded_reason"])
+@pghistory.track(
+    fields=["expected_visit_count", "work_area_group", "status", "opportunity_access", "excluded_reason"],
+    meta={
+        "indexes": [
+            Index(fields=["pgh_obj", "status", "pgh_created_at"], name="wae_obj_status_created_idx"),
+        ],
+    },
+)
 class WorkArea(geo_models.Model):
     work_area_group = geo_models.ForeignKey(WorkAreaGroup, null=True, blank=True, on_delete=geo_models.SET_NULL)
     opportunity = geo_models.ForeignKey(Opportunity, on_delete=geo_models.CASCADE)
@@ -68,7 +74,7 @@ class WorkArea(geo_models.Model):
         choices=WorkAreaStatus.choices,
         default=WorkAreaStatus.UNASSIGNED,
     )
-    case_id = geo_models.UUIDField(null=True, blank=True, unique=True)
+    case_id = geo_models.CharField(max_length=255, unique=True, null=True)
     case_properties = geo_models.JSONField(default=dict, null=True, blank=True)
     excluded_by = geo_models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -86,7 +92,6 @@ class WorkArea(geo_models.Model):
         return f"{self.slug}-{self.opportunity_id}"
 
     VISIT_TRACKABLE_STATUSES = {
-        WorkAreaStatus.NOT_STARTED,
         WorkAreaStatus.NOT_VISITED,
         WorkAreaStatus.VISITED,
         WorkAreaStatus.EXPECTED_VISIT_REACHED,
@@ -121,11 +126,7 @@ class WorkAreaInaccessibilityRequest(geo_models.Model):
     additional_details = geo_models.TextField(blank=True, default="")
 
     class Meta:
-        constraints = [
-            geo_models.UniqueConstraint(
-                fields=["xform_id", "work_area"], name="unique_xform_work_area_inaccessibility"
-            )
-        ]
+        constraints = [geo_models.UniqueConstraint(fields=["work_area"], name="unique_work_area_inaccessibility")]
 
     def __str__(self):
         return f"WorkAreaInaccessibilityRequest {self.xform_id} - {self.work_area}"

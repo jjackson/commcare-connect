@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.utils import OperationalError
 from django.test import Client
 from django.urls import reverse
 
@@ -264,7 +265,7 @@ class TestModifyWorkAreaUpdateView(BaseMicroplanningFlagTest):
             # decreased below visit count → EXPECTED_VISIT_REACHED
             (WorkAreaStatus.VISITED, 3, 5, 2, WorkAreaStatus.EXPECTED_VISIT_REACHED),
             # no visits → status unchanged regardless of count change
-            (WorkAreaStatus.NOT_STARTED, 0, 5, 2, WorkAreaStatus.NOT_STARTED),
+            (WorkAreaStatus.NOT_VISITED, 0, 5, 2, WorkAreaStatus.NOT_VISITED),
             # only group changed, not expected_visit_count → status unchanged
             (WorkAreaStatus.VISITED, 3, 5, 5, WorkAreaStatus.VISITED),
         ],
@@ -333,25 +334,25 @@ class TestWorkAreaTileViewFiltering(BaseMicroplanningFlagTest):
 
     def test_unfiltered_returns_all_work_areas(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.VISITED)
-        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
         qs = self._get_tile_queryset(client, org_user_admin, opportunity)
         assert qs.count() == 2
 
     def test_status_filter_forwarded(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.VISITED)
-        wa_not_started = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        wa_not_visited = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
         qs = self._get_tile_queryset(
             client,
             org_user_admin,
             opportunity,
-            query_params={"status": WorkAreaStatus.NOT_STARTED},
+            query_params={"status": WorkAreaStatus.NOT_VISITED},
         )
-        assert list(qs.values_list("id", flat=True)) == [wa_not_started.id]
+        assert list(qs.values_list("id", flat=True)) == [wa_not_visited.id]
 
     def test_assignee_filter_forwarded(self, client, org_user_admin, opportunity):
         access = OpportunityAccessFactory(opportunity=opportunity)
         wa_assigned = WorkAreaFactory(
-            opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_STARTED
+            opportunity=opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
         )
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
 
@@ -389,11 +390,11 @@ class TestWorkAreaMapFilterSet:
         access = OpportunityAccessFactory(opportunity=opportunity)
         group = WorkAreaGroupFactory(opportunity=opportunity)
 
-        wa_not_started = WorkAreaFactory(
+        wa_not_visited = WorkAreaFactory(
             opportunity=opportunity,
             work_area_group=group,
             opportunity_access=access,
-            status=WorkAreaStatus.NOT_STARTED,
+            status=WorkAreaStatus.NOT_VISITED,
         )
         wa_visited = WorkAreaFactory(
             opportunity=opportunity, work_area_group=group, opportunity_access=access, status=WorkAreaStatus.VISITED
@@ -402,7 +403,7 @@ class TestWorkAreaMapFilterSet:
         return SimpleNamespace(
             access=access,
             group=group,
-            wa_not_started=wa_not_started,
+            wa_not_visited=wa_not_visited,
             wa_visited=wa_visited,
             wa_unassigned=wa_unassigned,
         )
@@ -415,7 +416,7 @@ class TestWorkAreaMapFilterSet:
         "statuses, expected_attrs",
         [
             ([WorkAreaStatus.VISITED], ["wa_visited"]),
-            ([WorkAreaStatus.NOT_STARTED, WorkAreaStatus.UNASSIGNED], ["wa_not_started", "wa_unassigned"]),
+            ([WorkAreaStatus.NOT_VISITED, WorkAreaStatus.UNASSIGNED], ["wa_not_visited", "wa_unassigned"]),
         ],
         ids=["single_status", "multiple_statuses"],
     )
@@ -425,19 +426,19 @@ class TestWorkAreaMapFilterSet:
 
     def test_assignee_filter_excludes_unassigned(self, opportunity, work_areas):
         result = self._filter_ids({"assignee": [work_areas.access.user.pk]}, opportunity)
-        assert result == {work_areas.wa_not_started.id, work_areas.wa_visited.id}
+        assert result == {work_areas.wa_not_visited.id, work_areas.wa_visited.id}
 
     @pytest.mark.parametrize(
         "params, expected_attrs",
         [
-            ({"start_date": "2026-03-15"}, ["wa_not_started"]),
+            ({"start_date": "2026-03-15"}, ["wa_not_visited"]),
             ({"end_date": "2026-03-15"}, ["wa_visited"]),
-            ({"start_date": "2026-03-15", "end_date": "2026-03-22"}, ["wa_not_started"]),
+            ({"start_date": "2026-03-15", "end_date": "2026-03-22"}, ["wa_not_visited"]),
         ],
         ids=["start_date_gte", "end_date_lte", "date_range"],
     )
     def test_date_filters(self, opportunity, work_areas, params, expected_attrs):
-        for wa_attr, visit_date in [("wa_visited", "2026-03-10"), ("wa_not_started", "2026-03-20")]:
+        for wa_attr, visit_date in [("wa_visited", "2026-03-10"), ("wa_not_visited", "2026-03-20")]:
             UserVisitFactory(
                 opportunity=opportunity,
                 user=work_areas.access.user,
@@ -468,9 +469,9 @@ class TestWorkAreaMapFilterSet:
 
     def test_combined_status_and_assignee(self, opportunity, work_areas):
         result = self._filter_ids(
-            {"status": [WorkAreaStatus.NOT_STARTED], "assignee": [work_areas.access.user.pk]}, opportunity
+            {"status": [WorkAreaStatus.NOT_VISITED], "assignee": [work_areas.access.user.pk]}, opportunity
         )
-        assert result == {work_areas.wa_not_started.id}
+        assert result == {work_areas.wa_not_visited.id}
 
     def test_assignee_queryset_requires_opportunity(self):
         empty_qs = WorkArea.objects.none()
@@ -591,7 +592,7 @@ class TestUserVisitVectorLayer:
         visit_data.work_area.save()
         other_access = OpportunityAccessFactory(opportunity=opportunity)
         other_wa = WorkAreaFactory(
-            opportunity=opportunity, opportunity_access=other_access, status=WorkAreaStatus.NOT_STARTED
+            opportunity=opportunity, opportunity_access=other_access, status=WorkAreaStatus.NOT_VISITED
         )
         UserVisitFactory(
             opportunity=opportunity,
@@ -647,7 +648,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             ward="ward-x",
             building_count=10,
             expected_visit_count=5,
-            case_properties={"max_wag": "3", "wag_serial_number": "42", "lga": "LGA1", "state": "State1"},
+            case_properties={"lga": "LGA1", "state": "State1"},
             work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Group A"),
         )
         client.force_login(org_user_admin)
@@ -668,8 +669,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             "10",
             "5",
             "0",
-            "3",
-            "42",
             "LGA1",
             "State1",
             wa.work_area_group.name,
@@ -693,7 +692,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         WorkAreaFactory(opportunity=opportunity, case_properties=None, work_area_group=None)
         client.force_login(org_user_admin)
         row = self._parse_csv(client.get(self.url(opportunity)))[1]
-        assert row[6:] == ["0", "", "", "", "", ""]
+        assert row[6:] == ["0", "", "", ""]
 
     @pytest.mark.parametrize(
         "login_as, method, expected_status",
@@ -710,15 +709,15 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
 
     def test_status_filter(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
-        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
         client.force_login(org_user_admin)
 
-        rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_STARTED}"))
+        rows = self._parse_csv(client.get(self.url(opportunity) + f"?status={WorkAreaStatus.NOT_VISITED}"))
         assert rows[1][0] == wa.slug
         assert len(rows) == 2
 
     def test_excludes_excluded_work_areas(self, client, org_user_admin, opportunity):
-        kept = WorkAreaFactory(opportunity=opportunity, slug="kept", status=WorkAreaStatus.NOT_STARTED)
+        kept = WorkAreaFactory(opportunity=opportunity, slug="kept", status=WorkAreaStatus.NOT_VISITED)
         WorkAreaFactory(opportunity=opportunity, slug="dropped", status=WorkAreaStatus.EXCLUDED)
         client.force_login(org_user_admin)
 
@@ -764,7 +763,7 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
             building_count=4,
             expected_visit_count=2,
             work_area_group=WorkAreaGroupFactory(opportunity=opportunity, name="Rev Group"),
-            case_properties={"max_wag": "1", "wag_serial_number": "77", "lga": "RevLGA", "state": "RevState"},
+            case_properties={"lga": "RevLGA", "state": "RevState"},
         )
         client.force_login(org_user_admin)
 
@@ -781,8 +780,6 @@ class TestDownloadWorkAreas(BaseMicroplanningFlagTest):
         assert row_dict["Ward"] == "ward-rev"
         assert row_dict["Building Count"] == "4"
         assert row_dict["Expected Visit Count"] == "2"
-        assert row_dict["Max WAG"] == "1"
-        assert row_dict["WAG Serial Number"] == "77"
         assert row_dict["LGA"] == "RevLGA"
         assert row_dict["State"] == "RevState"
         assert row_dict["Work Area Group Name"] == "Rev Group"
@@ -895,12 +892,11 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
     @pytest.mark.parametrize(
         "status",
         [
-            WorkAreaStatus.NOT_STARTED,
             WorkAreaStatus.NOT_VISITED,
             WorkAreaStatus.VISITED,
             WorkAreaStatus.INACCESSIBLE,
         ],
-        ids=["not_started", "not_visited", "visited", "inaccessible"],
+        ids=["not_visited", "visited", "inaccessible"],
     )
     def test_get_modal_404_for_non_pending_status(self, status, client, org_user_admin, opportunity, organization):
         OpportunityAccessFactory(user=org_user_admin, opportunity=opportunity, accepted=True)
@@ -999,8 +995,8 @@ class TestReviewInaccessibilityModal(BaseMicroplanningFlagTest):
 
     @pytest.mark.parametrize(
         "status",
-        [WorkAreaStatus.NOT_STARTED, WorkAreaStatus.INACCESSIBLE],
-        ids=["not_started", "already_inaccessible"],
+        [WorkAreaStatus.NOT_VISITED, WorkAreaStatus.INACCESSIBLE],
+        ids=["not_visited", "already_inaccessible"],
     )
     def test_action_404_when_wa_not_pending(self, status, client, org_user_admin, opportunity, organization):
         OpportunityAccessFactory(user=org_user_admin, opportunity=opportunity, accepted=True)
@@ -1137,6 +1133,167 @@ class TestSaveAssignment:
 
 
 @pytest.mark.django_db
+class TestUnassignWorkAreas:
+    @pytest.fixture(autouse=True)
+    def setup_flag(self, managed_opportunity):
+        flag, _ = Flag.objects.get_or_create(name=MICROPLANNING)
+        flag.opportunities.add(managed_opportunity)
+        flag.flush()
+
+    def url(self, org_slug, opp_id):
+        return reverse(
+            "microplanning:unassign_work_areas",
+            kwargs={"org_slug": org_slug, "opp_id": opp_id},
+        )
+
+    def _post(self, client, org_slug, opp_id, work_area_ids):
+        return client.post(
+            self.url(org_slug, opp_id),
+            data=json.dumps({"work_area_ids": work_area_ids}),
+            content_type="application/json",
+        )
+
+    @patch("commcare_connect.microplanning.views.unassign_work_areas_for_opportunity")
+    def test_calls_helper_and_returns_counts(
+        self,
+        mock_unassign,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        access = OpportunityAccessFactory(opportunity=managed_opportunity)
+        wa1 = WorkAreaFactory(
+            opportunity=managed_opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
+        )
+        wa2 = WorkAreaFactory(
+            opportunity=managed_opportunity, opportunity_access=access, status=WorkAreaStatus.NOT_VISITED
+        )
+        mock_unassign.return_value = {"unassigned_ids": [wa1.id, wa2.id], "skipped": 0, "failed_ids": []}
+        client.force_login(program_manager_org_user_admin)
+
+        response = self._post(
+            client,
+            program_manager_org.slug,
+            managed_opportunity.opportunity_id,
+            [wa1.id, wa2.id],
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "status": "ok",
+            "unassigned_ids": [wa1.id, wa2.id],
+            "skipped": 0,
+            "failed_ids": [],
+        }
+        mock_unassign.assert_called_once()
+        kwargs = mock_unassign.call_args.kwargs
+        assert kwargs["opportunity"].pk == managed_opportunity.pk
+        assert kwargs["work_area_ids"] == [wa1.id, wa2.id]
+        assert kwargs["user"] == program_manager_org_user_admin
+
+    @patch("commcare_connect.microplanning.views.unassign_work_areas_for_opportunity")
+    def test_all_hq_failures_returns_502(
+        self,
+        mock_unassign,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        wa = WorkAreaFactory(opportunity=managed_opportunity)
+        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 0, "failed_ids": [wa.id]}
+        client.force_login(program_manager_org_user_admin)
+
+        response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, [wa.id])
+        assert response.status_code == 502
+        assert "error" in response.json()
+
+    @patch("commcare_connect.microplanning.views.unassign_work_areas_for_opportunity")
+    def test_all_skipped_returns_200(
+        self,
+        mock_unassign,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        wa = WorkAreaFactory(opportunity=managed_opportunity)
+        mock_unassign.return_value = {"unassigned_ids": [], "skipped": 1, "failed_ids": []}
+        client.force_login(program_manager_org_user_admin)
+
+        response = self._post(client, program_manager_org.slug, managed_opportunity.opportunity_id, [wa.id])
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "unassigned_ids": [], "skipped": 1, "failed_ids": []}
+
+    @pytest.mark.parametrize(
+        "payload, expected_status",
+        [
+            ({}, 400),
+            ({"work_area_ids": []}, 400),
+            ({"work_area_ids": ["abc"]}, 400),
+            ({"work_area_ids": [1.9]}, 400),
+            ({"work_area_ids": [True]}, 400),
+            ({"work_area_ids": [1, 1]}, 400),
+        ],
+        ids=["missing_key", "empty_list", "str_ids", "float_ids", "bool_ids", "duplicate_ids"],
+    )
+    def test_invalid_payload(
+        self,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+        payload,
+        expected_status,
+    ):
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        assert response.status_code == expected_status
+
+    def test_invalid_json_body(self, client, program_manager_org, program_manager_org_user_admin, managed_opportunity):
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id),
+            data="not-json",
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+
+    @patch("commcare_connect.microplanning.views.unassign_work_areas_for_opportunity")
+    def test_too_many_work_area_ids_returns_400(
+        self,
+        mock_unassign,
+        client,
+        program_manager_org,
+        program_manager_org_user_admin,
+        managed_opportunity,
+    ):
+        from commcare_connect.microplanning.views import MAX_UNASSIGN_WORK_AREAS
+
+        client.force_login(program_manager_org_user_admin)
+        response = client.post(
+            self.url(program_manager_org.slug, managed_opportunity.opportunity_id),
+            data=json.dumps({"work_area_ids": list(range(1, MAX_UNASSIGN_WORK_AREAS + 2))}),
+            content_type="application/json",
+        )
+        assert response.status_code == 400
+        assert str(MAX_UNASSIGN_WORK_AREAS) in response.json()["error"]
+        mock_unassign.assert_not_called()
+
+    def test_non_program_manager_blocked(self, client, organization, org_user_admin, managed_opportunity):
+        wa = WorkAreaFactory(opportunity=managed_opportunity)
+        client.force_login(org_user_admin)
+
+        response = self._post(client, organization.slug, managed_opportunity.opportunity_id, [wa.id])
+        assert response.status_code == 404
+
+
+@pytest.mark.django_db
 class TestExcludeWorkAreasView:
     """Thin tests for the view: validation + synchronous exclusion."""
 
@@ -1151,7 +1308,7 @@ class TestExcludeWorkAreasView:
         return_value={"excluded_ids": [1], "skipped": 0, "failed": 0},
     )
     def test_valid_request_calls_exclude_and_returns_200(self, mock_exclude, client, org_user_admin, opportunity):
-        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_STARTED)
+        wa = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
 
         client.force_login(org_user_admin)
         response = client.post(
@@ -1269,8 +1426,8 @@ class TestGetMetricsForMicroplanningWorkAreas:
         wa_visited, wa_pending_only, wa_empty, wa_inaccessible, wa_excluded = self._make_work_areas(
             opp,
             [
-                WorkAreaStatus.NOT_STARTED,
-                WorkAreaStatus.NOT_STARTED,
+                WorkAreaStatus.NOT_VISITED,
+                WorkAreaStatus.NOT_VISITED,
                 WorkAreaStatus.NOT_VISITED,
                 WorkAreaStatus.INACCESSIBLE,  # counts as unvisited because 0 approved visits
                 WorkAreaStatus.EXCLUDED,
@@ -1292,9 +1449,9 @@ class TestGetMetricsForMicroplanningWorkAreas:
         wa_visited_1, wa_visited_2, wa_no_visits, wa_excluded = self._make_work_areas(
             opp,
             [
-                WorkAreaStatus.NOT_STARTED,
-                WorkAreaStatus.NOT_STARTED,
-                WorkAreaStatus.NOT_STARTED,
+                WorkAreaStatus.NOT_VISITED,
+                WorkAreaStatus.NOT_VISITED,
+                WorkAreaStatus.NOT_VISITED,
                 WorkAreaStatus.EXCLUDED,
             ],
         )
@@ -1316,9 +1473,9 @@ class TestGetMetricsForMicroplanningWorkAreas:
         wa_reached, wa_partial, wa_over, wa_excluded_reached = self._make_work_areas(
             opp,
             [
-                WorkAreaStatus.NOT_STARTED,
-                WorkAreaStatus.NOT_STARTED,
-                WorkAreaStatus.NOT_STARTED,
+                WorkAreaStatus.NOT_VISITED,
+                WorkAreaStatus.NOT_VISITED,
+                WorkAreaStatus.NOT_VISITED,
                 WorkAreaStatus.EXCLUDED,
             ],
             expected_visit_counts=[5, 5, 5, 5],
@@ -1366,8 +1523,8 @@ class TestGetMetricsForMicroplanningWorkAreas:
         """Ratio uses approved UserVisits on non-excluded WAs only, and data-driven `visited` count.
 
         Setup:
-          - wa_visited (NOT_STARTED, expected=10): 1 approved → counted as visited
-          - wa_unvisited (NOT_STARTED, expected=10): 0 approved → not visited
+          - wa_visited (NOT_VISITED, expected=10): 1 approved → counted as visited
+          - wa_unvisited (NOT_VISITED, expected=10): 0 approved → not visited
           - wa_excluded (EXCLUDED, expected=10): 3 approved → excluded from both numerator and denominator
           pct_wa_visited = 1/2 = 0.5  (non_excluded = 2)
           total_approved (non_excluded) = 1
@@ -1377,7 +1534,7 @@ class TestGetMetricsForMicroplanningWorkAreas:
         """
         wa_visited, wa_unvisited, wa_excluded = self._make_work_areas(
             opp,
-            [WorkAreaStatus.NOT_STARTED, WorkAreaStatus.NOT_STARTED, WorkAreaStatus.EXCLUDED],
+            [WorkAreaStatus.NOT_VISITED, WorkAreaStatus.NOT_VISITED, WorkAreaStatus.EXCLUDED],
             expected_visit_counts=[10, 10, 10],
         )
         # 1 approved on visited WA
@@ -1406,7 +1563,7 @@ class TestGetMetricsForMicroplanningWorkAreas:
         """Approved visits with no work_area must not inflate the ratio's total_approved denominator."""
         wa_visited, wa_unvisited = self._make_work_areas(
             opp,
-            [WorkAreaStatus.NOT_STARTED, WorkAreaStatus.NOT_STARTED],
+            [WorkAreaStatus.NOT_VISITED, WorkAreaStatus.NOT_VISITED],
             expected_visit_counts=[10, 10],
         )
         self._make_visits(opp, wa_visited, approved=1)
@@ -1457,3 +1614,42 @@ class TestGetMetricsForMicroplanningWorkAreas:
         metrics = get_metrics_for_microplanning(opp)
         m = self._get_metric(metrics, "Days Remaining")
         assert m["value"] == expected
+
+
+@pytest.mark.django_db
+class TestCoverageProgressView(BaseMicroplanningFlagTest):
+    def url(self, org_slug, opp_id):
+        return reverse("microplanning:coverage_progress", args=(org_slug, opp_id))
+
+    def test_renders_page_with_rows_in_context(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 200
+        assert "microplanning/coverage_progress.html" in {t.name for t in resp.templates}
+        assert set(resp.context["header"].keys()) == {"ward_saturation_goal"}
+        assert any(r["ward"] == "w1" for r in resp.context["ward_rows"])
+
+    def test_statement_timeout_degrades_gracefully(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+        cause = Exception()
+        cause.pgcode = "57014"  # QueryCanceled — what statement_timeout raises
+        timeout_error = OperationalError("canceling statement due to statement timeout")
+        timeout_error.__cause__ = cause
+        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls, patch(
+            "commcare_connect.microplanning.views.transaction.set_rollback"
+        ) as set_rollback:
+            report_cls.return_value.header.side_effect = timeout_error
+            resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 503
+        # The degraded response must be query-free: a base.html render would re-hit the aborted txn.
+        assert resp["Content-Type"].startswith("text/plain")
+        assert b"timed out" in resp.content
+        set_rollback.assert_called_once_with(True)
+
+    def test_non_timeout_operational_error_is_not_masked(self, client, org_user_admin, opportunity):
+        client.force_login(org_user_admin)
+        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls:
+            report_cls.return_value.header.side_effect = OperationalError("connection lost")  # no pgcode 57014
+            with pytest.raises(OperationalError):
+                client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))

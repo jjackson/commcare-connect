@@ -139,8 +139,7 @@ def update_user_and_send_invite(user: ConnectIdUser, opp_id):
 def invite_user(user_id, opportunity_access_id):
     user = User.objects.get(pk=user_id)
     opportunity_access = OpportunityAccess.objects.get(pk=opportunity_access_id)
-    invite_id = opportunity_access.invite_id
-    location = reverse("users:accept_invite", args=(invite_id,))
+    location = reverse("users:invite_redirect", args=(opportunity_access.opportunity.opportunity_id,))
     url = build_absolute_uri(None, location)
     body = f"You have been invited to a job in Connect. Click the link to accept {url}"
     if not user.phone_number:
@@ -637,9 +636,9 @@ def generate_automated_service_delivery_invoice():
     opp_start_date = datetime.date(2026, 1, 1)
     created_invoices_ids = []
 
-    for opportunity in Opportunity.objects.filter(active=True, managed=True, start_date__gte=opp_start_date).iterator(
-        chunk_size=CHUNK_SIZE
-    ):
+    for opportunity in Opportunity.objects.filter(
+        active=True, managed=True, is_test=False, start_date__gte=opp_start_date
+    ).iterator(chunk_size=CHUNK_SIZE):
         start_date = get_start_date_for_invoice(opportunity)
         # Below indicates there are no uninvoiced completed works to invoice in previous month or earlier
         if start_date > end_date_prev_month:

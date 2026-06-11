@@ -129,7 +129,7 @@ class Opportunity(BaseModel):
 
     @property
     def is_setup_complete(self):
-        if not (self.paymentunit_set.count() > 0 and self.total_budget and self.start_date and self.end_date):
+        if not (self.paymentunit_set.exists() and self.total_budget and self.start_date and self.end_date):
             return False
         for pu in self.paymentunit_set.all():
             if not (pu.max_total and pu.max_daily):
@@ -237,9 +237,9 @@ class Opportunity(BaseModel):
 class OpportunityVerificationFlags(models.Model):
     opportunity = models.OneToOneField(Opportunity, on_delete=models.CASCADE)
     duration = models.PositiveIntegerField(default=1)
-    gps = models.BooleanField(default=True)
-    duplicate = models.BooleanField(default=True)
-    location = models.PositiveIntegerField(default=10)
+    gps = models.BooleanField(default=False)
+    duplicate = models.BooleanField(default=False)
+    location = models.PositiveIntegerField(default=0)
     form_submission_start = models.TimeField(null=True, blank=True)
     form_submission_end = models.TimeField(null=True, blank=True)
     catchment_areas = models.BooleanField(default=False)
