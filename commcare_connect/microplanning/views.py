@@ -973,7 +973,7 @@ def coverage_progress(request, *args, **kwargs):
             content_type="text/plain",
         )
 
-    export_response = _export_coverage_table(request, opportunity, ward_table, wag_table)
+    export_response = _export_coverage_table(request, opportunity, {"ward": ward_table, "wag": wag_table})
     if export_response is not None:
         return export_response
 
@@ -998,21 +998,30 @@ def coverage_progress(request, *args, **kwargs):
 # Query params used by the per-table download buttons: ``?_export=<format>&_table=<ward|wag>``.
 COVERAGE_EXPORT_FORMAT_PARAM = "_export"
 COVERAGE_EXPORT_TABLE_PARAM = "_table"
-COVERAGE_EXPORT_TABLES = {"ward": "core_metrics", "wag": "metrics_by_work_area_group"}
+DEFAULT_COVERAGE_EXPORT_TABLE = "ward"
+# Maps each ``_table`` value to the file-name stem used in the download.
+COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_work_area_group"}
 
 
-def _export_coverage_table(request, opportunity, ward_table, wag_table):
-    """Return a file response for the requested table/format, or None if no export was requested."""
+def _export_coverage_table(request, opportunity, tables):
+    """Return a file response for the requested table/format, or None if no export was requested.
+
+    ``tables`` maps a ``_table`` value (e.g. "ward"/"wag") to its built table. An unsupported
+    ``_export`` format or an unknown ``_table`` value returns a 400 rather than silently serving
+    the wrong table.
+    """
     export_format = request.GET.get(COVERAGE_EXPORT_FORMAT_PARAM)
-    if not TableExport.is_valid_format(export_format):
+    if not export_format:
         return None
+    if not TableExport.is_valid_format(export_format):
+        return HttpResponseBadRequest(_("Unsupported export format."))
 
-    which = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, "ward")
-    table = wag_table if which == "wag" else ward_table
-    filename_stem = COVERAGE_EXPORT_TABLES.get(which, COVERAGE_EXPORT_TABLES["ward"])
+    which = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, DEFAULT_COVERAGE_EXPORT_TABLE)
+    if which not in tables:
+        return HttpResponseBadRequest(_("Unknown table."))
 
-    exporter = TableExport(export_format, table)
-    return exporter.response(f"{slugify(opportunity.name)}_{filename_stem}.{export_format}")
+    exporter = TableExport(export_format, tables[which])
+    return exporter.response(f"{slugify(opportunity.name)}_{COVERAGE_EXPORT_FILENAME_STEMS[which]}.{export_format}")
 
 
 def _get_coverage_date_filter(request):

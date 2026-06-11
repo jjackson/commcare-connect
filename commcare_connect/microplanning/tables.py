@@ -87,9 +87,9 @@ class TextColumn(columns.Column):
 
 
 def _build_columns(label_columns, metric_columns):
-    label = [(key, TextColumn(verbose_name=label, accessor=key)) for key, label in label_columns]
-    metric = [(key, NumberColumn(verbose_name=label, accessor=key)) for key, label in metric_columns]
-    return label + metric
+    text_cols = [(key, TextColumn(verbose_name=header, accessor=key)) for key, header in label_columns]
+    number_cols = [(key, NumberColumn(verbose_name=header, accessor=key)) for key, header in metric_columns]
+    return text_cols + number_cols
 
 
 class CoverageWardTable(tables.Table):
