@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import uuid
+from datetime import date
 from functools import partial
 from http import HTTPStatus
 
@@ -15,9 +16,10 @@ from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count, F, FloatField, Func, IntegerField, OuterRef, Q, Subquery, Sum, TextChoices, Value
 from django.db.models.functions import Cast, Coalesce
+from django.db.utils import OperationalError
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -41,10 +43,12 @@ from commcare_connect.microplanning.const import (
     MAX_UNASSIGN_WORK_AREAS,
     WORK_AREA_STATUS_COLORS,
 )
+from commcare_connect.microplanning.coverage_progress import CoverageDateFilter, CoverageProgressReport
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
 from commcare_connect.microplanning.helpers import (
     exclude_work_areas_for_opportunity,
+    pct,
     unassign_work_areas_for_opportunity,
 )
 from commcare_connect.microplanning.models import (
@@ -78,6 +82,9 @@ from .tasks import (
 logger = logging.getLogger(__name__)
 
 WORKAREA_MIN_ZOOM = 6
+
+STATEMENT_TIMEOUT = "30s"
+PG_QUERY_CANCELED = "57014"  # SQLSTATE raised when statement_timeout cancels a query
 
 
 @require_GET
@@ -212,11 +219,6 @@ def get_metrics_for_microplanning(opportunity):
     non_excluded_count = agg["non_excluded"] or 0
     total = agg["total"] or 0
 
-    def pct(numerator, denominator):
-        if not denominator:
-            return None
-        return round(numerator / denominator * 100)
-
     total_expected = agg["total_expected_visits"] or 0
     if non_excluded_count and total_expected:
         total_approved_visits = agg["total_approved_visits"] or 0
@@ -233,27 +235,27 @@ def get_metrics_for_microplanning(opportunity):
         {
             "name": _("Unvisited Work Areas"),
             "value": agg["unvisited"],
-            "percentage": pct(agg["unvisited"], non_excluded_count),
+            "percentage": pct(agg["unvisited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Visited Work Areas"),
             "value": agg["visited"],
-            "percentage": pct(agg["visited"], non_excluded_count),
+            "percentage": pct(agg["visited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("EVC Reached"),
             "value": agg["evc_reached"],
-            "percentage": pct(agg["evc_reached"], non_excluded_count),
+            "percentage": pct(agg["evc_reached"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Inaccessible Work Areas"),
             "value": agg["inaccessible"],
-            "percentage": pct(agg["inaccessible"], non_excluded_count),
+            "percentage": pct(agg["inaccessible"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Excluded Work Areas"),
             "value": agg["excluded"],
-            "percentage": pct(agg["excluded"], total),
+            "percentage": pct(agg["excluded"], total, ndigits=None),
         },
         {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
     ]
@@ -934,3 +936,55 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     response = HttpResponse(status=204)
     response["HX-Trigger"] = json.dumps({"inaccessibilityReviewed": {"id": work_area.id, "status": new_status}})
     return response
+
+
+@org_admin_required
+@opportunity_required
+@waffle_flag(MICROPLANNING)
+def coverage_progress(request, *args, **kwargs):
+    # Renders an empty page shell for now, but fetches the report data (and exercises the safeguard)
+    # so the endpoint is live. CCCT-2268 (https://dimagi.atlassian.net/browse/CCCT-2268) adds
+    # the two tables to the template, consuming the context built below.
+    opportunity = request.opportunity
+    date_filter = _get_coverage_date_filter(request)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = %s", [STATEMENT_TIMEOUT])
+        report = CoverageProgressReport(opportunity, date_filter)
+        context = {
+            "opportunity": opportunity,
+            "header": report.header(),
+            "ward_rows": report.ward_rows(),
+            "wag_rows": report.wag_rows(),
+        }
+    except OperationalError as exc:
+        # Only a statement_timeout (QueryCanceled) is an expected degradation; re-raise anything else
+        # (e.g. a real connection error) so it isn't masked as a timeout.
+        if getattr(exc.__cause__, "pgcode", None) != PG_QUERY_CANCELED:
+            raise
+        # The timeout aborted the txn; roll back (else ATOMIC_REQUESTS' COMMIT fails) and return a
+        # query-free 503 — rendering base.html here would re-hit the DB via its context processors.
+        transaction.set_rollback(True)
+        logger.exception("Coverage progress query timed out for opportunity %s", opportunity.id)
+        return HttpResponse(
+            _("Report timed out. Please reach out to support if the error persists."),
+            status=503,
+            content_type="text/plain",
+        )
+    return render(request, "microplanning/coverage_progress.html", context)
+
+
+def _get_coverage_date_filter(request):
+    raw_from = request.GET.get("from")
+    raw_to = request.GET.get("to")
+    if raw_from and raw_to:
+        try:
+            start = date.fromisoformat(raw_from)
+            end = date.fromisoformat(raw_to)
+        except ValueError:
+            pass
+        else:
+            # Ignore a reversed range (start after end), which would otherwise read as zero coverage.
+            if start <= end:
+                return CoverageDateFilter(start=start, end=end)
+    return CoverageDateFilter.overall()
