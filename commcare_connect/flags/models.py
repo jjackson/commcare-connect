@@ -101,10 +101,6 @@ class Flag(AbstractUserFlag):
         return ids
 
     def is_active(self, request, read_only: bool = False) -> bool:
-        user = getattr(request, "user", None)
-        if not (user and user.is_authenticated):
-            return False
-
         if super().is_active(request, read_only):
             return True
 
