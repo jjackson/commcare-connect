@@ -19,7 +19,8 @@ from commcare_connect.microplanning.coverage_progress import (
     status_event_model,
     ward_saturation_goal,
 )
-from commcare_connect.microplanning.models import WorkAreaStatus
+from commcare_connect.microplanning.filters import CoverageProgressFilterSet
+from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.models import VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import UserVisitFactory
@@ -394,6 +395,14 @@ def test_custom_range_bypasses_filtered_cache_slot(opportunity):
         overall_slot.assert_not_called()
 
 
+def test_last_week_filter_reuses_cached_slot_instead_of_recomputing(opportunity):
+    WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+    with patch("commcare_connect.microplanning.coverage_progress._compute_filtered") as compute_filtered:
+        CoverageProgressReport(opportunity, CoverageDateFilter.last_week()).ward_rows()
+        # Last week is served by the cached _last_week_slot, not the uncached _compute_filtered path.
+        compute_filtered.assert_not_called()
+
+
 def test_slot_computes_once_then_serves_cache(opportunity):
     key = f"coverage:static:opp={opportunity.id}"
     cache.delete(key)
@@ -407,3 +416,32 @@ def test_slot_computes_once_then_serves_cache(opportunity):
             assert get_target.call_count == 2  # only the cold call recomputed
     finally:
         cache.delete(key)
+
+
+def _coverage_filter(data):
+    return CoverageProgressFilterSet(data, queryset=WorkArea.objects.none())
+
+
+def test_filterset_no_params_is_overall():
+    assert _coverage_filter({}).to_date_filter().is_overall is True
+
+
+def test_filterset_last_week_maps_to_last_week_filter():
+    assert _coverage_filter({"range": "last_week"}).to_date_filter() == CoverageDateFilter.last_week()
+
+
+def test_filterset_custom_range_maps_to_custom_window():
+    result = _coverage_filter({"range": "custom", "start": "2026-01-01", "end": "2026-01-31"}).to_date_filter()
+    assert result == CoverageDateFilter(start=datetime.date(2026, 1, 1), end=datetime.date(2026, 1, 31))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"range": "custom", "start": "2026-01-31", "end": "2026-01-01"},  # reversed
+        {"range": "custom", "start": "2026-01-01"},  # incomplete (no end)
+        {"range": "custom", "start": "not-a-date", "end": "2026-01-31"},  # invalid date
+    ],
+)
+def test_filterset_invalid_custom_range_falls_back_to_overall(data):
+    assert _coverage_filter(data).to_date_filter().is_overall is True

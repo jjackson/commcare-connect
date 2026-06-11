@@ -271,6 +271,9 @@ class CoverageProgressReport:
             last_week = _last_week_slot(self.opportunity)
             if self.date_filter.is_overall:
                 filtered = _filtered_overall_slot(self.opportunity)
+            elif self.date_filter == CoverageDateFilter.last_week():
+                # A last-week filter shares the already-cached last-week slot rather than recomputing.
+                filtered = last_week
             else:
                 filtered = _compute_filtered(self.opportunity, window=self.date_filter.window)
             self._slots_cache = (static, last_week, filtered)

@@ -2,6 +2,7 @@ import django_filters
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
+from commcare_connect.microplanning.coverage_progress import CoverageDateFilter
 from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.opportunity.filters import CSRFExemptForm
 from commcare_connect.opportunity.models import UserVisit
@@ -11,6 +12,66 @@ INPUT_CSS = (
     "w-full rounded-md border border-gray-300 px-3 py-2 "
     "text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 )
+
+# Coverage Progress date-filter modes.
+RANGE_OVERALL = "overall"
+RANGE_LAST_WEEK = "last_week"
+RANGE_CUSTOM = "custom"
+COVERAGE_RANGE_CHOICES = (
+    (RANGE_OVERALL, _("Overall")),
+    (RANGE_LAST_WEEK, _("Last week")),
+    (RANGE_CUSTOM, _("Custom range")),
+)
+
+
+class CoverageProgressFilterSet(django_filters.FilterSet):
+    """Date filter for the Coverage Progress Tracker page.
+
+    The page's date window is an *aggregation parameter* (it bounds the subqueries inside
+    ``CoverageProgressReport``), not a queryset ``.filter()`` — so this FilterSet is used only for
+    parsing / validating / rendering the form. ``.qs`` is never evaluated; ``to_date_filter()`` maps
+    the cleaned form data onto the already-defined ``CoverageDateFilter`` modes.
+    """
+
+    range = django_filters.ChoiceFilter(
+        label=_("Date range"),
+        choices=COVERAGE_RANGE_CHOICES,
+        empty_label=None,
+        method="_noop",
+        # x-model binds to the page's Alpine scope, which toggles the custom date inputs.
+        widget=forms.Select(attrs={"class": INPUT_CSS, "x-model": "range"}),
+    )
+    start = django_filters.DateFilter(
+        label=_("From"),
+        method="_noop",
+        widget=forms.DateInput(attrs={"type": "date", "class": INPUT_CSS}),
+    )
+    end = django_filters.DateFilter(
+        label=_("To"),
+        method="_noop",
+        widget=forms.DateInput(attrs={"type": "date", "class": INPUT_CSS}),
+    )
+
+    class Meta:
+        model = WorkArea
+        fields = []
+        form = CSRFExemptForm
+
+    def _noop(self, queryset, name, value):
+        # The filters never narrow a queryset; the cleaned values are read via to_date_filter().
+        return queryset
+
+    def to_date_filter(self) -> CoverageDateFilter:
+        """Resolve the submitted form to a CoverageDateFilter, falling back to overall() when the
+        custom range is incomplete or reversed (the page's existing lenient behavior)."""
+        if not self.form.is_valid():
+            return CoverageDateFilter.overall()
+        cd = self.form.cleaned_data
+        if cd.get("range") == RANGE_LAST_WEEK:
+            return CoverageDateFilter.last_week()
+        if cd.get("range") == RANGE_CUSTOM and cd.get("start") and cd.get("end") and cd["start"] <= cd["end"]:
+            return CoverageDateFilter(start=cd["start"], end=cd["end"])
+        return CoverageDateFilter.overall()
 
 
 class WorkAreaMapFilterSet(django_filters.FilterSet):
