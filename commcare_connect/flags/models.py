@@ -62,36 +62,6 @@ class Flag(AbstractUserFlag):
 
         return cls.objects.filter(filters).distinct()
 
-    @classmethod
-    def is_flag_active_for_request(cls, request, flag_name: str):
-        user = getattr(request, "user", None)
-        if not (user and user.is_authenticated):
-            return False
-        flag = cls.get(flag_name)
-        if flag.pk is None:
-            return False
-
-        if flag.everyone:
-            return True
-        if flag.staff and user.is_staff:
-            return True
-        if flag.superusers and user.is_superuser:
-            return True
-        if user.pk in flag._get_user_ids():
-            return True
-
-        opportunity = getattr(request, "opportunity", None)
-        if opportunity and flag.is_active_for(opportunity):
-            return True
-        program = _get_program_for_opportunity(opportunity)
-        if program and flag.is_active_for(program):
-            return True
-        org = getattr(request, "org", None)
-        if org and flag.is_active_for(org):
-            return True
-
-        return False
-
     def is_active_for(self, obj: Organization | Opportunity | Program):
         if isinstance(obj, Organization):
             organization_ids = self._get_ids_for_relation("organizations")
@@ -129,6 +99,22 @@ class Flag(AbstractUserFlag):
 
         cache.add(cache_key, ids)
         return ids
+
+    def is_active(self, request, read_only: bool = False) -> bool:
+        if super().is_active(request, read_only):
+            return True
+
+        opportunity = getattr(request, "opportunity", None)
+        if opportunity and self.is_active_for(opportunity):
+            return True
+        program = _get_program_for_opportunity(opportunity)
+        if program and self.is_active_for(program):
+            return True
+        org = getattr(request, "org", None)
+        if org and self.is_active_for(org):
+            return True
+
+        return False
 
 
 def _get_program_for_opportunity(opportunity):
