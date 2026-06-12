@@ -94,9 +94,10 @@ class CalcColumn(columns.Column):
         if not r.get("has_sufficient_data"):
             return format_html('<span class="text-gray-400">{}</span>', _("N/A"))
         value = r.get("value", "-")
+        display = f"{value:.2f}" if isinstance(value, float) else str(value) if value is not None else ""
         if not r.get("in_range"):
-            return format_html('<span class="badge badge-md negative-dark">{}</span>', value)
-        return value if value is not None else ""
+            return format_html('<span class="badge badge-md negative-dark">{}</span>', display)
+        return display
 
 
 class ActionColumn(columns.Column):
