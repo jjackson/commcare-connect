@@ -996,8 +996,8 @@ def coverage_progress(request, *args, **kwargs):
 
 
 # Query params used by the per-table download buttons: ``?_export=<format>&_table=<ward|wag>``.
-COVERAGE_EXPORT_FORMAT_PARAM = "_export"
-COVERAGE_EXPORT_TABLE_PARAM = "_table"
+COVERAGE_EXPORT_FORMAT_PARAM = "export"
+COVERAGE_EXPORT_TABLE_PARAM = "table"
 DEFAULT_COVERAGE_EXPORT_TABLE = "ward"
 # Maps each ``_table`` value to the file-name stem used in the download.
 COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_work_area_group"}
@@ -1006,8 +1006,8 @@ COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_wor
 def _export_coverage_table(request, opportunity, tables):
     """Return a file response for the requested table/format, or None if no export was requested.
 
-    ``tables`` maps a ``_table`` value (e.g. "ward"/"wag") to its built table. An unsupported
-    ``_export`` format or an unknown ``_table`` value returns a 400 rather than silently serving
+    ``tables`` maps a ``table`` value (e.g. "ward"/"wag") to its built table. An unsupported
+    ``export`` format or an unknown ``table`` value returns a 400 rather than silently serving
     the wrong table.
     """
     export_format = request.GET.get(COVERAGE_EXPORT_FORMAT_PARAM)
