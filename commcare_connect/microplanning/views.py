@@ -2,6 +2,7 @@ import csv
 import json
 import logging
 import uuid
+from datetime import date
 from functools import partial
 from http import HTTPStatus
 
@@ -15,9 +16,10 @@ from django.contrib.gis.db.models.functions import AsGeoJSON
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count, F, FloatField, Func, IntegerField, OuterRef, Q, Subquery, Sum, TextChoices, Value
 from django.db.models.functions import Cast, Coalesce
+from django.db.utils import OperationalError
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -29,22 +31,24 @@ from django.views.decorators.http import require_GET, require_POST
 from django.views.generic.edit import UpdateView
 from vectortiles import VectorLayer
 from vectortiles.views import MVTView
+from waffle.decorators import waffle_flag
 
 from commcare_connect.commcarehq.api import (
     bulk_create_or_update_cases_by_work_areas,
     create_or_update_case_by_work_area,
 )
-from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import (
     MAX_EXCLUDE_WORK_AREAS,
     MAX_UNASSIGN_WORK_AREAS,
     WORK_AREA_STATUS_COLORS,
 )
+from commcare_connect.microplanning.coverage_progress import CoverageDateFilter, CoverageProgressReport
 from commcare_connect.microplanning.filters import UserVisitMapFilterSet, WorkAreaMapFilterSet
 from commcare_connect.microplanning.forms import AssignmentModeForm, WorkAreaModelForm
 from commcare_connect.microplanning.helpers import (
     exclude_work_areas_for_opportunity,
+    pct,
     unassign_work_areas_for_opportunity,
 )
 from commcare_connect.microplanning.models import (
@@ -79,11 +83,14 @@ logger = logging.getLogger(__name__)
 
 WORKAREA_MIN_ZOOM = 6
 
+STATEMENT_TIMEOUT = "30s"
+PG_QUERY_CANCELED = "57014"  # SQLSTATE raised when statement_timeout cancels a query
+
 
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def microplanning_home(request, *args, **kwargs):
     opportunity = request.opportunity
     areas_present = WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists()
@@ -212,11 +219,6 @@ def get_metrics_for_microplanning(opportunity):
     non_excluded_count = agg["non_excluded"] or 0
     total = agg["total"] or 0
 
-    def pct(numerator, denominator):
-        if not denominator:
-            return None
-        return round(numerator / denominator * 100)
-
     total_expected = agg["total_expected_visits"] or 0
     if non_excluded_count and total_expected:
         total_approved_visits = agg["total_approved_visits"] or 0
@@ -233,27 +235,27 @@ def get_metrics_for_microplanning(opportunity):
         {
             "name": _("Unvisited Work Areas"),
             "value": agg["unvisited"],
-            "percentage": pct(agg["unvisited"], non_excluded_count),
+            "percentage": pct(agg["unvisited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Visited Work Areas"),
             "value": agg["visited"],
-            "percentage": pct(agg["visited"], non_excluded_count),
+            "percentage": pct(agg["visited"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("EVC Reached"),
             "value": agg["evc_reached"],
-            "percentage": pct(agg["evc_reached"], non_excluded_count),
+            "percentage": pct(agg["evc_reached"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Inaccessible Work Areas"),
             "value": agg["inaccessible"],
-            "percentage": pct(agg["inaccessible"], non_excluded_count),
+            "percentage": pct(agg["inaccessible"], non_excluded_count, ndigits=None),
         },
         {
             "name": _("Excluded Work Areas"),
             "value": agg["excluded"],
-            "percentage": pct(agg["excluded"], total),
+            "percentage": pct(agg["excluded"], total, ndigits=None),
         },
         {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
     ]
@@ -300,7 +302,7 @@ def _get_assignment_mode_context(request, opportunity):
     }
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class WorkAreaImport(View):
     def get(self, request, *args, **kwargs):
         response = HttpResponse(content_type="text/csv")
@@ -355,7 +357,7 @@ class WorkAreaImport(View):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def import_status(request, org_slug, opp_id):
     task_id = request.GET.get("task_id", None)
 
@@ -402,7 +404,7 @@ class WorkAreaVectorLayer(VectorLayer):
         return WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class WorkAreaTileView(MVTView):
     layer_classes = [WorkAreaVectorLayer]
 
@@ -455,7 +457,7 @@ class UserVisitVectorLayer(VectorLayer):
         )
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class UserVisitTileView(MVTView):
     layer_classes = [UserVisitVectorLayer]
 
@@ -470,7 +472,7 @@ class UserVisitTileView(MVTView):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def workareas_group_geojson(request, org_slug, opp_id):
     # This view aggregates group boundaries for map display.
     # To be removed in https://dimagi.atlassian.net/browse/CCCT-2213 for a better performant alternative
@@ -611,7 +613,7 @@ def exclude_work_areas(request, org_slug, opp_id):
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def download_work_areas(request, org_slug, opp_id):
     opportunity = request.opportunity
     base_qs = WorkArea.objects.filter(opportunity=opportunity).exclude(status=WorkAreaStatus.EXCLUDED)
@@ -622,7 +624,7 @@ def download_work_areas(request, org_slug, opp_id):
     return response
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class ModifyWorkAreaUpdateView(UpdateView):
     model = WorkArea
     form_class = WorkAreaModelForm
@@ -674,7 +676,7 @@ class ModifyWorkAreaUpdateView(UpdateView):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
     work_areas = list(
         WorkArea.objects.filter(
@@ -688,7 +690,7 @@ def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
     work_areas = list(
         WorkArea.objects.filter(
@@ -702,7 +704,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_flw_summary_for_assignment(request, org_slug, opp_id):
     assignee_id = request.GET.get("assignee_id")
     if not assignee_id:
@@ -728,7 +730,7 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
 @require_POST
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def save_assignment(request, org_slug, opp_id):
     try:
         data = json.loads(request.body)
@@ -802,7 +804,7 @@ def save_assignment(request, org_slug, opp_id):
 @require_POST
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def unassign_work_areas(request, org_slug, opp_id):
     try:
         data = json.loads(request.body)
@@ -847,7 +849,7 @@ def unassign_work_areas(request, org_slug, opp_id):
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     work_area = get_object_or_404(
         WorkArea,
@@ -890,7 +892,7 @@ _ACTION_TO_NEW_STATUS = {
 @require_POST
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     try:
         action = InaccessibilityReviewAction(request.POST.get("action", ""))
@@ -934,3 +936,55 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     response = HttpResponse(status=204)
     response["HX-Trigger"] = json.dumps({"inaccessibilityReviewed": {"id": work_area.id, "status": new_status}})
     return response
+
+
+@org_admin_required
+@opportunity_required
+@waffle_flag(MICROPLANNING)
+def coverage_progress(request, *args, **kwargs):
+    # Renders an empty page shell for now, but fetches the report data (and exercises the safeguard)
+    # so the endpoint is live. CCCT-2268 (https://dimagi.atlassian.net/browse/CCCT-2268) adds
+    # the two tables to the template, consuming the context built below.
+    opportunity = request.opportunity
+    date_filter = _get_coverage_date_filter(request)
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = %s", [STATEMENT_TIMEOUT])
+        report = CoverageProgressReport(opportunity, date_filter)
+        context = {
+            "opportunity": opportunity,
+            "header": report.header(),
+            "ward_rows": report.ward_rows(),
+            "wag_rows": report.wag_rows(),
+        }
+    except OperationalError as exc:
+        # Only a statement_timeout (QueryCanceled) is an expected degradation; re-raise anything else
+        # (e.g. a real connection error) so it isn't masked as a timeout.
+        if getattr(exc.__cause__, "pgcode", None) != PG_QUERY_CANCELED:
+            raise
+        # The timeout aborted the txn; roll back (else ATOMIC_REQUESTS' COMMIT fails) and return a
+        # query-free 503 — rendering base.html here would re-hit the DB via its context processors.
+        transaction.set_rollback(True)
+        logger.exception("Coverage progress query timed out for opportunity %s", opportunity.id)
+        return HttpResponse(
+            _("Report timed out. Please reach out to support if the error persists."),
+            status=503,
+            content_type="text/plain",
+        )
+    return render(request, "microplanning/coverage_progress.html", context)
+
+
+def _get_coverage_date_filter(request):
+    raw_from = request.GET.get("from")
+    raw_to = request.GET.get("to")
+    if raw_from and raw_to:
+        try:
+            start = date.fromisoformat(raw_from)
+            end = date.fromisoformat(raw_to)
+        except ValueError:
+            pass
+        else:
+            # Ignore a reversed range (start after end), which would otherwise read as zero coverage.
+            if start <= end:
+                return CoverageDateFilter(start=start, end=end)
+    return CoverageDateFilter.overall()

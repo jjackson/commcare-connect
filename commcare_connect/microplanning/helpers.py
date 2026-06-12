@@ -12,6 +12,17 @@ from commcare_connect.utils.itertools import batched
 logger = logging.getLogger(__name__)
 
 
+def pct(numerator, denominator, ndigits=2):
+    """Percentage of ``numerator`` over ``denominator``, rounded to ``ndigits``.
+
+    Returns None for a zero/falsy denominator or a None numerator. Pass ``ndigits=None`` for an
+    integer result (``round(x, None)`` returns an int).
+    """
+    if not denominator or numerator is None:
+        return None
+    return round(numerator / denominator * 100, ndigits)
+
+
 def exclude_work_areas_for_opportunity(opportunity, work_area_ids, user, exclusion_reason):
     """Exclude work areas and unassign their HQ cases.
     HQ calls are batched by HQ_BULK_CHUNK_SIZE; a batch failure skips DB exclusion
@@ -31,7 +42,7 @@ def exclude_work_areas_for_opportunity(opportunity, work_area_ids, user, exclusi
 
     for work_area_id in work_area_ids:
         work_area = work_areas_map.get(work_area_id)
-        if work_area is None or work_area.status != WorkAreaStatus.NOT_VISITED:
+        if work_area is None or work_area.status not in (WorkAreaStatus.NOT_VISITED, WorkAreaStatus.UNASSIGNED):
             skipped += 1
             continue
 

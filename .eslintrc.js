@@ -11,6 +11,7 @@ module.exports = {
   rules: {
     'no-console': 'error',
     'no-unused-vars': 'error',
+    'no-empty': ['error', { allowEmptyCatch: true }],
   },
   ignorePatterns: [
     'node_modules/',

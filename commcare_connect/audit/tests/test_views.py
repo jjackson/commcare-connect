@@ -295,6 +295,37 @@ def test_modal_submit_rejects_already_reviewed(client, program_manager_org_user_
 
 
 @pytest.mark.django_db
+def test_modal_submit_returns_400_when_task_already_assigned(client, program_manager_org_user_admin, audit_opp):
+    """Re-assigning an already-assigned task type returns 400 with a user-friendly message."""
+    client.force_login(program_manager_org_user_admin)
+    report = AuditReportFactory(opportunity=audit_opp)
+    entry = _entry(report, audit_opp, flagged=True)
+    task_type = TaskTypeFactory(opportunity=audit_opp, name="Refresher Module A")
+
+    # First submission — succeeds.
+    client.post(
+        _action_url(audit_opp, report, entry),
+        data={"action": "tasks_assigned", "task_type_ids": [str(task_type.pk)]},
+    )
+    assert AssignedTask.objects.filter(task_type=task_type).count() == 1
+
+    # Reset entry so the guard checks pass, then try to assign the same task again.
+    entry.reviewed = False
+    entry.review_action = None
+    entry.save(update_fields=["reviewed", "review_action"])
+
+    response = client.post(
+        _action_url(audit_opp, report, entry),
+        data={"action": "tasks_assigned", "task_type_ids": [str(task_type.pk)]},
+    )
+    assert response.status_code == 400
+    assert "already assigned" in response.content.decode()
+    assert "not completed" in response.content.decode()
+    # No duplicate task created.
+    assert AssignedTask.objects.filter(task_type=task_type).count() == 1
+
+
+@pytest.mark.django_db
 def test_modal_submit_rejects_cross_opportunity_task_type(
     client, program_manager_org_user_admin, audit_opp, opportunity
 ):

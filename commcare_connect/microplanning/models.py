@@ -3,7 +3,7 @@ from functools import cached_property
 import pghistory
 from django.conf import settings
 from django.contrib.gis.db import models as geo_models
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Index, Q, Sum
 from django.utils.translation import gettext_lazy as _
 
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess, UserVisit, VisitValidationStatus
@@ -42,7 +42,14 @@ class WorkAreaGroup(geo_models.Model):
         )
 
 
-@pghistory.track(fields=["expected_visit_count", "work_area_group", "status", "opportunity_access", "excluded_reason"])
+@pghistory.track(
+    fields=["expected_visit_count", "work_area_group", "status", "opportunity_access", "excluded_reason"],
+    meta={
+        "indexes": [
+            Index(fields=["pgh_obj", "status", "pgh_created_at"], name="wae_obj_status_created_idx"),
+        ],
+    },
+)
 class WorkArea(geo_models.Model):
     work_area_group = geo_models.ForeignKey(WorkAreaGroup, null=True, blank=True, on_delete=geo_models.SET_NULL)
     opportunity = geo_models.ForeignKey(Opportunity, on_delete=geo_models.CASCADE)
