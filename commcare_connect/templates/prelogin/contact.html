@@ -94,19 +94,21 @@
     <!-- ───── NAV ───── -->
     <header class="site-header">
       <div class="header-inner">
-        <a class="logo" href="/" aria-label="Connect by Dimagi">
+        <a class="logo"
+           href="{% url 'prelogin:home' %}"
+           aria-label="Connect by Dimagi">
           <svg viewBox="0 0 1526 431">
             <use href="#connect-logo" />
           </svg>
         </a>
         <nav id="primary-nav">
-          <a href="/the-opportunity">The Opportunity</a>
-          <a href="/platform">Platform</a>
-          <a href="/portfolio">Portfolio</a>
-          <a href="/frontline-network">Frontline Network</a>
+          <a href="{% url 'prelogin:the-opportunity' %}">The Opportunity</a>
+          <a href="{% url 'prelogin:platform' %}">Platform</a>
+          <a href="{% url 'prelogin:portfolio' %}">Portfolio</a>
+          <a href="{% url 'prelogin:frontline-network' %}">Frontline Network</a>
           <div class="nav-cta">
             <a href="{{ app_login_url }}" class="btn btn-ghost">Sign In</a>
-            <a href="/accounts/signup/" class="btn btn-primary">Sign Up</a>
+            <a href="{% url 'account_signup' %}" class="btn btn-primary">Sign Up</a>
           </div>
         </nav>
         <button class="nav-toggle"
@@ -120,12 +122,12 @@
         </button>
       </div>
       <nav class="mobile-nav" id="mobile-nav" hidden>
-        <a href="/the-opportunity">The Opportunity</a>
-        <a href="/platform">Platform</a>
-        <a href="/portfolio">Portfolio</a>
-        <a href="/frontline-network">Frontline Network</a>
+        <a href="{% url 'prelogin:the-opportunity' %}">The Opportunity</a>
+        <a href="{% url 'prelogin:platform' %}">Platform</a>
+        <a href="{% url 'prelogin:portfolio' %}">Portfolio</a>
+        <a href="{% url 'prelogin:frontline-network' %}">Frontline Network</a>
         <a href="{{ app_login_url }}" class="mobile-nav-cta-secondary">Sign In</a>
-        <a href="/accounts/signup/" class="mobile-nav-cta">Sign Up</a>
+        <a href="{% url 'account_signup' %}" class="mobile-nav-cta">Sign Up</a>
       </nav>
     </header>
     <main id="main">
@@ -221,22 +223,22 @@
           <span class="foot-col-label eyebrow">Navigate</span>
           <ul>
             <li>
-              <a href="/">Home</a>
+              <a href="{% url 'prelogin:home' %}">Home</a>
             </li>
             <li>
-              <a href="/the-opportunity">The Opportunity</a>
+              <a href="{% url 'prelogin:the-opportunity' %}">The Opportunity</a>
             </li>
             <li>
-              <a href="/platform">Platform</a>
+              <a href="{% url 'prelogin:platform' %}">Platform</a>
             </li>
             <li>
-              <a href="/portfolio">Portfolio</a>
+              <a href="{% url 'prelogin:portfolio' %}">Portfolio</a>
             </li>
             <li>
-              <a href="/frontline-network">Frontline Network</a>
+              <a href="{% url 'prelogin:frontline-network' %}">Frontline Network</a>
             </li>
             <li>
-              <a href="/insights">Insights</a>
+              <a href="{% url 'prelogin:insights' %}">Insights</a>
             </li>
           </ul>
         </div>
@@ -249,10 +251,10 @@
                  rel="noopener">Help Site &#8599;</a>
             </li>
             <li>
-              <a href="/release-notes">Release Notes</a>
+              <a href="{% url 'prelogin:release-notes' %}">Release Notes</a>
             </li>
             <li>
-              <a href="/accounts/signup/">Sign Up</a>
+              <a href="{% url 'account_signup' %}">Sign Up</a>
             </li>
             <li>
               <a href="{{ app_login_url }}">Sign In</a>
@@ -263,7 +265,7 @@
           <span class="foot-col-label eyebrow">Contact</span>
           <ul>
             <li>
-              <a href="/contact/" aria-current="page">Contact Us</a>
+              <a href="{% url 'prelogin:contact' %}" aria-current="page">Contact Us</a>
             </li>
           </ul>
         </div>

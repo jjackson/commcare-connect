@@ -1,3 +1,4 @@
+/* global hbspt */
 (function () {
   function mountForm() {
     if (typeof hbspt === 'undefined' || !hbspt.forms) return false;
