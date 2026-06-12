@@ -87,7 +87,8 @@ def _find_active_wag(opportunity_access, period_end) -> WorkAreaGroup | None:
         .annotate(
             last_visit=Max(
                 "workarea__uservisit__visit_date",
-                filter=Q(workarea__uservisit__visit_date__date__lte=period_end),
+                filter=Q(workarea__uservisit__visit_date__date__lte=period_end)
+                & Q(workarea__uservisit__deliver_unit__slug=SERVICE_DELIVERY_SLUG),
             )
         )
         .filter(last_visit__isnull=False)
@@ -111,7 +112,8 @@ def _find_last_closed_wag(opportunity_access, period_end) -> WorkAreaGroup | Non
             ),
             last_visit=Max(
                 "workarea__uservisit__visit_date",
-                filter=Q(workarea__uservisit__visit_date__date__lte=period_end),
+                filter=Q(workarea__uservisit__visit_date__date__lte=period_end)
+                & Q(workarea__uservisit__deliver_unit__slug=SERVICE_DELIVERY_SLUG),
             ),
         )
         .filter(total=F("closed_count"), last_visit__isnull=False)
