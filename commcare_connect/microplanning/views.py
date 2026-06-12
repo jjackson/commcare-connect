@@ -33,12 +33,12 @@ from django.views.generic.edit import UpdateView
 from django_tables2.export import TableExport
 from vectortiles import VectorLayer
 from vectortiles.views import MVTView
+from waffle.decorators import waffle_flag
 
 from commcare_connect.commcarehq.api import (
     bulk_create_or_update_cases_by_work_areas,
     create_or_update_case_by_work_area,
 )
-from commcare_connect.flags.decorators import require_flag_for_opp
 from commcare_connect.flags.flag_names import MICROPLANNING
 from commcare_connect.microplanning.const import (
     MAX_EXCLUDE_WORK_AREAS,
@@ -93,7 +93,7 @@ PG_QUERY_CANCELED = "57014"  # SQLSTATE raised when statement_timeout cancels a 
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def microplanning_home(request, *args, **kwargs):
     opportunity = request.opportunity
     areas_present = WorkArea.objects.filter(opportunity_id=request.opportunity.id).exists()
@@ -305,7 +305,7 @@ def _get_assignment_mode_context(request, opportunity):
     }
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class WorkAreaImport(View):
     def get(self, request, *args, **kwargs):
         response = HttpResponse(content_type="text/csv")
@@ -360,7 +360,7 @@ class WorkAreaImport(View):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def import_status(request, org_slug, opp_id):
     task_id = request.GET.get("task_id", None)
 
@@ -407,7 +407,7 @@ class WorkAreaVectorLayer(VectorLayer):
         return WorkAreaMapFilterSet(self.filter_params, queryset=qs, opportunity=self.opportunity).qs
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class WorkAreaTileView(MVTView):
     layer_classes = [WorkAreaVectorLayer]
 
@@ -460,7 +460,7 @@ class UserVisitVectorLayer(VectorLayer):
         )
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class UserVisitTileView(MVTView):
     layer_classes = [UserVisitVectorLayer]
 
@@ -475,7 +475,7 @@ class UserVisitTileView(MVTView):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def workareas_group_geojson(request, org_slug, opp_id):
     # This view aggregates group boundaries for map display.
     # To be removed in https://dimagi.atlassian.net/browse/CCCT-2213 for a better performant alternative
@@ -616,7 +616,7 @@ def exclude_work_areas(request, org_slug, opp_id):
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def download_work_areas(request, org_slug, opp_id):
     opportunity = request.opportunity
     base_qs = WorkArea.objects.filter(opportunity=opportunity).exclude(status=WorkAreaStatus.EXCLUDED)
@@ -627,7 +627,7 @@ def download_work_areas(request, org_slug, opp_id):
     return response
 
 
-@method_decorator([org_admin_required, opportunity_required, require_flag_for_opp(MICROPLANNING)], name="dispatch")
+@method_decorator([org_admin_required, opportunity_required, waffle_flag(MICROPLANNING)], name="dispatch")
 class ModifyWorkAreaUpdateView(UpdateView):
     model = WorkArea
     form_class = WorkAreaModelForm
@@ -679,7 +679,7 @@ class ModifyWorkAreaUpdateView(UpdateView):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
     work_areas = list(
         WorkArea.objects.filter(
@@ -693,7 +693,7 @@ def get_work_areas_for_assignment(request, org_slug, opp_id, group_id):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
     work_areas = list(
         WorkArea.objects.filter(
@@ -707,7 +707,7 @@ def get_flw_work_areas_for_assignment(request, org_slug, opp_id, assignee_id):
 @require_GET
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def get_flw_summary_for_assignment(request, org_slug, opp_id):
     assignee_id = request.GET.get("assignee_id")
     if not assignee_id:
@@ -733,7 +733,7 @@ def get_flw_summary_for_assignment(request, org_slug, opp_id):
 @require_POST
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def save_assignment(request, org_slug, opp_id):
     try:
         data = json.loads(request.body)
@@ -807,7 +807,7 @@ def save_assignment(request, org_slug, opp_id):
 @require_POST
 @org_program_manager_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def unassign_work_areas(request, org_slug, opp_id):
     try:
         data = json.loads(request.body)
@@ -852,7 +852,7 @@ def unassign_work_areas(request, org_slug, opp_id):
 @require_GET
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def review_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     work_area = get_object_or_404(
         WorkArea,
@@ -895,7 +895,7 @@ _ACTION_TO_NEW_STATUS = {
 @require_POST
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
     try:
         action = InaccessibilityReviewAction(request.POST.get("action", ""))
@@ -943,7 +943,7 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
 
 @org_admin_required
 @opportunity_required
-@require_flag_for_opp(MICROPLANNING)
+@waffle_flag(MICROPLANNING)
 def coverage_progress(request, *args, **kwargs):
     """Coverage Progress Tracker page: a header saturation goal plus the per-ward "Core Metrics"
     table and the per-work-area-group "Metrics by Work Area Group" table. Each table has its own
