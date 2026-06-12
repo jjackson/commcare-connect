@@ -1,22 +1,26 @@
 {% load i18n %}
-<div x-data="{ open: true, confirm: false, action: null, error: '' }"
+<div x-data="{ open: true, confirm: false, error: '' }"
+     x-ref="modal"
      x-show="open"
      x-cloak
+     @click.self="open = false"
      @keydown.escape.window="open = false"
+     @htmx:after-request="if (!event.detail.successful) { error = event.detail.xhr.responseText || '{% trans "Something went wrong. Please try again." %}'; confirm = false; }"
      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-  <div @click.outside="open = false"
-       class="bg-white rounded-lg shadow-lg w-full max-w-3xl overflow-hidden relative">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-3xl overflow-hidden relative">
     <div class="metric-container px-6 py-4">
       <h3 class="text-lg font-semibold text-white">
         {% blocktrans with name=entry.opportunity_access.user.name %}{{ name }}: Weekly Performance Report{% endblocktrans %}
       </h3>
       <p class="text-sm text-gray-100">{{ report.period_start }} – {{ report.period_end }}</p>
     </div>
-    <form method="post"
+    <form x-ref="form"
+          method="post"
           hx-post="{% url 'opportunity:audit:audit_report_task_action' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id entry_id=entry.audit_report_entry_id %}"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
-          hx-swap="none"
-          hx-on:htmx:after-request="if (event.detail.successful) { document.getElementById('modal-root').innerHTML = ''; htmx.trigger(document.body, 'refreshDetail'); } else { error = event.detail.xhr.responseText || '{% trans "Something went wrong. Please try again." %}'; confirm = false; }">
+          hx-target="#modal-root"
+          hx-swap="innerHTML">
+      <input type="hidden" name="action" x-ref="actionInput" />
       <div class="grid grid-cols-2 gap-6 p-6">
         <div>
           <h4 class="font-semibold mb-2">{% trans "Audit Results" %}</h4>
@@ -62,10 +66,12 @@
                 @click="open = false">{% trans "Cancel" %}</button>
         <button type="button"
                 class="button button-md outline-style"
-                @click="action='none'; confirm = true;">{% trans "No Action Needed" %}</button>
+                @click="$refs.actionInput.value = 'none'; $refs.form.requestSubmit()">
+          {% trans "No Action Needed" %}
+        </button>
         <button type="button"
                 class="button button-md primary-dark"
-                @click="action='tasks_assigned'; confirm = true;">{% trans "Complete Review" %}</button>
+                @click="confirm = true">{% trans "Complete Review" %}</button>
       </div>
       <!-- Confirmation overlay -->
       <div x-show="confirm"
@@ -73,14 +79,17 @@
            class="absolute inset-0 bg-black/40 flex items-center justify-center">
         <div class="bg-white rounded-lg shadow p-6 w-96">
           <p class="text-sm mb-4">
-            {% trans "Completing this review will assign the selected tasks to the Connect Worker. Are you sure you want to proceed?" %}
+            {% trans "This will assign the selected tasks to the Connect Worker. Are you sure you want to proceed?" %}
           </p>
-          <input type="hidden" name="action" :value="action" />
           <div class="flex justify-end gap-2">
             <button type="button"
                     class="button button-md outline-style"
                     @click="confirm=false">{% trans "Cancel" %}</button>
-            <button type="submit" class="button button-md primary-dark">{% trans "Assign Tasks" %}</button>
+            <button type="button"
+                    class="button button-md primary-dark"
+                    @click="$refs.actionInput.value = 'tasks_assigned'; $refs.form.requestSubmit()">
+              {% trans "Assign Tasks" %}
+            </button>
           </div>
         </div>
       </div>
