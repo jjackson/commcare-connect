@@ -93,8 +93,6 @@ def _build_columns(label_columns, metric_columns):
 
 
 class CoverageWardTable(tables.Table):
-    """Top "Core Metrics" table — one row per ward (``CoverageProgressReport.ward_rows()``)."""
-
     class Meta:
         orderable = False
         empty_text = _("No coverage data available.")
@@ -108,9 +106,6 @@ class CoverageWardTable(tables.Table):
 
 
 class CoverageWAGTable(tables.Table):
-    """Bottom "Metrics by Work Area Group" table — one row per work area group
-    (``CoverageProgressReport.wag_rows()``)."""
-
     class Meta:
         orderable = False
         empty_text = _("No work area group data available.")
