@@ -1684,7 +1684,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"_export": "csv", "_table": "ward"},
+            {"export": "csv", "table": "ward"},
         )
         assert resp.status_code == 200
         assert resp["Content-Type"].startswith("text/csv")
@@ -1699,7 +1699,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"_export": "xlsx", "_table": "wag"},
+            {"export": "xlsx", "table": "wag"},
         )
         assert resp.status_code == 200
         assert "spreadsheetml" in resp["Content-Type"]  # .xlsx
@@ -1709,7 +1709,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"_export": "csv", "_table": "bogus"},
+            {"export": "csv", "table": "bogus"},
         )
         assert resp.status_code == 400
 

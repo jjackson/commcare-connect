@@ -1010,8 +1010,8 @@ def coverage_progress(request, *args, **kwargs):
 
 
 # Query params used by the per-table download buttons: ``?_export=<format>&_table=<ward|wag>``.
-COVERAGE_EXPORT_FORMAT_PARAM = "_export"
-COVERAGE_EXPORT_TABLE_PARAM = "_table"
+COVERAGE_EXPORT_FORMAT_PARAM = "export"
+COVERAGE_EXPORT_TABLE_PARAM = "table"
 DEFAULT_COVERAGE_EXPORT_TABLE = "ward"
 # Maps each ``_table`` value to the file-name stem used in the download.
 COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_work_area_group"}
@@ -1020,8 +1020,8 @@ COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_wor
 def _export_coverage_table(request, opportunity, tables):
     """Return a file response for the requested table/format, or None if no export was requested.
 
-    ``tables`` maps a ``_table`` value (e.g. "ward"/"wag") to its built table. An unsupported
-    ``_export`` format or an unknown ``_table`` value returns a 400 rather than silently serving
+    ``tables`` maps a ``table`` value (e.g. "ward"/"wag") to its built table. An unsupported
+    ``export`` format or an unknown ``table`` value returns a 400 rather than silently serving
     the wrong table.
     """
     export_format = request.GET.get(COVERAGE_EXPORT_FORMAT_PARAM)
@@ -1030,9 +1030,11 @@ def _export_coverage_table(request, opportunity, tables):
     if not TableExport.is_valid_format(export_format):
         return HttpResponseBadRequest(_("Unsupported export format."))
 
-    which = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, DEFAULT_COVERAGE_EXPORT_TABLE)
-    if which not in tables:
+    export_table = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, DEFAULT_COVERAGE_EXPORT_TABLE)
+    if export_table not in tables:
         return HttpResponseBadRequest(_("Unknown table."))
 
-    exporter = TableExport(export_format, tables[which])
-    return exporter.response(f"{slugify(opportunity.name)}_{COVERAGE_EXPORT_FILENAME_STEMS[which]}.{export_format}")
+    exporter = TableExport(export_format, tables[export_table])
+    return exporter.response(
+        f"{slugify(opportunity.name)}_{COVERAGE_EXPORT_FILENAME_STEMS[export_table]}.{export_format}"
+    )
