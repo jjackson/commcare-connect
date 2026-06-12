@@ -1016,12 +1016,14 @@ def _export_coverage_table(request, opportunity, tables):
     if not TableExport.is_valid_format(export_format):
         return HttpResponseBadRequest(_("Unsupported export format."))
 
-    which = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, DEFAULT_COVERAGE_EXPORT_TABLE)
-    if which not in tables:
+    export_table = request.GET.get(COVERAGE_EXPORT_TABLE_PARAM, DEFAULT_COVERAGE_EXPORT_TABLE)
+    if export_table not in tables:
         return HttpResponseBadRequest(_("Unknown table."))
 
-    exporter = TableExport(export_format, tables[which])
-    return exporter.response(f"{slugify(opportunity.name)}_{COVERAGE_EXPORT_FILENAME_STEMS[which]}.{export_format}")
+    exporter = TableExport(export_format, tables[export_table])
+    return exporter.response(
+        f"{slugify(opportunity.name)}_{COVERAGE_EXPORT_FILENAME_STEMS[export_table]}.{export_format}"
+    )
 
 
 def _get_coverage_date_filter(request):
