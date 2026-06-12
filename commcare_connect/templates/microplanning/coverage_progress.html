@@ -5,7 +5,7 @@
   <div class="p-4">
     {% include 'components/breadcrumbs.html' with path=path %}
     {# Page header: title + the opportunity-wide Ward Saturation Goal #}
-    <header class="rounded-lg bg-brand-deep-purple p-6 text-white mb-6">
+    <header class="metric-container text-white mb-6">
       <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 class="text-2xl font-semibold">{% translate "Coverage Progress Tracker" %}</h1>
@@ -13,7 +13,14 @@
         </div>
         <div class="w-full lg:max-w-sm">
           <div class="rounded-md bg-white/10 p-3">
-            {% include 'components/progressbar/simple-progressbar.html' with percentage=header.ward_saturation_goal|default:0 %}
+            <div class="flex items-center gap-4">
+              <div class="w-full bg-brand-indigo rounded-full h-3 flex-1">
+                <div class="bg-white h-3 rounded-full" style="width: 4{{header.ward_saturation_goal|floatformat:'0'}}%"></div>
+              </div>
+              <div>
+                4{{header.ward_saturation_goal|floatformat:'0'}}%
+              </div>
+            </div>
             <p class="mt-1 text-sm text-white/80">{% translate "Ward Saturation Goal" %}</p>
           </div>
         </div>
