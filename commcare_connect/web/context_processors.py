@@ -1,7 +1,7 @@
 from django.conf import settings
+from waffle import flag_is_active
 
 from commcare_connect.flags.flag_names import OPEN_CHAT_STUDIO_WIDGET, SESSION_TRACKING
-from commcare_connect.flags.models import Flag
 from commcare_connect.utils.tables import DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS
 
 
@@ -26,14 +26,14 @@ def gtm_context(request):
 def chat_widget_context(request):
     creds_configured = bool(settings.CHATBOT_ID and settings.CHATBOT_EMBED_KEY)
     return {
-        "chat_widget_enabled": creds_configured and Flag.is_flag_active_for_request(request, OPEN_CHAT_STUDIO_WIDGET),
+        "chat_widget_enabled": creds_configured and flag_is_active(request, OPEN_CHAT_STUDIO_WIDGET),
         "chatbot_id": settings.CHATBOT_ID,
         "chatbot_embed_key": settings.CHATBOT_EMBED_KEY,
     }
 
 
 def session_tracking_context(request):
-    tracking_enabled = bool(settings.LIVESESSION_APP_ID) and Flag.is_flag_active_for_request(request, SESSION_TRACKING)
+    tracking_enabled = bool(settings.LIVESESSION_APP_ID) and flag_is_active(request, SESSION_TRACKING)
     additional_tracker_data = _get_additional_tracking_context(request) if tracking_enabled else {}
     return {
         "session_tracking_enabled": tracking_enabled,

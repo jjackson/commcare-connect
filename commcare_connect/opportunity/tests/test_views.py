@@ -837,6 +837,10 @@ class TestResendUserInvites:
         assert self.old_invite.status == UserInviteStatus.invited
         assert self.old_invite.notification_date is not None
 
+        sms_body = mock_send_sms.call_args.args[1]
+        expected_path = reverse("users:invite_redirect", args=(self.access2.opportunity.opportunity_id,))
+        assert expected_path in sms_body
+
     def test_no_user_ids(self, mock_send_event):
         response = self.client.post(self.url, data={})
         assert response.status_code == 400
