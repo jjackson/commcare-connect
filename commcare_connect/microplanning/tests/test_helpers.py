@@ -47,26 +47,29 @@ class TestExcludeWorkAreas:
         assert mock_bulk_hq.call_count == 1
 
     @patch("commcare_connect.microplanning.helpers.bulk_create_or_update_cases")
-    def test_mixed_batch_only_not_visited_is_excluded(self, mock_bulk_hq, org_user_admin, opportunity):
-        wa_valid = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
+    def test_mixed_batch_eligible_and_ineligible(self, mock_bulk_hq, org_user_admin, opportunity):
+        wa_not_visited = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.NOT_VISITED)
+        wa_unassigned = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.UNASSIGNED)
         wa_inaccessible = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.INACCESSIBLE)
         wa_excluded = WorkAreaFactory(opportunity=opportunity, status=WorkAreaStatus.EXCLUDED)
 
         res = exclude_work_areas_for_opportunity(
             opportunity=opportunity,
-            work_area_ids=[wa_valid.id, wa_inaccessible.id, wa_excluded.id],
+            work_area_ids=[wa_not_visited.id, wa_unassigned.id, wa_inaccessible.id, wa_excluded.id],
             user=org_user_admin,
             exclusion_reason="Test",
         )
-        assert res["excluded_ids"] == [wa_valid.id]
+        assert set(res["excluded_ids"]) == {wa_not_visited.id, wa_unassigned.id}
         assert res["skipped"] == 2
         assert res["failed"] == 0
 
-        wa_valid.refresh_from_db()
+        wa_not_visited.refresh_from_db()
+        wa_unassigned.refresh_from_db()
         wa_inaccessible.refresh_from_db()
         wa_excluded.refresh_from_db()
 
-        assert wa_valid.status == WorkAreaStatus.EXCLUDED
+        assert wa_not_visited.status == WorkAreaStatus.EXCLUDED
+        assert wa_unassigned.status == WorkAreaStatus.EXCLUDED
         assert wa_inaccessible.status == WorkAreaStatus.INACCESSIBLE  # unchanged
         assert wa_excluded.status == WorkAreaStatus.EXCLUDED  # unchanged
 
@@ -133,7 +136,6 @@ class TestExcludeWorkAreas:
         "status",
         [
             WorkAreaStatus.VISITED,
-            WorkAreaStatus.UNASSIGNED,
             WorkAreaStatus.REQUEST_FOR_INACCESSIBLE,
             WorkAreaStatus.EXPECTED_VISIT_REACHED,
         ],

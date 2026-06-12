@@ -36,7 +36,7 @@
             cannotExclude(id) {
                 if (this.excludedWorkAreaIds.has(id)) return true;
                 const status = this.workAreaProperties.get(id)?.status;
-                return status !== undefined && status !== 'NOT_VISITED';
+                return status !== undefined && status !== 'NOT_VISITED' && status !== 'UNASSIGNED';
             },
 
             cannotUnassign(id) {
@@ -602,9 +602,9 @@
                     if (excluded.length > 0 && skipped === 0) {
                         this.showToast(`{% translate "Work area(s) excluded successfully." %}`);
                     } else if (excluded.length > 0 && skipped > 0) {
-                        this.showToast(`${excluded.length} {% translate "excluded" %}, ${skipped} {% translate "skipped (already excluded or not 'Not Visited')." %}`);
+                        this.showToast(`${excluded.length} {% translate "excluded" %}, ${skipped} {% translate "skipped (already excluded or not eligible)." %}`);
                     } else if (skipped > 0) {
-                        this.showToast(`{% translate "No work areas were excluded. Only 'Not Visited' work areas can be excluded." %}`, true);
+                        this.showToast(`{% translate "No work areas were excluded. Only 'Not Visited' or 'Unassigned' work areas can be excluded." %}`, true);
                     }
                 });
             },
