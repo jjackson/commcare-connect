@@ -2,10 +2,10 @@
 <div x-data="{ open: true, confirm: false, action: null, error: '' }"
      x-show="open"
      x-cloak
+     @click.self="open = false"
      @keydown.escape.window="open = false"
      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-  <div @click.outside="open = false"
-       class="bg-white rounded-lg shadow-lg w-full max-w-3xl overflow-hidden relative">
+  <div class="bg-white rounded-lg shadow-lg w-full max-w-3xl overflow-hidden relative">
     <div class="metric-container px-6 py-4">
       <h3 class="text-lg font-semibold text-white">
         {% blocktrans with name=entry.opportunity_access.user.name %}{{ name }}: Weekly Performance Report{% endblocktrans %}
@@ -56,13 +56,14 @@
            role="alert"
            class="mx-6 mb-4 p-3 rounded-lg border border-message-error-border bg-message-error text-message-error-text text-sm"
            x-text="error"></div>
+      <input type="hidden" name="action" :value="action" />
       <div class="px-6 pb-6 flex justify-end gap-2">
         <button type="button"
                 class="button button-md outline-style"
                 @click="open = false">{% trans "Cancel" %}</button>
-        <button type="button"
+        <button type="submit"
                 class="button button-md outline-style"
-                @click="action='none'; confirm = true;">{% trans "No Action Needed" %}</button>
+                @click="action='none'">{% trans "No Action Needed" %}</button>
         <button type="button"
                 class="button button-md primary-dark"
                 @click="action='tasks_assigned'; confirm = true;">{% trans "Complete Review" %}</button>
@@ -73,9 +74,8 @@
            class="absolute inset-0 bg-black/40 flex items-center justify-center">
         <div class="bg-white rounded-lg shadow p-6 w-96">
           <p class="text-sm mb-4">
-            {% trans "Completing this review will assign the selected tasks to the Connect Worker. Are you sure you want to proceed?" %}
+            {% trans "This will assign the selected tasks to the Connect Worker. Are you sure you want to proceed?" %}
           </p>
-          <input type="hidden" name="action" :value="action" />
           <div class="flex justify-end gap-2">
             <button type="button"
                     class="button button-md outline-style"
