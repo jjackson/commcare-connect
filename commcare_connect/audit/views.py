@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
@@ -207,19 +208,20 @@ def audit_report_task_action(request, org_slug, opp_id, audit_report_id, entry_i
         task_type_ids = request.POST.getlist("task_type_ids")
         task_types = TaskType.objects.filter(pk__in=task_type_ids, opportunity=opportunity)
         due_date = timezone.now().date() + timedelta(days=DEFAULT_TASK_DUE_DAYS)
-        for task_type in task_types:
-            try:
-                AssignedTask.assign(
-                    task_type=task_type,
-                    opportunity_access=entry.opportunity_access,
-                    due_date=due_date,
-                    assigned_by=request.user,
-                )
-            except TaskAlreadyAssignedError:
-                return HttpResponseBadRequest(
-                    _("Task assignment not completed: '%(name)s' is already assigned to this worker.")
-                    % {"name": task_type.name}
-                )
+        try:
+            with transaction.atomic():
+                for task_type in task_types:
+                    AssignedTask.assign(
+                        task_type=task_type,
+                        opportunity_access=entry.opportunity_access,
+                        due_date=due_date,
+                        assigned_by=request.user,
+                    )
+        except TaskAlreadyAssignedError:
+            return HttpResponseBadRequest(
+                _("Task assignment not completed: '%(name)s' is already assigned to this worker.")
+                % {"name": task_type.name}
+            )
         entry.review_action = AuditReportEntry.ReviewAction.TASKS_ASSIGNED
     elif action == "none":
         entry.review_action = AuditReportEntry.ReviewAction.NONE
