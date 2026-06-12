@@ -15,6 +15,7 @@ from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTable
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
+from commcare_connect.opportunity.exceptions import TaskAlreadyAssignedError
 from commcare_connect.opportunity.models import AssignedTask, TaskType
 from commcare_connect.organization.decorators import opportunity_required, org_program_manager_required
 
@@ -207,25 +208,30 @@ def audit_report_task_action(request, org_slug, opp_id, audit_report_id, entry_i
         task_types = TaskType.objects.filter(pk__in=task_type_ids, opportunity=opportunity)
         due_date = timezone.now().date() + timedelta(days=DEFAULT_TASK_DUE_DAYS)
         for task_type in task_types:
-            AssignedTask.assign(
-                task_type=task_type,
-                opportunity_access=entry.opportunity_access,
-                due_date=due_date,
-                assigned_by=request.user,
-            )
+            try:
+                AssignedTask.assign(
+                    task_type=task_type,
+                    opportunity_access=entry.opportunity_access,
+                    due_date=due_date,
+                    assigned_by=request.user,
+                )
+            except TaskAlreadyAssignedError:
+                return HttpResponseBadRequest(
+                    _("Task assignment not completed: '%(name)s' is already assigned to this worker.")
+                    % {"name": task_type.name}
+                )
         entry.review_action = AuditReportEntry.ReviewAction.TASKS_ASSIGNED
     elif action == "none":
         entry.review_action = AuditReportEntry.ReviewAction.NONE
     else:
-        return HttpResponseBadRequest("Unknown action.")
+        return HttpResponseBadRequest(_("Unknown action."))
 
     entry.reviewed = True
     entry.save(update_fields=["reviewed", "review_action", "date_modified"])
 
-    # Empty 200. The modal's client-side handler closes the modal and triggers
-    # `refreshDetail` on document.body, which causes `#detail-body` to re-fetch
-    # itself and render the updated tables.
-    return HttpResponse(status=200)
+    response = HttpResponse(status=200)
+    response["HX-Trigger"] = "refreshDetail"
+    return response
 
 
 @opportunity_required
