@@ -440,7 +440,9 @@ def test_filterset_no_params_is_overall():
 
 
 def test_filterset_last_week_maps_to_last_week_filter():
-    assert _coverage_filter({"range": "last_week"}).to_date_filter() == CoverageDateFilter.last_week()
+    result = _coverage_filter({"range": "last_week"}).to_date_filter()
+    assert result.is_last_week is True
+    assert result.end - result.start == datetime.timedelta(days=6)
 
 
 def test_filterset_custom_range_maps_to_custom_window():

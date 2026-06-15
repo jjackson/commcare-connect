@@ -56,7 +56,7 @@ class CoverageProgressFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = WorkArea
-        fields = []
+        fields = ()
         form = CSRFExemptForm
 
     def _noop(self, queryset, name, value):
