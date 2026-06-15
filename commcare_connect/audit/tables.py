@@ -34,6 +34,7 @@ class AuditReportTable(OrgContextTable):
         empty_text = _l("No audits have been generated yet.")
         order_by = ("-period_end",)
         attrs = {"class": "table table-hover"}
+        row_attrs = {"class": "group"}
 
     def __init__(self, *args, opportunity=None, **kwargs):
         self.opportunity = opportunity
@@ -60,7 +61,14 @@ class AuditReportTable(OrgContextTable):
                 "audit_report_id": record.audit_report_id,
             },
         )
-        return format_html('<a href="{}" aria-label="{}">&rsaquo;</a>', url, _("View audit"))
+        return format_html(
+            '<div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-end">'
+            '<a href="{}" aria-label="{}">'
+            '<i class="fa-solid fa-chevron-right text-brand-deep-purple"></i>'
+            "</a></div>",
+            url,
+            _("View audit"),
+        )
 
 
 class CalcColumn(columns.Column):
