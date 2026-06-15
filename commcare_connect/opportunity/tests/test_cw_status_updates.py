@@ -10,11 +10,11 @@ from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     PaymentUnitFactory,
     UserVisitFactory,
 )
 from commcare_connect.opportunity.utils.completed_work import update_status
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 
 
 def _run_update(completed_work):
@@ -34,7 +34,7 @@ def _setup_non_managed(auto_approve=True):
 
 def _setup_managed(auto_approve=True):
     """Create a managed opportunity with auto_approve_payments."""
-    managed_opp = ManagedOpportunityFactory()
+    managed_opp = OpportunityFactory()
     opp_access = OpportunityAccessFactory()
     opp_access.opportunity = managed_opp
     opp_access.opportunity.auto_approve_payments = auto_approve

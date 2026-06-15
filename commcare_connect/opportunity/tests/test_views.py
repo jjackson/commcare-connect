@@ -61,7 +61,7 @@ from commcare_connect.opportunity.tests.factories import (
 )
 from commcare_connect.opportunity.views import WorkerPaymentsView
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import (
     MembershipFactory,
@@ -123,7 +123,7 @@ def test_add_budget_existing_users_for_managed_opportunity(
     initial_total_budget = budget_per_user * 2
 
     program = ProgramFactory(organization=program_manager_org, budget=200)
-    opportunity = ManagedOpportunityFactory(
+    opportunity = OpportunityFactory(
         program=program,
         organization=organization,
         total_budget=initial_total_budget,
@@ -233,7 +233,7 @@ def test_decrease_budget_existing_users_for_managed_opportunity(
     initial_total_budget = budget_per_user * 2
 
     program = ProgramFactory(organization=program_manager_org, budget=200)
-    opportunity = ManagedOpportunityFactory(
+    opportunity = OpportunityFactory(
         program=program,
         organization=organization,
         total_budget=initial_total_budget,
@@ -548,7 +548,7 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
     program2 = ProgramFactory(organization=organization, name="Test Program 2", slug="test-program-2")
 
     # Active opportunity (status=0)
-    opportunity = ManagedOpportunityFactory(
+    opportunity = OpportunityFactory(
         program=program1,
         organization=organization,
         end_date=today + timedelta(days=1),
@@ -557,7 +557,7 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
     )
 
     # Active opportunity (status=0)
-    ManagedOpportunityFactory(
+    OpportunityFactory(
         program=program2,
         organization=organization,
         name="test opportunity 2",
@@ -985,7 +985,7 @@ class TestFetchAttachmentView:
         storage_handler_getitem_mock.assert_called_once()
 
     def test_user_cannot_fetch_managed_opp(self, org_user_member, organization, client):
-        opp = ManagedOpportunityFactory()
+        opp = OpportunityFactory()
         opp.program.organization = opp.organization
         opp.program.save()
 
@@ -1000,7 +1000,7 @@ class TestFetchAttachmentView:
 
     @mock.patch.object(StorageHandler, "__getitem__")
     def test_user_can_fetch_managed_opp(self, storage_handler_getitem_mock, org_user_member, organization, client):
-        opp = ManagedOpportunityFactory(organization=organization)
+        opp = OpportunityFactory(organization=organization)
         opp.program.organization = organization
         opp.program.save()
 
@@ -1180,10 +1180,9 @@ class BaseTestInvoiceView:
     @pytest.fixture
     def setup_invoice(self, organization, org_user_member):
         program = ProgramFactory(organization=organization, budget=10000)
-        opportunity = ManagedOpportunityFactory(
+        opportunity = OpportunityFactory(
             program=program,
             organization=organization,
-            managed=True,
         )
         invoice = PaymentInvoiceFactory(
             opportunity=opportunity,
@@ -1246,7 +1245,7 @@ class TestInvoiceReviewView(BaseTestInvoiceView):
         user = setup_invoice["user"]
 
         program = ProgramFactory(organization=organization, budget=10000)
-        other_opportunity = ManagedOpportunityFactory(
+        other_opportunity = OpportunityFactory(
             program=program,
             organization=organization,
         )
@@ -1373,7 +1372,7 @@ class TestDownloadInvoiceView(BaseTestInvoiceView):
 
 class TestAddPaymentUnitView:
     def test_org_amount_field_visible_for_managed_opportunity(self, client):
-        managed_opportunity = ManagedOpportunityFactory()
+        managed_opportunity = OpportunityFactory()
         organization = managed_opportunity.organization
         organization.program_manager = True
         organization.save()
@@ -1392,7 +1391,7 @@ class TestAddPaymentUnitView:
         assert 'name="org_amount"' in content
 
     def test_add_payment_unit_form_with_managed_opportunity(self, client):
-        managed_opportunity = ManagedOpportunityFactory()
+        managed_opportunity = OpportunityFactory()
         organization = managed_opportunity.organization
         organization.program_manager = True
         organization.save()
@@ -1503,10 +1502,9 @@ def test_update_invoice_invoice_ticket_link_failure(client, program_manager_org,
 
 def _setup_data_for_invoice_ticket_link_update(program_manager_org):
     program = ProgramFactory(organization=program_manager_org, budget=10000)
-    program_manager_org_opportunity = ManagedOpportunityFactory(
+    program_manager_org_opportunity = OpportunityFactory(
         program=program,
         organization=program_manager_org,
-        managed=True,
     )
     return (
         PaymentInvoiceFactory(
@@ -1554,10 +1552,9 @@ class TestInvoiceUpdateStatus:
         Creates a Program (by PM org) with an Opportunity managed by NM org.
         """
         program = ProgramFactory(organization=pm_organization, budget=10000)
-        opportunity = ManagedOpportunityFactory(
+        opportunity = OpportunityFactory(
             program=program,
             organization=nm_organization,
-            managed=True,
         )
         invoice = PaymentInvoiceFactory(
             opportunity=opportunity,
@@ -1793,7 +1790,7 @@ class TestVerificationFlagsConfig:
 
         program = ProgramFactory(organization=program_manager_org)
         nm_org = OrganizationFactory()
-        opportunity = ManagedOpportunityFactory(organization=nm_org, program=program)
+        opportunity = OpportunityFactory(organization=nm_org, program=program)
 
         deliver_unit = DeliverUnitFactory(app=opportunity.deliver_app, payment_unit=None)
         data = self.base_post_data()
@@ -2193,7 +2190,7 @@ class TestTaskTypesConfig:
     @pytest.fixture
     def opp(self, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        return ManagedOpportunityFactory(program=program, organization=program_manager_org)
+        return OpportunityFactory(program=program, organization=program_manager_org)
 
     @pytest.fixture
     def task_units(self):
@@ -2216,7 +2213,7 @@ class TestTaskTypesConfig:
 
     def test_managed_opp_non_pm_not_found(self, client, organization, org_user_admin, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        managed_opp = OpportunityFactory(program=program, organization=organization)
         url = reverse("opportunity:task_types_config", args=(organization.slug, managed_opp.opportunity_id))
         client.force_login(org_user_admin)
         response = client.get(url)
@@ -2226,7 +2223,7 @@ class TestTaskTypesConfig:
         self, client, organization, program_manager_org, program_manager_org_user_admin, task_units
     ):
         program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        managed_opp = OpportunityFactory(program=program, organization=organization)
         url = reverse("opportunity:task_types_config", args=(program_manager_org.slug, managed_opp.opportunity_id))
         client.force_login(program_manager_org_user_admin)
         with mock.patch(self.MOCK_TASK_UNITS_PATH, return_value=task_units):
@@ -2311,7 +2308,7 @@ class TestTaskTypesConfig:
         self, client, organization, org_user_admin, program_manager_org
     ):
         program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        managed_opp = OpportunityFactory(program=program, organization=organization)
         task_type = TaskTypeFactory(app=managed_opp.deliver_app)
         url = reverse("opportunity:edit_task_type", args=(organization.slug, managed_opp.opportunity_id, task_type.pk))
         client.force_login(org_user_admin)
@@ -2403,7 +2400,7 @@ class TestEditAssignedTask:
     @pytest.fixture
     def opp(self, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        return ManagedOpportunityFactory(program=program, organization=program_manager_org)
+        return OpportunityFactory(program=program, organization=program_manager_org)
 
     @pytest.fixture
     def assigned_task(self, opp, user):
@@ -2474,7 +2471,7 @@ class TestEditAssignedTask:
 
     def test_managed_opp_requires_pm_role(self, client, organization, org_user_admin, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        managed_opp = ManagedOpportunityFactory(program=program, organization=organization)
+        managed_opp = OpportunityFactory(program=program, organization=organization)
         access = OpportunityAccessFactory(opportunity=managed_opp)
         task = AssignedTaskFactory(
             opportunity_access=access,
@@ -2495,7 +2492,7 @@ class TestCreateTask:
     @pytest.fixture
     def opportunity(self, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        return ManagedOpportunityFactory(program=program, organization=program_manager_org)
+        return OpportunityFactory(program=program, organization=program_manager_org)
 
     @pytest.fixture
     def access(self, opportunity):
@@ -2610,7 +2607,7 @@ class TestDeleteTasks:
     @pytest.fixture
     def opportunity(self, program_manager_org):
         program = ProgramFactory(organization=program_manager_org)
-        return ManagedOpportunityFactory(program=program, organization=program_manager_org)
+        return OpportunityFactory(program=program, organization=program_manager_org)
 
     @pytest.fixture
     def assigned_tasks(self, opportunity):

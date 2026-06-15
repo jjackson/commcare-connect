@@ -15,12 +15,12 @@ from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
     ExchangeRateFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     PaymentInvoiceFactory,
     PaymentUnitFactory,
     UserVisitFactory,
 )
 from commcare_connect.opportunity.utils.completed_work import get_uninvoiced_visit_items, update_status
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 
 
 @pytest.mark.django_db
@@ -394,7 +394,7 @@ class TestUpdateStatus:
 
     def test_managed_opp_completed_work_not_updated_to_approved_without_agreement(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         required_deliver_unit = DeliverUnitFactory(
@@ -434,7 +434,7 @@ class TestUpdateStatus:
 
     def test_managed_opp_completed_work_updated_to_approved_with_agreement(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         required_deliver_unit = DeliverUnitFactory(
@@ -474,7 +474,7 @@ class TestUpdateStatus:
 
     def test_managed_opp_completed_work_updated_to_approved_with_same_unit_over_limit(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         required_deliver_unit = DeliverUnitFactory(
@@ -508,7 +508,7 @@ class TestUpdateStatus:
 
     def test_managed_opp_completed_work_not_updated_to_approved_with_no_optional_visit(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         required_deliver_unit = DeliverUnitFactory(
@@ -693,7 +693,7 @@ class TestUpdateStatus:
 
     def test_managed_opp_approved_completed_work_status_preserved_when_agreement_revoked(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         deliver_unit = DeliverUnitFactory(

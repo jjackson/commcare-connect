@@ -39,7 +39,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     TaskTypeFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.models import UserCredential
 
 
@@ -577,11 +577,10 @@ class TestAddBudgetNewUsersForm:
         self.opp_total_budget_initially = total_user * self.budget_per_user  # 24
 
         self.program = ProgramFactory(organization=program_manager_org, budget=program_budget)
-        self.opportunity = ManagedOpportunityFactory(
+        self.opportunity = OpportunityFactory(
             program=self.program,
             organization=organization,
             total_budget=self.opp_total_budget_initially,
-            managed=True,
         )
         PaymentUnitFactory(opportunity=self.opportunity, max_total=max_total, amount=amount, org_amount=org_pay)
 

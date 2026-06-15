@@ -1,8 +1,8 @@
 from factory import Faker, LazyFunction, SubFactory
 from factory.django import DjangoModelFactory
 
-from commcare_connect.opportunity.models import Country, Currency, Opportunity
-from commcare_connect.opportunity.tests.factories import DeliveryTypeFactory, OpportunityFactory
+from commcare_connect.opportunity.models import Country, Currency
+from commcare_connect.opportunity.tests.factories import DeliveryTypeFactory
 from commcare_connect.program.models import Program, ProgramApplication
 from commcare_connect.users.tests.factories import OrganizationFactory
 
@@ -32,13 +32,6 @@ class ProgramFactory(DjangoModelFactory):
 
     class Meta:
         model = Program
-
-
-class ManagedOpportunityFactory(OpportunityFactory):
-    managed = True
-
-    class Meta:
-        model = Opportunity
 
 
 class ProgramApplicationFactory(DjangoModelFactory):

@@ -25,7 +25,6 @@ from commcare_connect.opportunity.tests.factories import (
     UserInviteFactory,
     UserVisitFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.tests.factories import MobileUserFactory
 
 
@@ -359,7 +358,7 @@ def test_export_user_visit_review_data(organization, from_date, to_date, expecte
         "Review Requested On",
         "Visit ID",
     ]
-    opp = ManagedOpportunityFactory(organization=organization)
+    opp = OpportunityFactory(organization=organization)
     now_time = now()
     pending_date = now_time - timedelta(days=3)
     agree_date = now_time - timedelta(days=10)
@@ -400,7 +399,7 @@ def test_export_user_visit_review_data(organization, from_date, to_date, expecte
 
 @pytest.mark.django_db
 def test_export_user_visit_review_data_boundary_dates(organization):
-    opp = ManagedOpportunityFactory(organization=organization)
+    opp = OpportunityFactory(organization=organization)
 
     from_date = datetime.date.today() - datetime.timedelta(days=4)
     to_date = datetime.date.today() - datetime.timedelta(days=1)

@@ -12,15 +12,12 @@ from commcare_connect.opportunity.tests.factories import (
     ApplicationFactory,
     DeliveryTypeFactory,
     HQApiKeyFactory,
+    OpportunityFactory,
     PaymentUnitFactory,
 )
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
 from commcare_connect.program.models import Program, ProgramApplicationStatus
-from commcare_connect.program.tests.factories import (
-    ManagedOpportunityFactory,
-    ProgramApplicationFactory,
-    ProgramFactory,
-)
+from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
@@ -174,7 +171,7 @@ class TestOpportunityFinalizeForm:
             end_date=timezone.now().date() + timezone.timedelta(days=30),
             organization=program_manager_org,
         )
-        manage_opp = ManagedOpportunityFactory.create(
+        manage_opp = OpportunityFactory.create(
             program=self.program, start_date=timezone.now().date(), end_date=None, total_budget=None
         )
         self.opportunity = Opportunity.objects.get(id=manage_opp.id)

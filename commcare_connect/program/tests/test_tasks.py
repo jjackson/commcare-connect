@@ -21,7 +21,7 @@ from commcare_connect.program.tasks import (
     send_monthly_delivery_reminder_email,
     send_pm_invoice_review_reminder,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.tests.factories import (
     OrganizationFactory,
     OrgWithUsersFactory,
@@ -72,7 +72,7 @@ class TestGetOrgManagedOppsIdsForReview:
         nm_org = OrganizationFactory()
 
         program = ProgramFactory(organization=pm_org)
-        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program, is_test=False)
+        managed_opportunity = OpportunityFactory(organization=nm_org, program=program, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=managed_opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -92,7 +92,7 @@ class TestGetOrgManagedOppsIdsForReview:
         nm_org = OrganizationFactory()
 
         program = ProgramFactory(organization=pm_org)
-        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program, is_test=False)
+        managed_opportunity = OpportunityFactory(organization=nm_org, program=program, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=managed_opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -183,7 +183,7 @@ class TestSendMonthlyDeliveryReminderEmail:
         nm_org = OrganizationFactory()
 
         program = ProgramFactory(organization=pm_org)
-        managed_opportunity = ManagedOpportunityFactory(organization=nm_org, program=program, is_test=False)
+        managed_opportunity = OpportunityFactory(organization=nm_org, program=program, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=managed_opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -208,8 +208,8 @@ class TestSendMonthlyDeliveryReminderEmail:
         program_1 = ProgramFactory(organization=pm_org_1)
         program_2 = ProgramFactory(organization=pm_org_2)
 
-        managed_opportunity_1 = ManagedOpportunityFactory(organization=nm_org, program=program_1, is_test=False)
-        managed_opportunity_2 = ManagedOpportunityFactory(organization=nm_org, program=program_2, is_test=False)
+        managed_opportunity_1 = OpportunityFactory(organization=nm_org, program=program_1, is_test=False)
+        managed_opportunity_2 = OpportunityFactory(organization=nm_org, program=program_2, is_test=False)
         nm_opportunity = OpportunityFactory(organization=nm_org, is_test=False)
         pm_opportunity = OpportunityFactory(organization=pm_org_2, is_test=False)
 
@@ -290,7 +290,7 @@ class TestSendPmInvoiceReviewReminder:
     def _make_invoice(self, pm_org, status, is_test=False):
         nm_org = OrganizationFactory()
         program = ProgramFactory(organization=pm_org)
-        opp = ManagedOpportunityFactory(
+        opp = OpportunityFactory(
             organization=nm_org,
             program=program,
             is_test=is_test,
