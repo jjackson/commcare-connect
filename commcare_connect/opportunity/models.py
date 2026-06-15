@@ -161,7 +161,7 @@ class Opportunity(BaseModel):
         for count in payment_unit_counts:
             visits_count = count["visits_count"]
             amount = count["amount"]
-            org_amount = count["org_amount"] if self.managed else 0
+            org_amount = count["org_amount"]
             claimed += visits_count * (amount + org_amount)
 
         return claimed
@@ -187,14 +187,10 @@ class Opportunity(BaseModel):
     def number_of_users(self):
         if not self.total_budget:
             return 0
-        if not self.managed:
-            return self.total_budget / self.budget_per_user
-
         budget_per_user = 0
         payment_units = self.paymentunit_set.all()
         for pu in payment_units:
             budget_per_user += pu.max_total * (pu.amount + pu.org_amount)
-
         return self.total_budget / budget_per_user
 
     @property
@@ -309,15 +305,6 @@ class OpportunityAccess(models.Model):
             models.Index(fields=["opportunity", "date_learn_started"]),
         ]
         unique_together = ("user", "opportunity")
-
-    @cached_property
-    def managed_opportunity(self):
-        from commcare_connect.program.models import ManagedOpportunity
-
-        if self.opportunity.managed:
-            return ManagedOpportunity.objects.get(id=self.opportunity.id)
-
-        return None
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property

@@ -28,7 +28,7 @@ from commcare_connect.organization.decorators import (
 )
 from commcare_connect.organization.models import Organization
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ManagedOpportunityInitUpdateForm, ProgramForm
-from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
+from commcare_connect.program.models import Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tasks import (
     send_opportunity_created_email,
     send_program_invite_applied_email,
@@ -113,7 +113,7 @@ class ProgramCreateOrUpdate(ProgramManagerMixin, UpdateView):
 
 
 class ManagedOpportunityList(ProgramManagerMixin, ListView):
-    model = ManagedOpportunity
+    model = Opportunity
     paginate_by = 10
     default_ordering = "name"
     template_name = "opportunity/opportunity_list.html"
@@ -122,7 +122,7 @@ class ManagedOpportunityList(ProgramManagerMixin, ListView):
         ordering = self.request.GET.get("sort", self.default_ordering)
         ordering = ALLOWED_ORDERINGS.get(ordering, self.default_ordering)
         program_id = self.kwargs.get("pk")
-        return ManagedOpportunity.objects.filter(program__program_id=program_id).order_by(ordering)
+        return Opportunity.objects.filter(program__program_id=program_id).order_by(ordering)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -267,8 +267,8 @@ def program_manager_home(request, org):
         queryset=ProgramApplication.objects.select_related("organization").annotate(
             current_budget=Coalesce(
                 Sum(
-                    "program__managedopportunity__total_budget",
-                    filter=Q(program__managedopportunity__organization=F("organization")),
+                    "program__opportunity__total_budget",
+                    filter=Q(program__opportunity__organization=F("organization")),
                 ),
                 Value(0),
             )
@@ -307,8 +307,7 @@ def program_manager_home(request, org):
         UserVisit.objects.filter(
             status=VisitValidationStatus.approved,
             review_status=VisitReviewStatus.pending,
-            opportunity__managed=True,
-            opportunity__managedopportunity__program__in=programs_qs,
+            opportunity__program__in=programs_qs,
         )
         .exclude(opportunity__automatic_visit_verification=True)
         .values(
@@ -321,8 +320,7 @@ def program_manager_home(request, org):
 
     pending_payments_data = (
         PaymentInvoice.objects.filter(
-            opportunity__managed=True,
-            opportunity__managedopportunity__program__in=programs_qs,
+            opportunity__program__in=programs_qs,
             payment__isnull=True,
         )
         .values(
@@ -368,8 +366,8 @@ def network_manager_home(request, org):
         )
         .prefetch_related(
             Prefetch(
-                "managedopportunity_set",
-                queryset=ManagedOpportunity.objects.filter(organization=org),
+                "opportunity_set",
+                queryset=Opportunity.objects.filter(organization=org),
                 to_attr="managed_opportunities_for_org",
             )
         )
@@ -380,7 +378,6 @@ def network_manager_home(request, org):
     pending_review_data = (
         UserVisit.objects.filter(
             status="pending",
-            opportunity__managed=True,
             opportunity__organization=org,
         )
         .exclude(opportunity__automatic_visit_verification=True)
@@ -390,7 +387,7 @@ def network_manager_home(request, org):
         .annotate(count=Count("id", distinct=True))
     )
     pending_review = _make_recent_activity_data(pending_review_data, org.slug, "opportunity:worker_deliver")
-    access_qs = OpportunityAccess.objects.filter(opportunity__managed=True, opportunity__organization=org)
+    access_qs = OpportunityAccess.objects.filter(opportunity__organization=org)
 
     payment_accrued_sum_sq = (
         OpportunityAccess.objects.filter(opportunity_id=OuterRef("id"))
@@ -405,7 +402,7 @@ def network_manager_home(request, org):
         .values("total")[:1]
     )
     pending_payments_data_opps = (
-        Opportunity.objects.filter(managed=True, organization=org)
+        Opportunity.objects.filter(organization=org)
         .annotate(
             pending_payment=Coalesce(Subquery(payment_accrued_sum_sq), 0, output_field=DecimalField())
             - Coalesce(Subquery(payment_amount_sum_sq), 0, output_field=DecimalField())

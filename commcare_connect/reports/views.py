@@ -26,7 +26,7 @@ from commcare_connect.opportunity.models import (
     PaymentInvoice,
 )
 from commcare_connect.organization.models import LLOEntity
-from commcare_connect.program.models import ManagedOpportunity, Program
+from commcare_connect.program.models import Program
 from commcare_connect.reports.decorators import KPIReportMixin
 from commcare_connect.reports.helpers import get_table_data_for_year_month
 from commcare_connect.reports.tables import AdminReportTable, InvoiceReportTable
@@ -177,7 +177,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 class InvoiceReportFilter(django_filters.FilterSet):
     opportunity_name = django_filters.ModelChoiceFilter(
         field_name="opportunity",
-        queryset=ManagedOpportunity.objects.only("id", "name"),
+        queryset=Opportunity.objects.filter(program__isnull=False).only("id", "name"),
         label=_("Opportunity"),
         widget=forms.Select(
             attrs={
@@ -221,7 +221,7 @@ class InvoiceReportFilter(django_filters.FilterSet):
 
         if self.request and not self.request.user.has_perm(ALL_ORG_ACCESS):
             self.filters["opportunity_name"].queryset = (
-                ManagedOpportunity.objects.filter(program__organization__memberships__user=self.request.user)
+                Opportunity.objects.filter(program__organization__memberships__user=self.request.user)
                 .distinct()
                 .only("id", "name")
             )
@@ -282,22 +282,20 @@ class InvoiceReportView(
     def get_invoice_queryset(cls, user):
         queryset = (
             PaymentInvoice.objects.select_related(
-                "opportunity__managedopportunity__program__organization",
+                "opportunity__program__organization",
                 "payment",
                 "exchange_rate",
             )
             .annotate(
                 date_paid=F("payment__date_paid"),
-                org_slug=F("opportunity__managedopportunity__program__organization__slug"),
-                program_name=F("opportunity__managedopportunity__program__name"),
+                org_slug=F("opportunity__program__organization__slug"),
+                program_name=F("opportunity__program__name"),
                 last_status_modified_at=Max("status_events__pgh_created_at"),
             )
             .order_by("-date")
         )
         if not user.has_perm(ALL_ORG_ACCESS):
-            queryset = queryset.filter(
-                opportunity__managedopportunity__program__organization__memberships__user=user
-            ).distinct()
+            queryset = queryset.filter(opportunity__program__organization__memberships__user=user).distinct()
         return queryset
 
     def get_queryset(self):

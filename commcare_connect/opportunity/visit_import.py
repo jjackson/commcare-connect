@@ -190,7 +190,7 @@ def bulk_update_visit_status(opportunity_id: int, headers: list[str], rows: list
                     continue
                 if visit.status != status:
                     visit.status = status
-                    if opportunity.managed and status == VisitValidationStatus.approved:
+                    if status == VisitValidationStatus.approved:
                         visit.review_created_on = now()
                         if visit.flagged and not justification:
                             missing_justifications.append(visit.xform_id)
@@ -721,8 +721,6 @@ class ReviewVisitRowData:
 
 def bulk_update_visit_review_status(opportunity: Opportunity, file: UploadedFile) -> VisitImportStatus:
     file_format = get_file_extension(file)
-    if not opportunity.managed:
-        raise ImportException("Action is only available for managed opportunity.")
 
     if file_format not in ("csv", "xlsx"):
         raise ImportException(f"Invalid file format. Only 'CSV' and 'XLSX' are supported. Got {file_format}")

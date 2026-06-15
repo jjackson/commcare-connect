@@ -163,8 +163,7 @@ def _get_opportunity_or_404(user, opp_id):
     try:
         return (
             Opportunity.objects.filter(
-                Q(organization__memberships__user=user)
-                | Q(managedopportunity__program__organization__memberships__user=user),
+                Q(organization__memberships__user=user) | Q(program__organization__memberships__user=user),
                 id=opp_id,
             )
             .distinct()
@@ -216,9 +215,7 @@ class ProgramOpportunityOrganizationDataView(BaseDataExportView):
     def get(self, request):
         organizations = Organization.objects.filter(memberships__user=request.user)
         opportunities = (
-            Opportunity.objects.filter(
-                Q(organization__in=organizations) | Q(managedopportunity__program__organization__in=organizations)
-            )
+            Opportunity.objects.filter(Q(organization__in=organizations) | Q(program__organization__in=organizations))
             .annotate(visit_count=Count("uservisit", distinct=True))
             .distinct()
         )
@@ -470,7 +467,7 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
         accessible_ids = (
             LabsRecord.objects.filter(
                 Q(opportunity__organization__memberships__user=user)
-                | Q(opportunity__managedopportunity__program__organization__memberships__user=user)
+                | Q(opportunity__program__organization__memberships__user=user)
                 | Q(program__organization__memberships__user=user)
                 | Q(organization__memberships__user=user)
                 | Q(opportunity__isnull=True, program__isnull=True, organization__isnull=True),
@@ -535,8 +532,8 @@ class ProgramOpportunityDataView(BaseDataExportListView):
     def get_queryset(self, request, program_id):
         return (
             Opportunity.objects.filter(
-                managedopportunity__program=program_id,
-                managedopportunity__program__organization__memberships__user=self.request.user,
+                program=program_id,
+                program__organization__memberships__user=self.request.user,
             )
             .select_related("learn_app", "deliver_app")
             .prefetch_related("paymentunit_set", "opportunityverificationflags")

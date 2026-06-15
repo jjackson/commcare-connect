@@ -3,9 +3,9 @@ from crispy_forms.layout import Button, Column, Field, Layout, Row, Submit
 from django import forms
 
 from commcare_connect.opportunity.forms import OpportunityInitForm, OpportunityInitUpdateForm
-from commcare_connect.opportunity.models import Country, Currency
+from commcare_connect.opportunity.models import Country, Currency, Opportunity
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
+from commcare_connect.program.models import Program, ProgramApplicationStatus
 
 DATE_INPUT = forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"})
 
@@ -122,7 +122,6 @@ class BaseManagedOpportunityInitForm:
         pass
 
     def save(self, commit=True):
-        self.instance.program_old = self.program  # to be removed in CCCT-2501
         self.instance.program = self.program
         self.instance.currency = self.program.currency
         self.instance.delivery_type = self.program.delivery_type
@@ -131,12 +130,12 @@ class BaseManagedOpportunityInitForm:
 
 class ManagedOpportunityInitForm(BaseManagedOpportunityInitForm, OpportunityInitForm):
     class Meta(OpportunityInitForm.Meta):
-        model = ManagedOpportunity
+        model = Opportunity
 
 
 class ManagedOpportunityInitUpdateForm(BaseManagedOpportunityInitForm, OpportunityInitUpdateForm):
     class Meta(OpportunityInitUpdateForm.Meta):
-        model = ManagedOpportunity
+        model = Opportunity
 
     def set_organization_initial(self):
         self.fields["organization"].initial = self.instance.organization
