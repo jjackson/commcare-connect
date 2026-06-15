@@ -16,7 +16,7 @@
     </div>
     <form x-ref="form"
           method="post"
-          hx-post="{% url 'opportunity:audit:audit_report_task_action' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id entry_id=entry.audit_report_entry_id %}"
+          hx-post="{% url 'opportunity:audit:audit_report_task_action' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id entry_id=entry.audit_report_entry_id %}"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
           hx-target="#modal-root"
           hx-swap="innerHTML">
