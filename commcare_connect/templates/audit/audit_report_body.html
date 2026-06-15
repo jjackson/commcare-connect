@@ -1,7 +1,7 @@
 {% load i18n %}
 {% load django_tables2 %}
 <div id="detail-body"
-     hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+     hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
      hx-trigger="refreshDetail from:body"
      hx-swap="outerHTML"
      class="flex flex-col gap-4">
@@ -21,7 +21,7 @@
            value="{{ name_filter }}"
            placeholder="{% trans 'Filter by worker name' %}"
            class="base-input w-64"
-           hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+           hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
            hx-trigger="input changed delay:200ms, search"
            hx-target="#detail-body"
            hx-swap="outerHTML"
@@ -35,7 +35,7 @@
     <button type="button"
             class="button button-md primary-dark"
             {% if not can_complete %}disabled{% endif %}
-            hx-post="{% url 'opportunity:audit:audit_report_complete' org_slug=opportunity.organization.slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+            hx-post="{% url 'opportunity:audit:audit_report_complete' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
             hx-swap="none"
             hx-on::after-request="if (event.detail.successful) window.location.reload()">

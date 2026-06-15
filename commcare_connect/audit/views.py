@@ -155,6 +155,7 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
         "can_complete": total_flagged == reviewed_count and report.status == AuditReport.Status.PENDING,
         "name_filter": name_filter,
         "path": path,
+        "org_slug": org_slug,
     }
 
     template = (
@@ -185,6 +186,7 @@ def audit_report_task_modal(request, org_slug, opp_id, audit_report_id, entry_id
             "entry": entry,
             "failed": failed,
             "task_types": task_types,
+            "org_slug": org_slug,
         },
     )
 
