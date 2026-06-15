@@ -29,8 +29,8 @@ def test_list_view_shows_reports(client, program_manager_org_user_admin, audit_o
     response = client.get(url)
     assert response.status_code == 200
     html = response.content.decode()
-    # Audit ID rendered as a 1-based serial number, not the pk.
-    assert "#1" in html
+    # Numbering column header
+    assert ">#</span>" in html
     # Period end rendered in the Date column.
     assert report.period_end.strftime("%b") in html
 

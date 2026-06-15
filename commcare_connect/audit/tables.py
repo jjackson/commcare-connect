@@ -5,15 +5,11 @@ from django.utils.translation import gettext_lazy as _l
 from django_tables2 import columns
 
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.utils.tables import OrgContextTable
+from commcare_connect.utils.tables import IndexColumn, OrgContextTable
 
 
 class AuditReportTable(OrgContextTable):
-    audit_id = columns.Column(
-        accessor="serial",
-        verbose_name=_l("Audit ID"),
-        order_by=("period_end",),
-    )
+    index = IndexColumn()
     date = columns.Column(
         accessor="period_end",
         verbose_name=_l("Date"),
@@ -34,7 +30,7 @@ class AuditReportTable(OrgContextTable):
 
     class Meta:
         model = AuditReport
-        fields = ("audit_id", "date", "status", "reviewer", "view")
+        fields = ("index", "date", "status", "reviewer", "view")
         empty_text = _l("No audits have been generated yet.")
         order_by = ("-period_end",)
         attrs = {"class": "table table-hover"}
@@ -42,17 +38,6 @@ class AuditReportTable(OrgContextTable):
     def __init__(self, *args, opportunity=None, **kwargs):
         self.opportunity = opportunity
         super().__init__(*args, **kwargs)
-
-    def render_audit_id(self, record):
-        url = reverse(
-            "opportunity:audit:audit_report_detail",
-            kwargs={
-                "org_slug": self.org_slug,
-                "opp_id": self.opportunity.opportunity_id,
-                "audit_report_id": record.audit_report_id,
-            },
-        )
-        return format_html('<a class="text-brand-deep-purple hover:underline" href="{}">#{}</a>', url, record.serial)
 
     def render_date(self, value):
         return value.strftime("%b %-d, %Y")
