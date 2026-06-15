@@ -31,8 +31,9 @@ def test_list_view_shows_reports(client, program_manager_org_user_admin, audit_o
     html = response.content.decode()
     # Numbering column header
     assert ">#</span>" in html
-    # Period end rendered in the Date column.
-    assert report.period_end.strftime("%b") in html
+    # Generation Date column header and date_created value are rendered.
+    assert "Generation Date" in html
+    assert report.date_created.strftime("%b") in html
 
 
 @pytest.mark.django_db

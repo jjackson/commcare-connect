@@ -5,15 +5,16 @@ from django.utils.translation import gettext_lazy as _l
 from django_tables2 import columns
 
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.utils.tables import IndexColumn, OrgContextTable
+from commcare_connect.utils.tables import DMYTColumn, IndexColumn, OrgContextTable
 
 
 class AuditReportTable(OrgContextTable):
     index = IndexColumn()
-    date = columns.Column(
-        accessor="period_end",
-        verbose_name=_l("Date"),
+    date = DMYTColumn(
+        accessor="date_created",
+        verbose_name=_l("Generation Date"),
         orderable=True,
+        order_by=("date_created",),
     )
     status = columns.Column(verbose_name=_l("Status"))
     reviewer = columns.Column(
@@ -32,15 +33,12 @@ class AuditReportTable(OrgContextTable):
         model = AuditReport
         fields = ("index", "date", "status", "reviewer", "view")
         empty_text = _l("No audits have been generated yet.")
-        order_by = ("-period_end",)
+        order_by = ("-date_created",)
         row_attrs = {"class": "group"}
 
     def __init__(self, *args, opportunity=None, **kwargs):
         self.opportunity = opportunity
         super().__init__(*args, **kwargs)
-
-    def render_date(self, value):
-        return value.strftime("%b %-d, %Y")
 
     def render_status(self, record):
         if record.status == AuditReport.Status.COMPLETED:
