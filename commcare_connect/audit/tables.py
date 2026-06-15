@@ -33,7 +33,6 @@ class AuditReportTable(OrgContextTable):
         fields = ("index", "date", "status", "reviewer", "view")
         empty_text = _l("No audits have been generated yet.")
         order_by = ("-period_end",)
-        attrs = {"class": "table table-hover"}
         row_attrs = {"class": "group"}
 
     def __init__(self, *args, opportunity=None, **kwargs):
