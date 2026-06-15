@@ -48,9 +48,6 @@ class CoverageDateFilter:
 
     start: datetime.date | None = None
     end: datetime.date | None = None
-    # Marks the rolling "last week" preset so the report can route it to the cached last-week slot
-    # without re-deriving today's date (which would be fragile across a local-midnight boundary).
-    is_last_week: bool = False
 
     def __post_init__(self):
         # Invariant: a window is either fully specified or fully absent. A half-specified
@@ -68,8 +65,9 @@ class CoverageDateFilter:
 
     @classmethod
     def last_week(cls) -> "CoverageDateFilter":
+        # Used to compute the pinned 7-day "last week" report columns (not a page-level filter mode).
         today = localdate()
-        return cls(start=today - datetime.timedelta(days=WEEK_DAYS - 1), end=today, is_last_week=True)
+        return cls(start=today - datetime.timedelta(days=WEEK_DAYS - 1), end=today)
 
     @property
     def window(self) -> tuple[datetime.datetime, datetime.datetime] | None:
@@ -274,9 +272,6 @@ class CoverageProgressReport:
             last_week = _last_week_slot(self.opportunity)
             if self.date_filter.is_overall:
                 filtered = _filtered_overall_slot(self.opportunity)
-            elif self.date_filter.is_last_week:
-                # A last-week filter shares the already-cached last-week slot rather than recomputing.
-                filtered = last_week
             else:
                 filtered = _compute_filtered(self.opportunity, window=self.date_filter.window)
             self._slots_cache = (static, last_week, filtered)

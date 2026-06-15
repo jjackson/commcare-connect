@@ -14,35 +14,17 @@ INPUT_CSS = (
     "text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
 )
 
-# Coverage Progress date-filter modes.
-RANGE_OVERALL = "overall"
-RANGE_LAST_WEEK = "last_week"
-RANGE_CUSTOM = "custom"
-COVERAGE_RANGE_CHOICES = (
-    (RANGE_OVERALL, _("Overall")),
-    (RANGE_LAST_WEEK, _("Last week")),
-    (RANGE_CUSTOM, _("Custom range")),
-)
-VALID_RANGES = frozenset(value for value, _label in COVERAGE_RANGE_CHOICES)
-
 
 class CoverageProgressFilterSet(django_filters.FilterSet):
     """Date filter for the Coverage Progress Tracker page.
 
-    The page's date window is an *aggregation parameter* (it bounds the subqueries inside
-    ``CoverageProgressReport``), not a queryset ``.filter()`` — so this FilterSet is used only for
-    parsing / validating / rendering the form. ``.qs`` is never evaluated; ``to_date_filter()`` maps
-    the cleaned form data onto the already-defined ``CoverageDateFilter`` modes.
+    Two always-visible date inputs: both empty means Overall (no window), and a complete From/To
+    pair applies a custom window. The page's date window is an *aggregation parameter* (it bounds the
+    subqueries inside ``CoverageProgressReport``), not a queryset ``.filter()`` — so this FilterSet is
+    used only for parsing / validating / rendering the form. ``.qs`` is never evaluated;
+    ``to_date_filter()`` maps the cleaned form data onto the existing ``CoverageDateFilter`` modes.
     """
 
-    range = django_filters.ChoiceFilter(
-        label=_("Date range"),
-        choices=COVERAGE_RANGE_CHOICES,
-        empty_label=None,
-        method="_noop",
-        # x-model binds to the page's Alpine scope, which toggles the custom date inputs.
-        widget=forms.Select(attrs={"class": INPUT_CSS, "x-model": "range"}),
-    )
     start = django_filters.DateFilter(
         label=_("From"),
         method="_noop",
@@ -65,32 +47,19 @@ class CoverageProgressFilterSet(django_filters.FilterSet):
 
     def to_date_filter(self) -> CoverageDateFilter:
         """Resolve the submitted form to a CoverageDateFilter, falling back to overall() when the
-        custom range is incomplete or reversed (the page's existing lenient behavior)."""
+        From/To range is incomplete or reversed (the page's existing lenient behavior)."""
         if not self.form.is_valid():
             return CoverageDateFilter.overall()
         cd = self.form.cleaned_data
-        if cd.get("range") == RANGE_LAST_WEEK:
-            return CoverageDateFilter.last_week()
-        if cd.get("range") == RANGE_CUSTOM and cd.get("start") and cd.get("end") and cd["start"] <= cd["end"]:
-            return CoverageDateFilter(start=cd["start"], end=cd["end"])
+        start, end = cd.get("start"), cd.get("end")
+        if start and end and start <= end:
+            return CoverageDateFilter(start=start, end=end)
         return CoverageDateFilter.overall()
 
-    @property
-    def selected_range(self) -> str:
-        """The submitted range mode, whitelisted to a valid choice. Safe to echo into the page
-        (e.g. an Alpine ``x-data`` expression); an unknown value collapses to ``overall``."""
-        submitted = self.data.get("range")
-        return submitted if submitted in VALID_RANGES else RANGE_OVERALL
-
     def active_params(self) -> dict:
-        """The active filter as a plain dict. Param names come from the declared filters (single
-        source of truth); an unknown range is dropped to stay consistent with ``selected_range``."""
-        params = {}
-        for name in self.filters:
-            value = self.data.get(name)
-            if value and not (name == "range" and value not in VALID_RANGES):
-                params[name] = value
-        return params
+        """The active filter as a plain dict, with param names taken from the declared filters
+        (single source of truth)."""
+        return {name: self.data[name] for name in self.filters if self.data.get(name)}
 
     def export_querystring(self, extra=None) -> str:
         """URL-encoded querystring for a download link: the active filter plus the given ``extra``

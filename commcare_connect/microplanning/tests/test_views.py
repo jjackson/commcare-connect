@@ -1635,46 +1635,29 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
     def test_context_exposes_date_filter(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
-        resp = client.get(
-            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "last_week"},
-        )
+        resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
         assert resp.status_code == 200
         assert "filter_form" in resp.context
-        assert resp.context["selected_range"] == "last_week"
-        # The download links embed the active filter so a download matches the filtered view.
-        assert resp.context["export_hrefs"]["ward"]["csv"] == "?range=last_week&export=csv&table=ward"
+        # No filter applied -> the download links carry no filter params.
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
 
     def test_export_links_carry_custom_range(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "custom", "start": "2026-01-01", "end": "2026-01-31"},
+            {"start": "2026-01-01", "end": "2026-01-31"},
         )
         assert resp.context["export_hrefs"]["wag"]["xlsx"] == (
-            "?range=custom&start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
+            "?start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
         )
-
-    def test_invalid_range_is_not_reflected_into_page(self, client, org_user_admin, opportunity):
-        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
-        client.force_login(org_user_admin)
-        # A crafted range must not reach the Alpine x-data expression or the download links.
-        resp = client.get(
-            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "'+alert(1)+'"},
-        )
-        assert resp.status_code == 200
-        assert resp.context["selected_range"] == "overall"
-        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
-        assert b"alert(1)" not in resp.content
 
     def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "last_week", "export": "csv", "table": "ward"},
+            {"start": "2026-01-01", "end": "2026-01-31", "export": "csv", "table": "ward"},
         )
         assert resp.status_code == 200
         assert resp["Content-Type"].startswith("text/csv")

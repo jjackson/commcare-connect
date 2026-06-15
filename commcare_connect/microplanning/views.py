@@ -1000,7 +1000,6 @@ def coverage_progress(request, *args, **kwargs):
         "ward_table": ward_table,
         "wag_table": wag_table,
         "filter_form": filterset.form,
-        "selected_range": filterset.selected_range,
         "export_hrefs": export_hrefs,
         "path": [
             {
