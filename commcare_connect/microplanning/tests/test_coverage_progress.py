@@ -478,11 +478,11 @@ def test_filterset_selected_range_is_whitelisted(raw_range, expected):
 def test_filterset_export_querystring_carries_known_params_plus_export_args():
     qs = _coverage_filter(
         {"range": "custom", "start": "2026-01-01", "end": "2026-01-31", "bogus": "x"}
-    ).export_querystring(_export="csv", _table="ward")
-    assert qs == "range=custom&start=2026-01-01&end=2026-01-31&_export=csv&_table=ward"
+    ).export_querystring({"export": "csv", "table": "ward"})
+    assert qs == "range=custom&start=2026-01-01&end=2026-01-31&export=csv&table=ward"
 
 
 def test_filterset_export_querystring_drops_invalid_range():
-    assert _coverage_filter({"range": "garbage"}).export_querystring(_export="csv", _table="ward") == (
-        "_export=csv&_table=ward"
+    assert _coverage_filter({"range": "garbage"}).export_querystring({"export": "csv", "table": "ward"}) == (
+        "export=csv&table=ward"
     )

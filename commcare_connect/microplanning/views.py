@@ -950,7 +950,7 @@ def act_on_inaccessibility_request(request, org_slug, opp_id, work_area_id):
 def coverage_progress(request, *args, **kwargs):
     """Coverage Progress Tracker page: a header saturation goal plus the per-ward "Core Metrics"
     table and the per-work-area-group "Metrics by Work Area Group" table. Each table has its own
-    download button, handled via the ``_export``/``_table`` query params (see ``_export_coverage_table``).
+    download button, handled via the ``export``/``table`` query params (see ``_export_coverage_table``).
     """
     opportunity = request.opportunity
     filterset = CoverageProgressFilterSet(request.GET, queryset=WorkArea.objects.none())
@@ -977,15 +977,21 @@ def coverage_progress(request, *args, **kwargs):
             content_type="text/plain",
         )
 
-    export_response = _export_coverage_table(request, opportunity, {"ward": ward_table, "wag": wag_table})
+    tables = {"ward": ward_table, "wag": wag_table}
+    export_response = _export_coverage_table(request, opportunity, tables)
     if export_response is not None:
         return export_response
 
     # Pre-build the per-table download links so each carries the active filter (a download then
-    # matches the on-screen filtered view rather than silently exporting the overall report).
+    # matches the on-screen filtered view rather than silently exporting the overall report). The
+    # export param names come from the same constants the export view reads, so they can't drift.
     export_hrefs = {
-        table: {fmt: "?" + filterset.export_querystring(_export=fmt, _table=table) for fmt in ("csv", "xlsx")}
-        for table in ("ward", "wag")
+        table_key: {
+            fmt: "?"
+            + filterset.export_querystring({COVERAGE_EXPORT_FORMAT_PARAM: fmt, COVERAGE_EXPORT_TABLE_PARAM: table_key})
+            for fmt in ("csv", "xlsx")
+        }
+        for table_key in tables
     }
 
     context = {
@@ -1009,11 +1015,11 @@ def coverage_progress(request, *args, **kwargs):
     return render(request, "microplanning/coverage_progress.html", context)
 
 
-# Query params used by the per-table download buttons: ``?_export=<format>&_table=<ward|wag>``.
+# Query params used by the per-table download buttons: ``?export=<format>&table=<ward|wag>``.
 COVERAGE_EXPORT_FORMAT_PARAM = "export"
 COVERAGE_EXPORT_TABLE_PARAM = "table"
 DEFAULT_COVERAGE_EXPORT_TABLE = "ward"
-# Maps each ``_table`` value to the file-name stem used in the download.
+# Maps each ``table`` value to the file-name stem used in the download.
 COVERAGE_EXPORT_FILENAME_STEMS = {"ward": "core_metrics", "wag": "metrics_by_work_area_group"}
 
 

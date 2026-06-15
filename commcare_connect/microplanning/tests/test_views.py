@@ -1643,7 +1643,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert "filter_form" in resp.context
         assert resp.context["selected_range"] == "last_week"
         # The download links embed the active filter so a download matches the filtered view.
-        assert resp.context["export_hrefs"]["ward"]["csv"] == "?range=last_week&_export=csv&_table=ward"
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?range=last_week&export=csv&table=ward"
 
     def test_export_links_carry_custom_range(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
@@ -1653,7 +1653,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
             {"range": "custom", "start": "2026-01-01", "end": "2026-01-31"},
         )
         assert resp.context["export_hrefs"]["wag"]["xlsx"] == (
-            "?range=custom&start=2026-01-01&end=2026-01-31&_export=xlsx&_table=wag"
+            "?range=custom&start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
         )
 
     def test_invalid_range_is_not_reflected_into_page(self, client, org_user_admin, opportunity):
@@ -1666,7 +1666,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         )
         assert resp.status_code == 200
         assert resp.context["selected_range"] == "overall"
-        assert resp.context["export_hrefs"]["ward"]["csv"] == "?_export=csv&_table=ward"
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
         assert b"alert(1)" not in resp.content
 
     def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
@@ -1674,7 +1674,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         client.force_login(org_user_admin)
         resp = client.get(
             self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
-            {"range": "last_week", "_export": "csv", "_table": "ward"},
+            {"range": "last_week", "export": "csv", "table": "ward"},
         )
         assert resp.status_code == 200
         assert resp["Content-Type"].startswith("text/csv")

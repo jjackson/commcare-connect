@@ -92,10 +92,10 @@ class CoverageProgressFilterSet(django_filters.FilterSet):
                 params[name] = value
         return params
 
-    def export_querystring(self, **extra) -> str:
-        """URL-encoded querystring for a download link: the active filter plus the given export
-        params (e.g. ``_export``/``_table``), so the download matches the on-screen filtered view."""
-        return urlencode({**self.active_params(), **extra})
+    def export_querystring(self, extra=None) -> str:
+        """URL-encoded querystring for a download link: the active filter plus the given ``extra``
+        export params (the export format/table), so the download matches the on-screen filtered view."""
+        return urlencode({**self.active_params(), **(extra or {})})
 
 
 class WorkAreaMapFilterSet(django_filters.FilterSet):
