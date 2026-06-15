@@ -7,7 +7,7 @@ import pytest
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
 from commcare_connect.opportunity.app_xml import DeliverUnit as DeliverUnitData
 from commcare_connect.opportunity.app_xml import Module
-from commcare_connect.opportunity.models import CommCareApp, HQApiKey
+from commcare_connect.opportunity.models import CommCareApp, HQApiKey, Opportunity
 from commcare_connect.opportunity.tests.factories import DeliveryTypeFactory, HQApiKeyFactory
 from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
@@ -280,7 +280,7 @@ class TestManagedOpportunityCreate:
         assert len(response.data["learn_app"]["learn_modules"]) == 1
         assert len(response.data["deliver_app"]["deliver_units"]) == 2
 
-        opp = ManagedOpportunity.objects.get(opportunity_id=response.data["opportunity_id"])
+        opp = Opportunity.objects.get(opportunity_id=response.data["opportunity_id"])
         assert opp.organization == organization
         assert opp.program == program
         assert opp.currency == program.currency

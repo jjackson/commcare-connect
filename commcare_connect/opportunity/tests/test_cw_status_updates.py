@@ -70,6 +70,8 @@ def _make_visit(opp_access, deliver_unit, completed_work, status, review_status=
     )
     if review_status is not None:
         kwargs["review_status"] = review_status
+    elif status == VisitValidationStatus.approved:
+        kwargs["review_status"] = VisitReviewStatus.agree
     if reason:
         kwargs["reason"] = reason
     return UserVisitFactory(**kwargs)

@@ -262,6 +262,8 @@ class TestUninvoicedVisitItems:
 class TestUpdateStatus:
     def _create_visit(self, completed_work, deliver_unit, **kwargs):
         opp_access = completed_work.opportunity_access
+        if kwargs.get("status") == VisitValidationStatus.approved and "review_status" not in kwargs:
+            kwargs["review_status"] = VisitReviewStatus.agree
         return UserVisitFactory(
             opportunity=opp_access.opportunity,
             user=opp_access.user,

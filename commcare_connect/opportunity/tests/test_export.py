@@ -61,9 +61,9 @@ def test_export_user_visit_data(mobile_user_with_connect_link):
 
     assert dataset.export("csv") == (
         "Visit ID,Visit date,Status,Username,Name of User,Unit Name,Rejected Reason,"
-        "Duration,Entity ID,Entity Name,Flags,form.name,form.group.q\r\n"
-        f",{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,test_form1,\r\n"
-        f",{date2.isoformat()},Pending,{username},{name},{deliver_units[1].name},,,abc,A B C,,test_form2,b\r\n"
+        "Justification,Duration,Entity ID,Entity Name,Flags,form.name,form.group.q\r\n"
+        f",{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,,test_form1,\r\n"
+        f",{date2.isoformat()},Pending,{username},{name},{deliver_units[1].name},,,,abc,A B C,,test_form2,b\r\n"
     )
 
 
@@ -138,9 +138,9 @@ def test_export_user_visit_data_no_flatten(mobile_user_with_connect_link):
     name = mobile_user_with_connect_link.name
     assert dataset.export("csv") == (
         "Visit ID,Visit date,Status,Username,Name of User,Unit Name,Rejected Reason,"
-        "Duration,Entity ID,Entity Name,Flags,form_json\r\n"
-        f',{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,"{form_json_1_string}"\r\n'
-        f",{date2.isoformat()},Pending,{username},{name},{deliver_units[1].name},,,abc,A B C,,"
+        "Justification,Duration,Entity ID,Entity Name,Flags,form_json\r\n"
+        f',{date1.isoformat()},Pending,{username},{name},{deliver_units[0].name},,,,,,,"{form_json_1_string}"\r\n'
+        f",{date2.isoformat()},Pending,{username},{name},{deliver_units[1].name},,,,abc,A B C,,"
         f'"{form_json_2_string}"\r\n'
     )
 

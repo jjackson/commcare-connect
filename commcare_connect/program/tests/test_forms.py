@@ -15,7 +15,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
 )
 from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
-from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplicationStatus
+from commcare_connect.program.models import Program, ProgramApplicationStatus
 from commcare_connect.program.tests.factories import (
     ManagedOpportunityFactory,
     ProgramApplicationFactory,
@@ -155,8 +155,8 @@ class TestManagedOpportunityInitForm:
         )
         assert form.is_valid()
         form.save()
-        assert ManagedOpportunity.objects.count() == 1
-        managed_opportunity = ManagedOpportunity.objects.first()
+        assert Opportunity.objects.count() == 1
+        managed_opportunity = Opportunity.objects.first()
         assert managed_opportunity.name == "Test managed opportunity"
         assert managed_opportunity.currency == self.program.currency
         assert managed_opportunity.program == self.program
