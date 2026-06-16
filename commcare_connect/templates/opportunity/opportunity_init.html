@@ -6,7 +6,7 @@
 {% load tailwind_filters %}
 {% block title %}
   {{ request.org }} -
-  {% if is_update %}
+  {% if opportunity_created %}
     Edit Opportunity
   {% else %}
     Create Opportunity
@@ -23,7 +23,7 @@
       </div>
     {% endif %}
     <h6 class="title">
-      {% if is_update %}
+      {% if opportunity_created %}
         Edit Details
       {% else %}
         Create Details

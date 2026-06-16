@@ -316,7 +316,7 @@ class OpportunityInit(OrganizationProgramManagerMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
-        context["is_update"] = False
+        context["opportunity_created"] = False
         return context
 
     def form_valid(self, form: OpportunityInitForm):
@@ -358,7 +358,7 @@ class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMi
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["api_key_form"] = HQApiKeyCreateForm(auto_id="api_key_form_id_for_%s")
-        context["is_update"] = True
+        context["opportunity_created"] = True
         return context
 
 
