@@ -19,7 +19,7 @@ def isolated_registry():
 
 @pytest.fixture
 def fixed_calc(isolated_registry):
-    from commcare_connect.audit.calculations import AuditCalculation
+    from commcare_connect.audit.calculations import AuditCalculation, Measurement
 
     state = {"call_count": 0}
 
@@ -33,7 +33,7 @@ def fixed_calc(isolated_registry):
             state["call_count"] += 1
             # Even pk → value=1.0 (in range); odd pk → value=0.0 (out of range).
             value = 1.0 if opportunity_access.pk % 2 == 0 else 0.0
-            return value, 1
+            return Measurement(value, 1)
 
     calculations._REGISTRY.append(FakeCalc())
     return state

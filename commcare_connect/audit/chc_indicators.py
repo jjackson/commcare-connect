@@ -6,7 +6,7 @@ from django.db.models import Count, F, IntegerField, Max, Q, Sum, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, NullIf
 
-from commcare_connect.audit.calculations import AuditCalculation, register_calculation
+from commcare_connect.audit.calculations import AuditCalculation, Measurement, register_calculation
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit
 
@@ -154,7 +154,7 @@ class CampingRatio(AuditCalculation):
             for row in wa_visit_counts
             if row["visit_count"] > MAX_VISITS_PER_BUILDING * row["work_area__building_count"]
         )
-        return camping_count, total_evaluated
+        return Measurement(camping_count, total_evaluated)
 
 
 @register_calculation
@@ -183,8 +183,8 @@ class GenderRatioDeviation(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["female"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["female"], total), total)
 
 
 @register_calculation
@@ -218,8 +218,8 @@ class MUACPhotoCompliance(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["with_photo"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["with_photo"], total), total)
 
 
 @register_calculation
@@ -249,8 +249,8 @@ class AgeHeaping(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["heaped"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["heaped"], total), total)
 
 
 @register_calculation
@@ -289,11 +289,11 @@ class WACoverageToVisitRatio(AuditCalculation):
         ).count()
 
         if not (total_eligible and expected_visits and actual_visits):
-            return None, 0
+            return Measurement(None, 0)
 
         coverage_ratio = wa_stats["visited_count"] / total_eligible
         visit_ratio = actual_visits / expected_visits
-        return coverage_ratio / visit_ratio, total_eligible
+        return Measurement(coverage_ratio / visit_ratio, total_eligible)
 
 
 @register_calculation
@@ -313,7 +313,7 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
     def compute(self, opportunity_access, period_start, period_end):
         active_wag = _find_active_wag(opportunity_access, period_end)
         if active_wag is None:
-            return None, 0
+            return Measurement(None, 0)
 
         stats = WorkArea.objects.filter(work_area_group=active_wag, opportunity_access=opportunity_access).aggregate(
             total=Count("id"),
@@ -322,9 +322,16 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
         )
 
         if not stats["total"]:
-            return None, 0
+            return Measurement(None, 0)
 
-        return _percent(stats["inaccessible_count"], stats["total"]), stats["terminal_count"]
+        # Rate is over all assigned WAs (total), but evaluation is gated on ≥5
+        # terminal WAs — so the display denominator (total) differs from the
+        # gating sample_size (terminal_count).
+        return Measurement(
+            value=_percent(stats["inaccessible_count"], stats["total"]),
+            sample_size=stats["terminal_count"],
+            denominator=stats["total"],
+        )
 
 
 @register_calculation
@@ -344,7 +351,7 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
     def compute(self, opportunity_access, period_start, period_end):
         last_wag = _find_last_closed_wag(opportunity_access, period_end)
         if last_wag is None:
-            return None, 0
+            return Measurement(None, 0)
 
         stats = (
             WorkArea.objects.filter(
@@ -363,9 +370,9 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
         total = stats["total"]
         if total == 0:
-            return None, 0
+            return Measurement(None, 0)
 
-        return _percent(stats["inaccessible_count"], total), total
+        return Measurement(_percent(stats["inaccessible_count"], total), total)
 
 
 @register_calculation
@@ -393,8 +400,8 @@ class VaccineRate(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["vaccinated"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["vaccinated"], total), total)
 
 
 @register_calculation
@@ -425,8 +432,8 @@ class VaccineCardPhotoCompliance(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["with_photo"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["with_photo"], total), total)
 
 
 # ── MUAC distribution helpers (ported from MLFeatureAggregationReport.py) ────
@@ -571,7 +578,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
 
         total = len(measurements)
         if total < self.min_sample_size:
-            return None, total
+            return Measurement(None, total)
 
         bin_counts = _muac_build_bins(measurements)
         max_count = max(bin_counts)
@@ -589,4 +596,4 @@ class MUACDistributionPatternIndex(AuditCalculation):
                 max_count / total <= 0.42,
             ]
         )
-        return score, total
+        return Measurement(score, total)
