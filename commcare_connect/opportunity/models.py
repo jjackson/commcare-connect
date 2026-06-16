@@ -768,9 +768,10 @@ class CompletedWork(models.Model):
 
     @property
     def approved_count(self):
-        visits = self.uservisit_set.filter(status=VisitValidationStatus.approved).values_list(
-            "deliver_unit_id", flat=True
-        )
+        qs = self.uservisit_set.filter(status=VisitValidationStatus.approved)
+        if self.opportunity_access.opportunity.managed:
+            qs = qs.filter(review_status=VisitReviewStatus.agree)
+        visits = qs.values_list("deliver_unit_id", flat=True)
         return self.calculate_completed(visits, approved=True)
 
     def calculate_completed(self, visits, approved=False):
