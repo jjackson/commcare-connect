@@ -6,7 +6,7 @@ from django.utils import timezone
 from factory.fuzzy import FuzzyText
 
 from commcare_connect.commcarehq.tests.factories import HQServerFactory
-from commcare_connect.opportunity.forms import OpportunityFinalizeForm
+from commcare_connect.opportunity.forms import OpportunityFinalizeForm, OpportunityInitForm
 from commcare_connect.opportunity.models import Opportunity
 from commcare_connect.opportunity.tests.factories import (
     ApplicationFactory,
@@ -15,7 +15,7 @@ from commcare_connect.opportunity.tests.factories import (
     OpportunityFactory,
     PaymentUnitFactory,
 )
-from commcare_connect.program.forms import ManagedOpportunityInitForm, ProgramForm
+from commcare_connect.program.forms import ProgramForm
 from commcare_connect.program.models import Program, ProgramApplicationStatus
 from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 from commcare_connect.users.tests.factories import OrganizationFactory
@@ -88,7 +88,7 @@ class TestProgramForm:
 
 
 @pytest.mark.django_db
-class TestManagedOpportunityInitForm:
+class TestOpportunityInitForm:
     @pytest.fixture(autouse=True)
     def setup(self, program_manager_org, program_manager_org_user_admin):
         self.user = program_manager_org_user_admin
@@ -119,20 +119,20 @@ class TestManagedOpportunityInitForm:
         }
 
     def test_form_initialization(self):
-        form = ManagedOpportunityInitForm(program=self.program, org_slug=self.organization.slug)
+        form = OpportunityInitForm(program=self.program, org_slug=self.organization.slug)
         assert form.fields["currency"].initial == self.program.currency
         assert form.fields["currency"].widget.attrs.get("readonly") == "readonly"
         assert form.fields["currency"].widget.attrs.get("disabled") is True
         assert "organization" in form.fields
 
     def test_form_validation_valid_data(self):
-        form = ManagedOpportunityInitForm(data=self.form_data, program=self.program, org_slug=self.organization.slug)
+        form = OpportunityInitForm(data=self.form_data, program=self.program, org_slug=self.organization.slug)
         assert form.is_valid()
 
     def test_form_validation_invalid_data(self):
         invalid_data = self.form_data.copy()
         invalid_data["learn_app"] = invalid_data["deliver_app"]
-        form = ManagedOpportunityInitForm(data=invalid_data, program=self.program, org_slug=self.organization.slug)
+        form = OpportunityInitForm(data=invalid_data, program=self.program, org_slug=self.organization.slug)
         assert not form.is_valid()
         assert form.errors["learn_app"] == ["Learn app and Deliver app cannot be same"]
         assert form.errors["deliver_app"] == ["Learn app and Deliver app cannot be same"]
@@ -140,11 +140,11 @@ class TestManagedOpportunityInitForm:
     def test_form_validation_missing_data(self):
         invalid_data = self.form_data.copy()
         invalid_data["learn_app"] = None
-        form = ManagedOpportunityInitForm(data=invalid_data, program=self.program, org_slug=self.organization.slug)
+        form = OpportunityInitForm(data=invalid_data, program=self.program, org_slug=self.organization.slug)
         assert not form.is_valid()
 
     def test_form_save(self):
-        form = ManagedOpportunityInitForm(
+        form = OpportunityInitForm(
             data=self.form_data,
             program=self.program,
             org_slug=self.organization.slug,

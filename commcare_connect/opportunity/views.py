@@ -89,6 +89,7 @@ from commcare_connect.opportunity.forms import (
     OpportunityChangeForm,
     OpportunityFinalizeForm,
     OpportunityInitForm,
+    OpportunityInitUpdateForm,
     OpportunityUserInviteForm,
     OpportunityVerificationFlagsConfigForm,
     PaymentExportForm,
@@ -207,7 +208,6 @@ from commcare_connect.organization.decorators import (
     org_program_manager_required,
     org_viewer_required,
 )
-from commcare_connect.program.forms import ManagedOpportunityInitUpdateForm
 from commcare_connect.program.utils import is_program_manager
 from commcare_connect.users.models import User
 from commcare_connect.utils.analytics import GA_CUSTOM_DIMENSIONS, Event, GATrackingInfo, send_event_to_ga
@@ -328,7 +328,7 @@ class OpportunityInit(OrganizationProgramManagerMixin, CreateView):
 class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMixin, UpdateView):
     model = Opportunity
     template_name = "opportunity/opportunity_init.html"
-    form_class = ManagedOpportunityInitUpdateForm
+    form_class = OpportunityInitUpdateForm
     context_object_name = "opportunity"
 
     def get_success_url(self):

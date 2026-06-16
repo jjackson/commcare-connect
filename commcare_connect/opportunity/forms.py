@@ -54,6 +54,7 @@ from commcare_connect.opportunity.utils.invoice import (
     get_start_date_for_invoice,
 )
 from commcare_connect.organization.models import Organization
+from commcare_connect.program.models import ProgramApplicationStatus
 from commcare_connect.users.models import User, UserCredential
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException
 
@@ -355,7 +356,6 @@ class OpportunityChangeForm(OpportunityUserInviteForm, forms.ModelForm):
 
 
 class OpportunityInitForm(forms.ModelForm):
-    managed_opp = False
     app_hint_text = "Add required apps to the opportunity. All fields are mandatory."
     currency = forms.ModelChoiceField(
         label=_("Currency"),
@@ -384,6 +384,7 @@ class OpportunityInitForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop("user", {})
         self.org_slug = kwargs.pop("org_slug", "")
+        self.program = kwargs.pop("program", None)
         super().__init__(*args, **kwargs)
 
         self.fields["short_description"].label = format_html(
@@ -514,6 +515,25 @@ class OpportunityInitForm(forms.ModelForm):
             ),
         )
 
+        for field_name in ["currency", "country"]:
+            form_field = self.fields[field_name]
+            form_field.initial = getattr(self.program, field_name)
+            form_field.widget.attrs.update({"readonly": "readonly", "disabled": True})
+            form_field.required = False
+
+        program_members = Organization.objects.filter(
+            programapplication__program=self.program,
+            programapplication__status=ProgramApplicationStatus.ACCEPTED,
+        ).distinct()
+        self.fields["organization"] = forms.ModelChoiceField(
+            queryset=program_members,
+            required=True,
+            widget=forms.Select(attrs={"class": "form-control"}),
+            label="Network Manager Organization",
+        )
+        opportunity_details_row = self.helper.layout[0]
+        opportunity_details_row.fields.insert(1, Column(Field("organization"), css_class="col-span-2"))
+
     def clean(self):
         cleaned_data = super().clean()
         if cleaned_data:
@@ -589,10 +609,11 @@ class OpportunityInitForm(forms.ModelForm):
             opportunity.created_by = self.user.email
         opportunity.modified_by = self.user.email
 
-        if self.managed_opp:
-            opportunity.organization = self.cleaned_data.get("organization")
-        else:
-            opportunity.organization = organization
+        opportunity.organization = self.cleaned_data.get("organization")
+        opportunity.program = self.program
+        opportunity.currency = self.program.currency
+        opportunity.delivery_type = self.program.delivery_type
+        opportunity.managed = True
 
         if not opportunity.pk and switch_is_active(AUTOMATIC_VISIT_VERIFICATION):
             opportunity.automatic_visit_verification = True
@@ -647,6 +668,8 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
         self._set_initial_api_key(getattr(opportunity, "api_key", None))
         self._set_initial_app("learn", getattr(opportunity, "learn_app", None))
         self._set_initial_app("deliver", getattr(opportunity, "deliver_app", None))
+
+        self.fields["organization"].initial = opportunity.organization
 
         if self._has_existing_accesses:
             self._disabled_fields = (
@@ -708,8 +731,7 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
 
     def save(self, commit=True):
         opportunity = self.instance
-        if self.managed_opp and self.cleaned_data.get("organization"):
-            opportunity.organization = self.cleaned_data.get("organization")
+        opportunity.organization = self.cleaned_data.get("organization")
 
         created_by = opportunity.created_by or self.user.email
         hq_server = self.cleaned_data["hq_server"]

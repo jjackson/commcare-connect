@@ -12,6 +12,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, UpdateView
 
+from commcare_connect.opportunity.forms import OpportunityInitForm, OpportunityInitUpdateForm
 from commcare_connect.opportunity.models import (
     Opportunity,
     OpportunityAccess,
@@ -27,7 +28,7 @@ from commcare_connect.organization.decorators import (
     org_viewer_required,
 )
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.forms import ManagedOpportunityInitForm, ManagedOpportunityInitUpdateForm, ProgramForm
+from commcare_connect.program.forms import ProgramForm
 from commcare_connect.program.models import Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tasks import (
     send_opportunity_created_email,
@@ -159,11 +160,11 @@ class ManagedOpportunityViewMixin:
 
 
 class ManagedOpportunityInit(ManagedOpportunityViewMixin, ProgramManagerMixin, OpportunityInit):
-    form_class = ManagedOpportunityInitForm
+    form_class = OpportunityInitForm
 
 
 class ManagedOpportunityInitUpdate(ManagedOpportunityViewMixin, ProgramManagerMixin, OpportunityInitUpdate):
-    form_class = ManagedOpportunityInitUpdateForm
+    form_class = OpportunityInitUpdateForm
 
 
 @org_program_manager_required

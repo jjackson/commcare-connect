@@ -39,7 +39,8 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     TaskTypeFactory,
 )
-from commcare_connect.program.tests.factories import ProgramFactory
+from commcare_connect.program.models import ProgramApplicationStatus
+from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 from commcare_connect.users.models import UserCredential
 
 
@@ -293,6 +294,12 @@ class TestOpportunityInitUpdateForm:
     def opportunity(self, organization):
         opportunity = OpportunityFactory(organization=organization)
 
+        ProgramApplicationFactory(
+            organization=organization,
+            program=opportunity.program,
+            status=ProgramApplicationStatus.ACCEPTED,
+        )
+
         learn_app = CommCareAppFactory(
             organization=organization,
             cc_app_id="existing-learn-id",
@@ -335,6 +342,7 @@ class TestOpportunityInitUpdateForm:
             "short_description": "updated short description",
             "currency": currency_code,
             "country": opportunity.country,
+            "organization": opportunity.organization.pk,
             "learn_app_description": learn_description,
             "learn_app_passing_score": learn_score,
         }
@@ -359,6 +367,7 @@ class TestOpportunityInitUpdateForm:
             instance=opportunity,
             user=opportunity.api_key.user,
             org_slug=opportunity.organization.slug,
+            program=opportunity.program,
         )
 
     def test_updates_existing_linked_apps(self, opportunity):
@@ -492,17 +501,18 @@ class TestOpportunityInitUpdateForm:
 
 @pytest.mark.django_db
 class TestOpportunityInitForm:
-    @pytest.mark.parametrize("switch_active", [True, False])
-    def test_init_form_sets_automatic_visit_verification_from_global_switch(self, opportunity, switch_active):
-        cache.clear()
+    @pytest.fixture(autouse=True)
+    def program_application(self, opportunity):
+        return ProgramApplicationFactory(
+            organization=opportunity.organization,
+            program=opportunity.program,
+            status=ProgramApplicationStatus.ACCEPTED,
+        )
+
+    def _build_data(self, opportunity):
         learn_app = opportunity.learn_app
         deliver_app = opportunity.deliver_app
-        data = {
-            "name": "Brand new opportunity",
-            "description": "Description",
-            "short_description": "Short",
-            "currency": opportunity.currency.code,
-            "country": opportunity.country.code,
+        return {
             "hq_server": opportunity.hq_server.id,
             "api_key": str(opportunity.api_key.id),
             "learn_app_domain": learn_app.cc_domain,
@@ -511,12 +521,28 @@ class TestOpportunityInitForm:
             "learn_app_passing_score": 70,
             "deliver_app_domain": deliver_app.cc_domain,
             "deliver_app": json.dumps({"id": deliver_app.cc_app_id, "name": deliver_app.name}),
+            "organization": opportunity.organization.pk,
         }
-        form = OpportunityInitForm(
+
+    def _build_form(self, opportunity, extra_data=None):
+        data = {
+            "name": "Brand new opportunity",
+            "description": "Description",
+            "short_description": "Short",
+            **self._build_data(opportunity),
+            **(extra_data or {}),
+        }
+        return OpportunityInitForm(
             data=data,
             user=opportunity.api_key.user,
             org_slug=opportunity.organization.slug,
+            program=opportunity.program,
         )
+
+    @pytest.mark.parametrize("switch_active", [True, False])
+    def test_init_form_sets_automatic_visit_verification_from_global_switch(self, opportunity, switch_active):
+        cache.clear()
+        form = self._build_form(opportunity)
         assert form.is_valid(), form.errors
 
         with override_switch(AUTOMATIC_VISIT_VERIFICATION, active=switch_active):
@@ -528,28 +554,7 @@ class TestOpportunityInitForm:
     @pytest.mark.parametrize("switch_active", [True, False])
     def test_default_credential_config_on_new_opportunity(self, opportunity, switch_active):
         cache.clear()
-        learn_app = opportunity.learn_app
-        deliver_app = opportunity.deliver_app
-        data = {
-            "name": "New opportunity with credentials",
-            "description": "Description",
-            "short_description": "Short",
-            "currency": opportunity.currency.code,
-            "country": opportunity.country.code,
-            "hq_server": opportunity.hq_server.id,
-            "api_key": str(opportunity.api_key.id),
-            "learn_app_domain": learn_app.cc_domain,
-            "learn_app": json.dumps({"id": learn_app.cc_app_id, "name": learn_app.name}),
-            "learn_app_description": "Learn description",
-            "learn_app_passing_score": 70,
-            "deliver_app_domain": deliver_app.cc_domain,
-            "deliver_app": json.dumps({"id": deliver_app.cc_app_id, "name": deliver_app.name}),
-        }
-        form = OpportunityInitForm(
-            data=data,
-            user=opportunity.api_key.user,
-            org_slug=opportunity.organization.slug,
-        )
+        form = self._build_form(opportunity, extra_data={"name": "New opportunity with credentials"})
         assert form.is_valid(), form.errors
 
         with override_switch(OPPORTUNITY_CREDENTIALS, active=switch_active):
