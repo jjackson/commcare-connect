@@ -28,9 +28,7 @@
       <div class="flex items-center relative"
            :class="{'gap-6': isTest}"
            x-data="{ isOpen: false }">
-        <h3 class="text-sm font-medium text-brand-sky flex-1">
-          {% if object.managed %}{{ object.program.name }}{% endif %}
-        </h3>
+        <h3 class="text-sm font-medium text-brand-sky flex-1">{{ object.program.name }}</h3>
         {% if object.is_test %}<span class="badge badge-md primary-light">Test</span>{% endif %}
         {% if request.org_membership.is_viewer %}
           <i class="fa-solid opacity-50"
