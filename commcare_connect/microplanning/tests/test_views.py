@@ -1652,6 +1652,18 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
             "?start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
         )
 
+    def test_single_date_shows_validation_error(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        # Only a From date -> the page renders an error and falls back to overall (links carry no dates).
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01"},
+        )
+        assert resp.status_code == 200
+        assert b"Select both a From and a To date" in resp.content
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
+
     def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)

@@ -435,8 +435,27 @@ def test_filterset_invalid_custom_range_falls_back_to_overall(data):
     assert _coverage_filter(data).to_date_filter().is_overall is True
 
 
+def test_filterset_single_date_is_a_validation_error():
+    fs = _coverage_filter({"start": "2026-01-01"})
+    assert fs.form.is_valid() is False
+    assert "Select both a From and a To date to filter by a date range." in fs.form.non_field_errors()
+
+
+def test_filterset_reversed_range_is_a_validation_error():
+    fs = _coverage_filter({"start": "2026-01-31", "end": "2026-01-01"})
+    assert fs.form.is_valid() is False
+    assert "The From date must be on or before the To date." in fs.form.non_field_errors()
+
+
 def test_filterset_export_querystring_carries_known_params_plus_export_args():
     qs = _coverage_filter({"start": "2026-01-01", "end": "2026-01-31", "bogus": "x"}).export_querystring(
         {"export": "csv", "table": "ward"}
     )
     assert qs == "start=2026-01-01&end=2026-01-31&export=csv&table=ward"
+
+
+def test_filterset_export_querystring_drops_invalid_range():
+    # A lone date doesn't resolve to a window, so the download link carries no date params.
+    assert _coverage_filter({"start": "2026-01-01"}).export_querystring({"export": "csv", "table": "ward"}) == (
+        "export=csv&table=ward"
+    )
