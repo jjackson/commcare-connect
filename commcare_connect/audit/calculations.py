@@ -14,14 +14,21 @@ class CalculationResult:
     value: Any
     has_sufficient_data: bool
     in_range: bool
+    numerator: int | None = None
+    denominator: int | None = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "value": self.value,
             "has_sufficient_data": self.has_sufficient_data,
             "in_range": self.in_range,
             "label": self.label,
         }
+        if self.numerator is not None:
+            d["numerator"] = self.numerator
+        if self.denominator is not None:
+            d["denominator"] = self.denominator
+        return d
 
 
 class AuditCalculation(ABC):
@@ -44,6 +51,7 @@ class AuditCalculation(ABC):
 
     name: ClassVar[str]
     label: ClassVar[str]
+    is_percentage: ClassVar[bool] = False
     min_sample_size: ClassVar[int] = 1
     lower_bound: ClassVar[float | None] = None
     upper_bound: ClassVar[float | None] = None
@@ -65,12 +73,19 @@ class AuditCalculation(ABC):
                 has_sufficient_data=False,
                 in_range=True,
             )
+        numerator = None
+        denominator = None
+        if self.is_percentage and value is not None:
+            denominator = sample_size
+            numerator = round(value * sample_size / 100)
         return CalculationResult(
             name=self.name,
             label=self.label,
             value=value,
             has_sufficient_data=True,
             in_range=self._in_range(value),
+            numerator=numerator,
+            denominator=denominator,
         )
 
     def _in_range(self, value) -> bool:

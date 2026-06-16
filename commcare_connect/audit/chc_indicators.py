@@ -165,6 +165,7 @@ class GenderRatioDeviation(AuditCalculation):
 
     name = "gender_ratio_deviation"
     label = "Gender Ratio Deviation"
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 40
     upper_bound = 60
@@ -194,6 +195,7 @@ class MUACPhotoCompliance(AuditCalculation):
 
     name = "muac_photo_compliance"
     label = "MUAC Photo Compliance"
+    is_percentage = True
     min_sample_size = 70
     lower_bound = 72
 
@@ -227,6 +229,7 @@ class AgeHeaping(AuditCalculation):
 
     name = "age_heaping"
     label = "Age Heaping"
+    is_percentage = True
     min_sample_size = 97
     upper_bound = 19
 
@@ -297,6 +300,7 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
 
     name = "inaccessible_wa_rate_early_warning"
     label = "Inaccessible WA Rate – Early Warning"
+    is_percentage = True
     min_sample_size = 5
     upper_bound = 25
 
@@ -326,6 +330,7 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
     name = "inaccessible_wa_rate_last_completed_wag"
     label = "Inaccessible WA Rate – Last Completed WAG"
+    is_percentage = True
     min_sample_size = 5
     upper_bound = 15
 
@@ -365,6 +370,7 @@ class VaccineRate(AuditCalculation):
 
     name = "vaccine_rate"
     label = "Vaccine Rate"
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 58
 
@@ -394,6 +400,7 @@ class VaccineCardPhotoCompliance(AuditCalculation):
 
     name = "vaccine_card_photo_compliance"
     label = "Vaccine Card Photo Compliance"
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 38
 
