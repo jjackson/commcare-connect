@@ -131,6 +131,7 @@ class CampingRatio(AuditCalculation):
 
     name = "camping_ratio"
     label = "Camping (Visit:Building Ratio)"
+    tooltip = "Flagged if visits exceed 12 per building in any single Work Area in the past week."
     min_sample_size = 1
     upper_bound = 0
 
@@ -165,6 +166,7 @@ class GenderRatioDeviation(AuditCalculation):
 
     name = "gender_ratio_deviation"
     label = "Gender Ratio Deviation"
+    tooltip = "Flagged if female or male ratio falls below 40% or exceeds 60%."
     is_percentage = True
     min_sample_size = 97
     lower_bound = 40
@@ -195,6 +197,7 @@ class MUACPhotoCompliance(AuditCalculation):
 
     name = "muac_photo_compliance"
     label = "MUAC Photo Compliance"
+    tooltip = "Flagged if MUAC photo taken in fewer than 72% of eligible visits (children ≥6 months)."
     is_percentage = True
     min_sample_size = 70
     lower_bound = 72
@@ -229,6 +232,7 @@ class AgeHeaping(AuditCalculation):
 
     name = "age_heaping"
     label = "Age Heaping"
+    tooltip = "Flagged if more than 19% of recorded ages are exactly 12, 24, 36, or 48 months."
     is_percentage = True
     min_sample_size = 97
     upper_bound = 19
@@ -260,6 +264,7 @@ class WACoverageToVisitRatio(AuditCalculation):
 
     name = "wa_coverage_to_visit_ratio"
     label = "WA Coverage to Visit Ratio"
+    tooltip = "Flagged if ratio falls below 0.6 or exceeds 1.4."
     min_sample_size = 1
     lower_bound = 0.6
     upper_bound = 1.4
@@ -300,6 +305,7 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
 
     name = "inaccessible_wa_rate_early_warning"
     label = "Inaccessible WA Rate – Early Warning"
+    tooltip = "Flagged if more than 25% of Work Areas in the current active WAG are marked Inaccessible."
     is_percentage = True
     min_sample_size = 5
     upper_bound = 25
@@ -330,6 +336,7 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
     name = "inaccessible_wa_rate_last_completed_wag"
     label = "Inaccessible WA Rate – Last Completed WAG"
+    tooltip = "Flagged if more than 15% of Work Areas in the most recently closed WAG are marked Inaccessible."
     is_percentage = True
     min_sample_size = 5
     upper_bound = 15
@@ -370,6 +377,7 @@ class VaccineRate(AuditCalculation):
 
     name = "vaccine_rate"
     label = "Vaccine Rate"
+    tooltip = "Flagged if fewer than 58% of visits record at least one vaccine received."
     is_percentage = True
     min_sample_size = 97
     lower_bound = 58
@@ -400,6 +408,7 @@ class VaccineCardPhotoCompliance(AuditCalculation):
 
     name = "vaccine_card_photo_compliance"
     label = "Vaccine Card Photo Compliance"
+    tooltip = "Flagged if vaccine card photo taken in fewer than 38% of visits where child was vaccinated."
     is_percentage = True
     min_sample_size = 97
     lower_bound = 38
@@ -525,6 +534,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
 
     name = "muac_distribution_pattern_index"
     label = "MUAC Distribution Pattern Index (MDPI)"
+    tooltip = "Flagged if fewer than 5 of 6 distribution shape tests pass."
     min_sample_size = 100
     lower_bound = 5
 

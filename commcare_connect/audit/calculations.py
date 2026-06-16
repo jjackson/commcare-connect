@@ -51,6 +51,7 @@ class AuditCalculation(ABC):
 
     name: ClassVar[str]
     label: ClassVar[str]
+    tooltip: ClassVar[str] = ""
     is_percentage: ClassVar[bool] = False
     min_sample_size: ClassVar[int] = 1
     lower_bound: ClassVar[float | None] = None

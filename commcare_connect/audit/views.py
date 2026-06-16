@@ -77,14 +77,14 @@ def audit_report_list(request, org_slug, opp_id):
 
 def _column_specs(entries):
     """Calculation columns to render, ordered by registry then by appearance."""
-    registry_names = [c.name for c in get_registered_calculations()]
+    registry = {c.name: c.tooltip for c in get_registered_calculations()}
     seen = {}
     for entry in entries:
         for name, result in entry.results.items():
             if name not in seen:
                 seen[name] = result.get("label", name)
-    ordered = [(name, seen[name]) for name in registry_names if name in seen]
-    leftovers = [(name, label) for name, label in seen.items() if name not in registry_names]
+    ordered = [(name, seen[name], registry.get(name, "")) for name in registry if name in seen]
+    leftovers = [(name, label, "") for name, label in seen.items() if name not in registry]
     return ordered + leftovers
 
 
