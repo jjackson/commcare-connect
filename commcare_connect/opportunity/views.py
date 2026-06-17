@@ -430,13 +430,6 @@ class OpportunityFinalize(OpportunityObjectMixin, OrganizationProgramManagerMixi
         kwargs["cumulative_pu_budget_per_user"] = cumulative_pu_budget_per_user
         return kwargs
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        opportunity = self.object
-        if opportunity.managed:
-            context["program"] = opportunity.managedopportunity.program
-        return context
-
     def form_valid(self, form):
         opportunity = form.instance
         opportunity.modified_by = self.request.user.email
@@ -805,11 +798,10 @@ def add_payment_units(request, org_slug=None, opp_id=None):
         return add_payment_unit(request, org_slug=org_slug, opp_id=opp_id)
     opportunity = request.opportunity
     paymentunit_count = PaymentUnit.objects.filter(opportunity=opportunity).count()
-    program = opportunity.managedopportunity.program if opportunity.managed else None
     return render(
         request,
         "opportunity/add_payment_units.html",
-        dict(opportunity=opportunity, paymentunit_count=paymentunit_count, program=program),
+        dict(opportunity=opportunity, paymentunit_count=paymentunit_count),
     )
 
 

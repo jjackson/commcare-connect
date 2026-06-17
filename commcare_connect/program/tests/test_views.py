@@ -267,7 +267,7 @@ class TestManagedOpportunityInitViews(BaseProgramTest):
         assert self.program.name.encode() in response.content
 
     def test_opportunity_init_edit_get(self):
-        opportunity = ManagedOpportunityFactory.create(organization=self.organization, program=self.program)
+        opportunity = OpportunityFactory.create(organization=self.organization, program=self.program)
         edit_url = reverse(
             "program:opportunity_init_edit",
             kwargs={
