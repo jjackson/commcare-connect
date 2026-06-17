@@ -113,13 +113,10 @@ git-build-branch = { git = "https://github.com/dimagi/git-build-branch" }
 
 [dependency-groups]
 dev = [
-    "black>=23.7.0",
     "coverage>=7.2.7",
     "django-debug-toolbar>=4.1.0",
     "djlint>=1.36.4",
     "factory-boy>=3.3.0",
-    "flake8>=6.1.0",
-    "flake8-isort>=6.0.0",
     "git-build-branch",
     "invoke>=2.2.0",
     "ipdb>=0.13.13",
@@ -130,6 +127,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-django>=4.5.2",
     "pytest-httpx>=0.24.0",
+    "ruff>=0.15.17",
     "watchfiles>=0.19.0",
     "werkzeug[watchdog]>=2.3.7",
     "xml2json",
