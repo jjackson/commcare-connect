@@ -59,22 +59,25 @@ omit = ["*/migrations/*", "*/tests/*"]
 plugins = ["django_coverage_plugin"]
 
 
-# ==== black ====
-[tool.black]
+# ==== ruff ====
+[tool.ruff]
 line-length = 119
-target-version = ['py311']
+target-version = "py311"
+extend-exclude = ["**/migrations/*.py"]
 
+[tool.ruff.lint]
+# E/W: pycodestyle, F: pyflakes (flake8 defaults), I: isort
+select = ["E", "F", "W", "I"]
 
-# ==== isort ====
-[tool.isort]
-profile = "black"
-line_length = 119
-known_first_party = [
-    "commcare_connect",
-    "config",
-]
-skip = ["venv/"]
-skip_glob = ["**/migrations/*.py"]
+[tool.ruff.lint.isort]
+known-first-party = ["commcare_connect", "config"]
+
+[tool.ruff.format]
+# black-compatible formatting (ruff's defaults match black)
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 
 # ==== PyLint ====
