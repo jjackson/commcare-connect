@@ -168,11 +168,26 @@ def test_detail_404_when_flag_disabled(client, program_manager_org_user_admin, a
 
 
 @pytest.mark.django_db
-def test_task_modal_renders_task_types(client, program_manager_org_user_admin, audit_opp):
+def test_task_modal_renders(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
-    entry = _entry(report, audit_opp, flagged=True)
-
+    access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
+    entry = AuditReportEntryFactory(
+        audit_report=report,
+        opportunity_access=access,
+        flagged=True,
+        results={
+            "ratio": {"value": 0.564356, "has_sufficient_data": True, "in_range": False, "label": "Ratio"},
+            "female": {
+                "value": 56.44543,
+                "has_sufficient_data": True,
+                "in_range": False,
+                "label": "Female %",
+                "numerator": 56,
+                "denominator": 100,
+            },
+        },
+    )
     task_type = TaskTypeFactory(opportunity=audit_opp, name="Refresher Module A")
 
     url = reverse(
@@ -187,8 +202,16 @@ def test_task_modal_renders_task_types(client, program_manager_org_user_admin, a
     response = client.get(url)
     assert response.status_code == 200
     html = response.content.decode()
+
+    # Task types and worker are shown
     assert task_type.name in html
-    assert entry.opportunity_access.user.name in html
+    assert access.user.name in html
+
+    # Out-of-range results
+    assert "0.56" in html
+    assert "0.564356" not in html
+    assert "56%" in html
+    assert "56.44543" not in html
 
 
 # ---------------------------------------------------------------------------
