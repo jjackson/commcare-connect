@@ -588,8 +588,10 @@ def review_visit_export(request, org_slug, opp_id):
 @require_GET
 def export_status(request, org_slug, task_id):
     def ownership_check(request, task_meta):
-        opportunity_id = task_meta.get("args")[0]
-        get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
+        args = task_meta.get("args") or []
+        if not args:
+            raise Http404("Export not found.")
+        get_opportunity_or_404(org_slug=org_slug, pk=args[0])
 
     return render_export_status(
         request,
@@ -604,8 +606,10 @@ def export_status(request, org_slug, task_id):
 @require_GET
 def download_export(request, org_slug, task_id):
     task_meta = AsyncResult(task_id)._get_task_meta()
-    opportunity_id = task_meta.get("args")[0]
-    opportunity = get_opportunity_or_404(org_slug=org_slug, pk=opportunity_id)
+    args = task_meta.get("args") or []
+    if not args:
+        raise Http404("Export not found.")
+    opportunity = get_opportunity_or_404(org_slug=org_slug, pk=args[0])
     op_slug = slugify(opportunity.name)
     return download_export_file(
         task_id=task_id,

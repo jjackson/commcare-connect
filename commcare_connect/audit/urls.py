@@ -30,4 +30,19 @@ urlpatterns = [
         views.audit_report_complete,
         name="audit_report_complete",
     ),
+    path(
+        "<slug:opp_id>/audit_reports/<uuid:audit_report_id>/export/",
+        views.export_audit_report,
+        name="export_audit_report",
+    ),
+    path(
+        "<slug:opp_id>/audit_reports/<uuid:audit_report_id>/export_status/<slug:task_id>/",
+        views.audit_export_status,
+        name="export_status",
+    ),
+    path(
+        "<slug:opp_id>/audit_reports/<uuid:audit_report_id>/download_export/<slug:task_id>/",
+        views.audit_download_export,
+        name="download_export",
+    ),
 ]
