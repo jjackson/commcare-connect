@@ -4,6 +4,7 @@ from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy as _l
 from django_tables2 import columns
 
+from commcare_connect.audit.calculations import format_value
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.utils.tables import OrgContextTable
 
@@ -106,15 +107,7 @@ class CalcColumn(columns.Column):
         r = record.results.get(self.calc_name, {})
         if not r.get("has_sufficient_data"):
             return format_html('<span class="text-gray-400">{}</span>', _("N/A"))
-        value = r.get("value")
-        if value is None:
-            display = "-"
-        elif r.get("numerator") is not None:
-            display = f"{round(value)}% ({r['numerator']}/{r['denominator']})"
-        elif isinstance(value, float):
-            display = f"{value:.2f}"
-        else:
-            display = str(value)
+        display = format_value(r, with_fraction=True)
         if not r.get("in_range"):
             return format_html('<span class="badge badge-md negative-dark">{}</span>', display)
         return display
