@@ -4,7 +4,8 @@ import pytest
 
 from commcare_connect.audit import calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.audit.services import generate_audit_report_for_opportunity, period_for
+from commcare_connect.audit.services import entries_for_export, generate_audit_report_for_opportunity, period_for
+from commcare_connect.audit.tests.factories import AuditReportFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory
 
 
@@ -93,3 +94,15 @@ def test_period_for_returns_previous_completed_week(today, expected_start, expec
     start, end = period_for(today)
     assert start == expected_start
     assert end == expected_end
+
+
+@pytest.mark.django_db
+def test_entries_for_export_filters_by_worker_name(make_audit_entry):
+    report = AuditReportFactory()
+    for name in ("Bob", "Bobby", "Carol"):
+        make_audit_entry(report, name, 1)
+
+    rows = entries_for_export(report, name_filter="bob")
+
+    worker_names = {entry.opportunity_access.user.name for entry in rows}
+    assert worker_names == {"Bob", "Bobby"}

@@ -5,8 +5,30 @@ import datetime
 from django.db import transaction
 
 from commcare_connect.audit import calculations
+from commcare_connect.audit.calculations import get_registered_calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+
+
+def column_specs(entries):
+    """Calculation columns to render, ordered by registry then by appearance."""
+    registry_names = [c.name for c in get_registered_calculations()]
+    seen = {}
+    for entry in entries:
+        for name, result in entry.results.items():
+            if name not in seen:
+                seen[name] = result.get("label", name)
+    ordered = [(name, seen[name]) for name in registry_names if name in seen]
+    leftovers = [(name, label) for name, label in seen.items() if name not in registry_names]
+    return ordered + leftovers
+
+
+def entries_for_export(report, name_filter=""):
+    """Report entries for CSV export, optionally filtered by worker name, ordered by name."""
+    rows = report.entries.select_related("opportunity_access__user")
+    if name_filter:
+        rows = rows.filter(opportunity_access__user__name__icontains=name_filter)
+    return rows.order_by("opportunity_access__user__name")
 
 
 def period_for(today: datetime.date) -> tuple[datetime.date, datetime.date]:
