@@ -1637,6 +1637,48 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert any(row.get_cell_value("ward") == "w1" for row in ward_table.rows)
         assert "wag_table" in resp.context
 
+    def test_context_exposes_date_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 200
+        assert "filter_form" in resp.context
+        # No filter applied -> the download links carry no filter params.
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
+
+    def test_export_links_carry_custom_range(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01", "end": "2026-01-31"},
+        )
+        assert resp.context["export_hrefs"]["wag"]["xlsx"] == (
+            "?start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
+        )
+
+    def test_single_date_shows_validation_error(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        # Only a From date -> the page renders an error and falls back to overall (links carry no dates).
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01"},
+        )
+        assert resp.status_code == 200
+        assert b"Select both a From and a To date" in resp.content
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
+
+    def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01", "end": "2026-01-31", "export": "csv", "table": "ward"},
+        )
+        assert resp.status_code == 200
+        assert resp["Content-Type"].startswith("text/csv")
+
     def test_export_returns_csv_of_requested_table(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
