@@ -1719,9 +1719,10 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         cause.pgcode = "57014"  # QueryCanceled — what statement_timeout raises
         timeout_error = OperationalError("canceling statement due to statement timeout")
         timeout_error.__cause__ = cause
-        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls, patch(
-            "commcare_connect.microplanning.views.transaction.set_rollback"
-        ) as set_rollback:
+        with (
+            patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls,
+            patch("commcare_connect.microplanning.views.transaction.set_rollback") as set_rollback,
+        ):
             report_cls.return_value.header.side_effect = timeout_error
             resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
         assert resp.status_code == 503
