@@ -72,13 +72,6 @@ select = ["E", "F", "W", "I"]
 [tool.ruff.lint.isort]
 known-first-party = ["commcare_connect", "config"]
 
-[tool.ruff.format]
-# black-compatible formatting (ruff's defaults match black)
-quote-style = "double"
-indent-style = "space"
-skip-magic-trailing-comma = false
-line-ending = "auto"
-
 
 # ==== PyLint ====
 [tool.pylint.MASTER]
