@@ -6,7 +6,6 @@ import pytest
 from commcare_connect.audit import services as services_module
 from commcare_connect.audit.models import AuditReport
 from commcare_connect.audit.tasks import generate_audit_reports
-from commcare_connect.audit.tests.factories import AuditReportFactory  # noqa: F401 (keeps factory importable)
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
 from commcare_connect.opportunity.tests.factories import OpportunityFactory
