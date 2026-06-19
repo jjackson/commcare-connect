@@ -1551,18 +1551,18 @@ class TestGetMetricsForMicroplanningWorkAreas:
         UserVisitFactory(opportunity=opp, work_area=None, status=VisitValidationStatus.pending)
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
         assert m["value"] == 1000.0
         assert "percentage" not in m
-        assert m["unit"] == "%"
+        assert "unit" not in m
 
     def test_pct_visited_to_pct_visits_zero_denominator(self, opp):
         """No visits and no expected visits → show '--'."""
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
         assert m["value"] == "--"
-        assert m["unit"] == "%"
+        assert "unit" not in m
 
     def test_pct_visited_ignores_visits_without_work_area(self, opp):
         """Approved visits with no work_area must not inflate the ratio's total_approved denominator."""
@@ -1577,7 +1577,7 @@ class TestGetMetricsForMicroplanningWorkAreas:
             UserVisitFactory(opportunity=opp, work_area=None, status=VisitValidationStatus.approved)
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
         # total_approved (WA-attached) = 1 → pct_visits = 1/20 = 0.05
         # pct_wa_visited = 1/2 = 0.5 → ratio = 0.5 / 0.05 = 10.0
         assert m["value"] == 1000.0

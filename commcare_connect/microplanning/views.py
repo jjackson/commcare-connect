@@ -263,7 +263,7 @@ def get_metrics_for_microplanning(opportunity):
             "value": agg["excluded"],
             "percentage": pct(agg["excluded"], total, ndigits=None),
         },
-        {"name": _("% WA visited to % total visits"), "value": visited_to_visits, "unit": "%"},
+        {"name": _("WA Visited : Visits Ratio"), "value": visited_to_visits},
     ]
 
 
