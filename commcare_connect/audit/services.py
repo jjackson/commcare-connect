@@ -16,7 +16,8 @@ STREAM_CHUNK_SIZE = 2000
 
 
 def stream_audit_report_csv(report, name_filter=""):
-    columns = column_specs(list(report.entries.all()))
+    # A single entry is enough to determine the columns -- no need to load them all.
+    columns = column_specs(report.entries.all()[:1])
     writer = csv.writer(EchoWriter())
 
     yield writer.writerow([gettext("Connect Worker"), *_column_headers(columns)])
