@@ -45,7 +45,6 @@ from commcare_connect.opportunity.tasks import (
 )
 from commcare_connect.opportunity.visit_import import update_payment_accrued_for_user
 from commcare_connect.users.models import User
-from commcare_connect.utils.lock import try_redis_lock
 
 logger = logging.getLogger(__name__)
 
@@ -434,7 +433,8 @@ def clean_form_submission(access: OpportunityAccess, user_visit: UserVisit, xfor
 def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Opportunity, deliver_unit_block: dict):
     """Process a delivery form submission into a UserVisit and update CompletedWork.
 
-    Acquires a Redis lock per entity to handle concurrent submissions, then:
+    Locks the claim limit row (select_for_update) to serialize concurrent
+    submissions for the same user + payment unit, then:
     1. Creates a UserVisit with initial status based on daily/total/claim limits
     2. Runs verification flag checks via clean_form_submission()
     3. Auto-rejects flagged visits if automatic_visit_verification is enabled
@@ -455,15 +455,18 @@ def process_deliver_unit(user, xform: XForm, app: CommCareApp, opportunity: Oppo
         )
 
     claim = OpportunityClaim.objects.get(opportunity_access=access)
-    claim_limit = OpportunityClaimLimit.objects.get(opportunity_claim=claim, payment_unit=payment_unit)
     entity_id = deliver_unit_block.get("entity_id")
     entity_name = deliver_unit_block.get("entity_name")
 
-    # handle concurrent form submissions for same entity id
-    lock_key = f"visit_processor:{access.id}:{deliver_unit.id}:{entity_id}"
-    with try_redis_lock(lock_key, timeout=30, blocking_timeout=5) as acquired, transaction.atomic():
-        if not acquired:
-            raise ProcessingError("Error processing form, please retry again.")
+    with transaction.atomic():
+        # Lock the claim limit row to serialize concurrent submissions for the same
+        # user + payment unit. Without it, simultaneous submissions read the same
+        # daily/total counts before either commits and both pass the limit check,
+        # letting visits slip past the daily limit. The lock also serializes the
+        # duplicate-entity check below.
+        claim_limit = OpportunityClaimLimit.objects.select_for_update().get(
+            opportunity_claim=claim, payment_unit=payment_unit
+        )
         counts = (
             UserVisit.objects.filter(opportunity_access=access, deliver_unit=deliver_unit)
             .exclude(status__in=[VisitValidationStatus.over_limit, VisitValidationStatus.trial])
