@@ -23,6 +23,16 @@ def pct(numerator, denominator, ndigits=2):
     return round(numerator / denominator * 100, ndigits)
 
 
+def ratio(numerator, denominator, ndigits=2):
+    """Plain ratio of ``numerator`` over ``denominator`` (no ×100), rounded to ``ndigits``.
+
+    Returns None for a zero/falsy denominator or a None numerator.
+    """
+    if not denominator or numerator is None:
+        return None
+    return round(numerator / denominator, ndigits)
+
+
 def exclude_work_areas_for_opportunity(opportunity, work_area_ids, user, exclusion_reason):
     """Exclude work areas and unassign their HQ cases.
     HQ calls are batched by HQ_BULK_CHUNK_SIZE; a batch failure skips DB exclusion

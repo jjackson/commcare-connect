@@ -8,7 +8,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.timezone import localdate
 
-from commcare_connect.microplanning.helpers import pct
+from commcare_connect.microplanning.helpers import pct, ratio
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
@@ -361,7 +361,7 @@ def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_we
             "last_week": pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"]),
         }
         for out_key, pct_key, denom in _WARD_PCT_RATIOS:
-            row[out_key] = pct(row[pct_key], ratio_denominator[denom])
+            row[out_key] = ratio(row[pct_key], ratio_denominator[denom])
 
         rows.append(row)
     return rows
@@ -404,10 +404,10 @@ def build_wag_rows(display, target_aggregates, filtered_status, filtered_visits,
         row["pct_WAs_evc_reached"] = pct(status.get("WAs_evc_reached", 0), target["num_work_areas"])
         row["pct_WAs_evc_reached_last_week"] = pct(lw_status.get("WAs_evc_reached", 0), target["num_work_areas"])
         # pct_WAs_visited is not a bottom-table column; compute inline as the ratio numerator
-        row["pct_WA_visited_to_pct_visits"] = pct(
+        row["pct_WA_visited_to_pct_visits"] = ratio(
             pct(status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved"]
         )
-        row["pct_WA_visited_to_pct_visits_last_week"] = pct(
+        row["pct_WA_visited_to_pct_visits_last_week"] = ratio(
             pct(lw_status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved_last_week"]
         )
         rows.append(row)

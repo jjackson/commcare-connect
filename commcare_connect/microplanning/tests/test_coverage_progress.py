@@ -268,13 +268,13 @@ def test_build_ward_rows_merges_and_derives():
     assert row["pct_WAs_visited"] == 40.0  # 4 / 10
     assert row["pct_WAs_evc_reached"] == 20.0  # 2 / 10
     assert row["pct_Buildings_covered_in_WAs_visited"] == 40.0  # 20 / 50
-    assert row["pct_WA_visited_to_pct_visits"] == 80.0  # 40 / 50 * 100
-    assert row["pct_WA_evc_reached_to_pct_visit"] == 40.0  # 20 / 50 * 100
+    assert row["pct_WA_visited_to_pct_visits"] == 0.8  # 40 / 50
+    assert row["pct_WA_evc_reached_to_pct_visit"] == 0.4  # 20 / 50
     assert row["WAs_visited_last_week"] == 1
     assert row["pct_WAs_visited_last_week"] == 10.0  # 1 / 10
-    # last-week ratio = pct_WAs_visited_last_week / pct_visits_approved_last_week * 100
-    #                 = 10.0 / (5/40*100 = 12.5) * 100 = 80.0
-    assert row["pct_WA_visited_to_pct_visits_last_week"] == 80.0
+    # last-week ratio = pct_WAs_visited_last_week / pct_visits_approved_last_week
+    #                 = 10.0 / (5/40*100 = 12.5) = 0.8
+    assert row["pct_WA_visited_to_pct_visits_last_week"] == 0.8
 
 
 def test_build_ward_rows_zero_denominator_yields_none():
@@ -338,7 +338,7 @@ def test_build_wag_rows_reduced_columns(opportunity):
     assert row["expected_visit_total"] == 50
     assert row["pct_visits_approved"] == 50.0  # 25 / 50
     assert row["pct_WAs_evc_reached"] == 25.0  # 3 / 12
-    assert row["pct_WA_visited_to_pct_visits"] == 100.0  # (6/12=50) / (25/50=50) * 100
+    assert row["pct_WA_visited_to_pct_visits"] == 1.0  # (6/12=50) / (25/50=50)
     # reduced set: building-coverage columns are NOT present
     assert "pct_Buildings_covered_in_WAs_visited" not in row
 
