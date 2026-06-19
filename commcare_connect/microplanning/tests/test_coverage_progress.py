@@ -335,7 +335,7 @@ def test_build_wag_rows_reduced_columns(opportunity):
 
     assert row["work_area_group"] == "G1"
     assert row["ward"] == "w1"
-    assert row["target_population"] == 300
+    assert row["expected_visit_total"] == 50
     assert row["pct_visits_approved"] == 50.0  # 25 / 50
     assert row["pct_WAs_evc_reached"] == 25.0  # 3 / 12
     assert row["pct_WA_visited_to_pct_visits"] == 100.0  # (6/12=50) / (25/50=50) * 100

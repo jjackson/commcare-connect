@@ -337,7 +337,7 @@ def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_we
         # raw counts/sums (default 0 when this ward is absent from an aggregate)
         row = {
             "ward": ward,
-            "target_population": target["target_population"],
+            "expected_visit_total": target["expected_visit_total"],
             "building_count": target["building_count"],
             "num_work_areas": target["num_work_areas"],
             "visits_approved": visits.get("visits_approved", 0),
@@ -397,7 +397,7 @@ def build_wag_rows(display, target_aggregates, filtered_status, filtered_visits,
             "work_area_group_id": wag_id,
             "work_area_group": meta["work_area_group"],
             "ward": meta["ward"],
-            "target_population": target["target_population"],
+            "expected_visit_total": target["expected_visit_total"],
         }
         row["pct_visits_approved"] = pct(visits.get("visits_approved", 0), target["expected_visit_total"])
         row["pct_visits_approved_last_week"] = pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"])

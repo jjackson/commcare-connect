@@ -1690,7 +1690,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert resp["Content-Type"].startswith("text/csv")
         assert "attachment" in resp["Content-Disposition"]
         body = resp.getvalue().decode()
-        assert "Ward Population Target" in body
+        assert "Expected Visit Count" in body
         assert "w1" in body
 
     def test_export_returns_xlsx_of_wag_table(self, client, org_user_admin, opportunity):
