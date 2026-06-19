@@ -66,6 +66,7 @@ from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
+from commcare_connect.utils.file import EchoWriter
 from commcare_connect.utils.permission_const import WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 STREAM_CHUNK_SIZE = 2000
@@ -83,14 +84,6 @@ class OpportunityDataExportView(BaseDataExportView):
     def check_permissions(self, request):
         super().check_permissions(request)
         self.check_opportunity_permission(request.user, self.kwargs.get("opp_id"))
-
-
-class EchoWriter:
-    """A Buffer interface that implements write for csv.writer
-    and returns back the value passed to write."""
-
-    def write(self, value):
-        return value
 
 
 class BaseDataExportListView(BaseDataExportView):

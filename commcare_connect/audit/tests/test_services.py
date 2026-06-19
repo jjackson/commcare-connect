@@ -4,7 +4,12 @@ import pytest
 
 from commcare_connect.audit import calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.audit.services import entries_for_export, generate_audit_report_for_opportunity, period_for
+from commcare_connect.audit.services import (
+    entries_for_export,
+    generate_audit_report_for_opportunity,
+    period_for,
+    stream_audit_report_csv,
+)
 from commcare_connect.audit.tests.factories import AuditReportFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory
 
@@ -106,3 +111,28 @@ def test_entries_for_export_filters_by_worker_name(make_audit_entry):
 
     worker_names = {entry.opportunity_access.user.name for entry in rows}
     assert worker_names == {"Bob", "Bobby"}
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_outputs_header_and_rows(make_audit_entry):
+    report = AuditReportFactory()
+    make_audit_entry(report, "Bob", 0.5, in_range=False)  # out-of-range still exports raw value
+    make_audit_entry(report, "Ann", None, has_data=False)  # insufficient data -> "N/A"
+
+    lines = "".join(stream_audit_report_csv(report)).splitlines()
+
+    assert lines[0] == "Connect Worker,Calc A"
+    assert "Ann,N/A" in lines
+    assert "Bob,0.5" in lines
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_applies_name_filter(make_audit_entry):
+    report = AuditReportFactory()
+    for name in ("Bob", "Bobby", "Carol"):
+        make_audit_entry(report, name, 1)
+
+    csv_text = "".join(stream_audit_report_csv(report, name_filter="carol"))
+
+    assert "Carol" in csv_text
+    assert "Bob" not in csv_text

@@ -26,17 +26,13 @@
            hx-target="#detail-body"
            hx-swap="outerHTML"
            hx-vals='{"review-page": "1", "noaction-page": "1"}' />
-    <div class="flex items-center gap-x-4" x-data>
-      <button type="button"
-              x-tooltip.raw="{% trans 'Export uses the current worker-name filter.' %}"
-              hx-post="{% url 'opportunity:audit:export_audit_report' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
-              hx-include="[name='filter']"
-              hx-target="#export-slot"
-              hx-swap="innerHTML"
-              class="relative button-icon">
+    <div x-data>
+      <a href="{% url 'opportunity:audit:export_audit_report' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}{% if name_filter %}?filter={{ name_filter|urlencode }}{% endif %}"
+         x-tooltip.raw="{% trans 'Export uses the current worker-name filter.' %}"
+         class="button-icon"
+         download>
         <i class="fa-solid fa-download text-brand-deep-purple"></i>
-      </button>
-      <div id="export-slot" class="flex items-center"></div>
+      </a>
     </div>
   </div>
   <h2 class="text-xl font-semibold">{% trans "Workers to Review" %}</h2>

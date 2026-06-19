@@ -1,5 +1,3 @@
-from unittest import mock
-
 import pytest
 from django.urls import reverse
 
@@ -350,9 +348,23 @@ def test_modal_submit_rejects_cross_opportunity_task_type(
 
 
 @pytest.mark.django_db
-def test_export_post_starts_task_and_renders_progress(client, program_manager_org_user_admin, audit_opp):
+def test_export_streams_filtered_csv(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
+
+    alice_access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
+    alice_access.user.name = "Alice Smith"
+    alice_access.user.save(update_fields=["name"])
+    bob_access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
+    bob_access.user.name = "Bob Jones"
+    bob_access.user.save(update_fields=["name"])
+    for access in (alice_access, bob_access):
+        AuditReportEntryFactory(
+            audit_report=report,
+            opportunity_access=access,
+            flagged=True,
+            results={"fake": {"value": 0.5, "has_sufficient_data": True, "in_range": False, "label": "Fake"}},
+        )
 
     url = reverse(
         "opportunity:audit:export_audit_report",
@@ -362,20 +374,20 @@ def test_export_post_starts_task_and_renders_progress(client, program_manager_or
             "audit_report_id": report.audit_report_id,
         },
     )
-
-    with mock.patch("commcare_connect.audit.views.export_audit_report_task.delay") as delay:
-        delay.return_value = mock.Mock(id="task-123")
-        response = client.post(url, data={"filter": "bob"})
+    response = client.get(url, {"filter": "alice"})
 
     assert response.status_code == 200
-    delay.assert_called_once_with(str(report.audit_report_id), "bob")
-    html = response.content.decode()
-    # The progress-bar partial polls the status endpoint for this task id.
-    assert "export_status/task-123" in html
+    assert response["Content-Type"] == "text/csv"
+    assert "attachment" in response["Content-Disposition"]
+    assert ".csv" in response["Content-Disposition"]
+    body = b"".join(response.streaming_content).decode()
+    assert "Fake" in body  # header column
+    assert "Alice Smith" in body
+    assert "Bob Jones" not in body  # name filter applied
 
 
 @pytest.mark.django_db
-def test_export_post_404_when_flag_disabled(client, program_manager_org_user_admin, audit_opp):
+def test_export_404_when_flag_disabled(client, program_manager_org_user_admin, audit_opp):
     Flag.objects.get(name=WEEKLY_PERFORMANCE_REPORT).opportunities.remove(audit_opp)
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
@@ -388,56 +400,5 @@ def test_export_post_404_when_flag_disabled(client, program_manager_org_user_adm
             "audit_report_id": report.audit_report_id,
         },
     )
-    with mock.patch("commcare_connect.audit.views.export_audit_report_task.delay"):
-        response = client.post(url, data={})
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db
-def test_export_download_404_when_task_not_ready(client, program_manager_org_user_admin, audit_opp):
-    client.force_login(program_manager_org_user_admin)
-    report = AuditReportFactory(opportunity=audit_opp)
-
-    url = reverse(
-        "opportunity:audit:download_export",
-        kwargs={
-            "org_slug": audit_opp.organization.slug,
-            "opp_id": audit_opp.opportunity_id,
-            "audit_report_id": report.audit_report_id,
-            "task_id": "task-pending",
-        },
-    )
-
-    fake_task = mock.Mock(status="PENDING")
-    fake_task._get_task_meta.return_value = {"args": [str(report.audit_report_id), ""], "status": "PENDING"}
-    with (
-        mock.patch("commcare_connect.audit.views.AsyncResult", return_value=fake_task),
-        mock.patch("commcare_connect.utils.celery.AsyncResult", return_value=fake_task),
-    ):
-        response = client.get(url)
-
-    assert response.status_code == 404
-
-
-@pytest.mark.django_db
-def test_export_download_404_when_task_belongs_to_other_report(client, program_manager_org_user_admin, audit_opp):
-    client.force_login(program_manager_org_user_admin)
-    report = AuditReportFactory(opportunity=audit_opp)
-
-    url = reverse(
-        "opportunity:audit:download_export",
-        kwargs={
-            "org_slug": audit_opp.organization.slug,
-            "opp_id": audit_opp.opportunity_id,
-            "audit_report_id": report.audit_report_id,
-            "task_id": "task-foreign",
-        },
-    )
-
-    # Task was created for a different report id -> must not be downloadable here.
-    fake_task = mock.Mock(status="SUCCESS", result="weekly-performance-report-abc.csv")
-    fake_task._get_task_meta.return_value = {"args": ["some-other-report-id", ""], "status": "SUCCESS"}
-    with mock.patch("commcare_connect.audit.views.AsyncResult", return_value=fake_task):
-        response = client.get(url)
-
+    response = client.get(url)
     assert response.status_code == 404

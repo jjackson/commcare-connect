@@ -1,13 +1,37 @@
 from __future__ import annotations
 
+import csv
 import datetime
 
 from django.db import transaction
+from django.utils.translation import gettext
 
 from commcare_connect.audit import calculations
 from commcare_connect.audit.calculations import get_registered_calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.opportunity.models import Opportunity, OpportunityAccess
+from commcare_connect.utils.file import EchoWriter
+
+STREAM_CHUNK_SIZE = 2000
+
+
+def stream_audit_report_csv(report, name_filter=""):
+    columns = column_specs(list(report.entries.all()))
+    writer = csv.writer(EchoWriter())
+
+    yield writer.writerow([gettext("Connect Worker"), *(label for _name, label in columns)])
+
+    entries = entries_for_export(report, name_filter)
+    for entry in entries.iterator(chunk_size=STREAM_CHUNK_SIZE):
+        cells = [_export_cell_value(entry.results, name) for name, _label in columns]
+        yield writer.writerow([entry.opportunity_access.user.name, *cells])
+
+
+def _export_cell_value(results, calc_name):
+    result = results.get(calc_name, {})
+    if not result.get("has_sufficient_data"):
+        return gettext("N/A")
+    return result.get("value")
 
 
 def column_specs(entries):

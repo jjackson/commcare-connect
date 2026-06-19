@@ -1,4 +1,3 @@
-import django_tables2 as tables
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext as _
@@ -90,13 +89,6 @@ class CalcColumn(columns.Column):
             return format_html('<span class="badge badge-md negative-dark">{}</span>', display)
         return display
 
-    def value(self, record):
-        """Plain (non-HTML) value used by ``Table.as_values()`` for CSV export."""
-        r = record.results.get(self.calc_name, {})
-        if not r.get("has_sufficient_data"):
-            return _("N/A")
-        return r.get("value")
-
 
 class ActionColumn(columns.Column):
     """Rightmost column: Review button for flagged+unreviewed, Done badge for reviewed."""
@@ -152,25 +144,4 @@ class AuditReportEntryTable(OrgContextTable):
         self.report = report
         extra = [(name, CalcColumn(calc_name=name, verbose_name=label)) for name, label in columns_spec]
         extra.append(("action", ActionColumn()))
-        super().__init__(data, extra_columns=extra, **kw)
-
-
-class AuditReportExportTable(tables.Table):
-    """Flat table used only for CSV export of an audit report's entries.
-
-    One row per entry: the worker name followed by one raw-value column per
-    calculation in ``columns_spec`` (ordered by the caller).
-    """
-
-    user = columns.Column(
-        accessor="opportunity_access__user__name",
-        verbose_name=_l("Connect Worker"),
-    )
-
-    class Meta:
-        model = AuditReportEntry
-        fields = ("user",)
-
-    def __init__(self, data, *, columns_spec, **kw):
-        extra = [(name, CalcColumn(calc_name=name, verbose_name=label)) for name, label in columns_spec]
         super().__init__(data, extra_columns=extra, **kw)
