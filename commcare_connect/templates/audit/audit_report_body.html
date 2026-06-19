@@ -30,8 +30,10 @@
       <a href="{% url 'opportunity:audit:export_audit_report' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}{% if name_filter %}?filter={{ name_filter|urlencode }}{% endif %}"
          x-tooltip.raw="{% trans 'Export uses the current worker-name filter.' %}"
          class="button-icon"
+         aria-label="{% trans 'Export performance report (CSV)' %}"
          download>
-        <i class="fa-solid fa-download text-brand-deep-purple"></i>
+        <i class="fa-solid fa-download text-brand-deep-purple"
+           aria-hidden="true"></i>
       </a>
     </div>
   </div>
