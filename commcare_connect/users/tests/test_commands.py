@@ -88,8 +88,9 @@ class TestBackfillHqUserUuid:
         link2 = self._link_for(opportunity)
         uuids = {link1.commcare_username: "u1", link2.commcare_username: "u2"}
 
-        with mock.patch(FETCH_HQ_USER_UUIDS, return_value=uuids) as fetch, mock.patch(
-            "builtins.input", return_value="y"
+        with (
+            mock.patch(FETCH_HQ_USER_UUIDS, return_value=uuids) as fetch,
+            mock.patch("builtins.input", return_value="y"),
         ):
             call_command("backfill_hq_user_uuid")
 
@@ -109,8 +110,9 @@ class TestBackfillHqUserUuid:
         )
         link = self._link_for(opportunity)
 
-        with mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}) as fetch, mock.patch(
-            "builtins.input", return_value="y"
+        with (
+            mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}) as fetch,
+            mock.patch("builtins.input", return_value="y"),
         ):
             call_command("backfill_hq_user_uuid")
 
@@ -128,8 +130,9 @@ class TestBackfillHqUserUuid:
                 return {link1.commcare_username: "u1"}
             return {link2.commcare_username: "u2"}
 
-        with mock.patch(FETCH_HQ_USER_UUIDS, side_effect=by_domain) as fetch, mock.patch(
-            "builtins.input", return_value="y"
+        with (
+            mock.patch(FETCH_HQ_USER_UUIDS, side_effect=by_domain) as fetch,
+            mock.patch("builtins.input", return_value="y"),
         ):
             call_command("backfill_hq_user_uuid")
 
@@ -160,8 +163,9 @@ class TestBackfillHqUserUuid:
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
 
-        with mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}), mock.patch(
-            "builtins.input", return_value="y"
+        with (
+            mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}),
+            mock.patch("builtins.input", return_value="y"),
         ):
             call_command("backfill_hq_user_uuid", "--dry-run")
 
@@ -185,8 +189,9 @@ class TestBackfillHqUserUuid:
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
 
-        with mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}) as fetch, mock.patch(
-            "builtins.input", side_effect=["y", "n"]
+        with (
+            mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}) as fetch,
+            mock.patch("builtins.input", side_effect=["y", "n"]),
         ):
             call_command("backfill_hq_user_uuid")
 
