@@ -114,7 +114,8 @@ class BaseManagedOpportunityInitForm:
         self.set_organization_initial()
         opportunity_details_row = self.helper.layout[0]
         organization_field_layout = Column(
-            Field("organization"), css_class="col-span-2"  # This makes the field take the full width of the grid row
+            Field("organization"),
+            css_class="col-span-2",  # This makes the field take the full width of the grid row
         )
         opportunity_details_row.fields.insert(1, organization_field_layout)
 
