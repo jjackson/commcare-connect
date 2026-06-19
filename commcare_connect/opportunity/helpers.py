@@ -171,14 +171,10 @@ def get_annotated_opportunity_access(opportunity: Opportunity):
             date_deliver_started=Min(
                 "opportunity_access__uservisit__visit_date",
             ),
-            passed_assessment=Sum(
-                Case(
-                    When(
-                        Q(opportunity_access__assessment__passed=True),
-                        then=1,
-                    ),
-                    default=0,
-                )
+            passed_assessment=Count(
+                "opportunity_access__assessment",
+                filter=Q(opportunity_access__assessment__passed=True),
+                distinct=True,
             ),
             completed_modules_count=Count(
                 "opportunity_access__completedmodule__module",
