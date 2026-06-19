@@ -1,3 +1,4 @@
+import tempfile
 from io import StringIO
 from unittest import mock
 
@@ -66,7 +67,7 @@ class TestBackfillHqUserUuid:
         assert (other.api_key.hq_server_id, other.deliver_app.cc_domain) not in api_keys
 
     def test_backfills_missing_uuid_and_writes_reference_file(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
         uuids = {link.commcare_username: "hq-uuid-1"}
@@ -81,7 +82,7 @@ class TestBackfillHqUserUuid:
         assert str(link.user_id) in reference_files[0].read_text()
 
     def test_single_call_resolves_all_users_in_a_domain(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link1 = self._link_for(opportunity)
         link2 = self._link_for(opportunity)
@@ -99,7 +100,7 @@ class TestBackfillHqUserUuid:
         assert link2.hq_user_uuid == "u2"
 
     def test_shared_domain_across_opportunities_uses_one_call(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         OpportunityFactory(
             api_key=opportunity.api_key,
@@ -116,7 +117,7 @@ class TestBackfillHqUserUuid:
         assert fetch.call_count == 1
 
     def test_separate_domains_get_separate_calls(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity1 = OpportunityFactory()
         opportunity2 = OpportunityFactory()
         link1 = self._link_for(opportunity1)
@@ -139,7 +140,7 @@ class TestBackfillHqUserUuid:
         assert link2.hq_user_uuid == "u2"
 
     def test_saves_in_batches(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         links = [self._link_for(opportunity) for _ in range(3)]
         uuids = {link.commcare_username: f"u{i}" for i, link in enumerate(links)}
@@ -155,7 +156,7 @@ class TestBackfillHqUserUuid:
         assert "Updated 3/3 records." in out.getvalue()
 
     def test_dry_run_does_not_update(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
 
@@ -168,7 +169,7 @@ class TestBackfillHqUserUuid:
         assert not link.hq_user_uuid
 
     def test_aborts_before_lookups_when_declined(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
 
@@ -180,7 +181,7 @@ class TestBackfillHqUserUuid:
         assert not link.hq_user_uuid
 
     def test_aborts_before_save_when_declined(self, monkeypatch, tmp_path):
-        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
 

@@ -17,6 +17,7 @@ Flow:
 """
 
 import csv
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -70,8 +71,10 @@ class Command(BaseCommand):
         no_key = sum(len(links) for links in links_by_server_and_domain.values()) - sum(
             len(links) for links in resolvable.values()
         )
-        self._save(to_be_updated, options["batch_size"], dry_run)
+        reference_path = self._save(to_be_updated, options["batch_size"], dry_run)
         self._report(len(to_be_updated), not_found, no_key, errors, dry_run)
+        if reference_path:
+            self.stdout.write(f"Reference of updated users: {reference_path}")
 
     def _links_missing_uuid_by_server_and_domain(self):
         links = (
@@ -153,28 +156,29 @@ class Command(BaseCommand):
     def _save(self, to_be_updated, batch_size, dry_run):
         if not to_be_updated:
             self.stdout.write("No UUIDs resolved; nothing to update.")
-            return
+            return None
 
         path = self._write_reference_file(to_be_updated)
-        self.stdout.write(f"Saved {len(to_be_updated)} user references to {path}")
+        self.stdout.write(f"Wrote {len(to_be_updated)} user references for review.")
 
         if dry_run:
             self.stdout.write(self.style.SUCCESS(f"Dry run: would update {len(to_be_updated)} records."))
-            return
+            return path
 
         if not self._confirm(f"Update {len(to_be_updated)} records now?"):
             self.stdout.write("Aborted before saving.")
-            return
+            return path
 
         total = len(to_be_updated)
         for start in range(0, total, batch_size):
             batch = to_be_updated[start : start + batch_size]  # noqa: E203
             self._bulk_update_with_retry(batch)
             self.stdout.write(self.style.SUCCESS(f"Updated {min(start + batch_size, total)}/{total} records."))
+        return path
 
     def _write_reference_file(self, to_be_updated):
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
-        path = Path(f"hq_user_uuid_backfill_{timestamp}.csv").resolve()
+        path = Path(tempfile.gettempdir()) / f"hq_user_uuid_backfill_{timestamp}.csv"
         with path.open("w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(REFERENCE_HEADER)
