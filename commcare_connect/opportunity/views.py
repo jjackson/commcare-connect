@@ -605,8 +605,7 @@ def export_status(request, org_slug, task_id):
 @org_member_required
 @require_GET
 def download_export(request, org_slug, task_id):
-    task_meta = AsyncResult(task_id)._get_task_meta()
-    args = task_meta.get("args") or []
+    args = AsyncResult(task_id).args or []
     if not args:
         raise Http404("Export not found.")
     opportunity = get_opportunity_or_404(org_slug=org_slug, pk=args[0])
