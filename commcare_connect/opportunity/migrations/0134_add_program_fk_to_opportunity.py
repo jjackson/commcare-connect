@@ -35,7 +35,7 @@ def create_legacy_programs(apps, schema_editor):
         description="Auto-created delivery type for legacy non-managed opportunities by system",
     )
 
-    llo_entity = LLOEntity.objects.create(name="Legacy Connect llo")
+    llo_entity = LLOEntity.objects.create(name="Legacy Connect LLO")
 
     test_org = Organization.objects.create(
         name="Legacy Test Opportunities",
