@@ -1,10 +1,12 @@
 import datetime
+from types import SimpleNamespace
 
 import pytest
 
 from commcare_connect.audit import calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.audit.services import (
+    _format_reference_range,
     entries_for_export,
     generate_audit_report_for_opportunity,
     period_for,
@@ -136,3 +138,37 @@ def test_stream_audit_report_csv_applies_name_filter(make_audit_entry):
 
     assert "Carol" in csv_text
     assert "Bob" not in csv_text
+
+
+@pytest.mark.parametrize(
+    "lower, upper, expected",
+    [
+        (0.5, 1.0, "0.5 - 1.0"),
+        (0.5, None, ">= 0.5"),
+        (None, 1.0, "<= 1.0"),
+        (None, None, ""),
+    ],
+)
+def test_format_reference_range(lower, upper, expected):
+    calc = SimpleNamespace(lower_bound=lower, upper_bound=upper)
+    assert _format_reference_range(calc) == expected
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_appends_reference_range_to_header(isolated_registry, make_audit_entry):
+    @calculations.register_calculation
+    class RangeCalc(calculations.AuditCalculation):
+        name = "calc_a"
+        label = "Calc A"
+        lower_bound = 0.5
+        upper_bound = 1.0
+
+        def compute(self, opportunity_access, period_start, period_end):
+            return 0.5, 1
+
+    report = AuditReportFactory()
+    make_audit_entry(report, "Bob", 0.5)
+
+    header = "".join(stream_audit_report_csv(report)).splitlines()[0]
+
+    assert header == "Connect Worker,Calc A (0.5 - 1.0)"

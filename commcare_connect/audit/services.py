@@ -19,12 +19,34 @@ def stream_audit_report_csv(report, name_filter=""):
     columns = column_specs(list(report.entries.all()))
     writer = csv.writer(EchoWriter())
 
-    yield writer.writerow([gettext("Connect Worker"), *(label for _name, label in columns)])
+    yield writer.writerow([gettext("Connect Worker"), *_column_headers(columns)])
 
     entries = entries_for_export(report, name_filter)
     for entry in entries.iterator(chunk_size=STREAM_CHUNK_SIZE):
         cells = [_export_cell_value(entry.results, name) for name, _label in columns]
         yield writer.writerow([entry.opportunity_access.user.name, *cells])
+
+
+def _column_headers(columns):
+    """Header label per calculation, with its acceptable range appended when known."""
+    calcs = {c.name: c for c in get_registered_calculations()}
+    headers = []
+    for name, label in columns:
+        reference_range = _format_reference_range(calcs[name]) if name in calcs else ""
+        headers.append(f"{label} ({reference_range})" if reference_range else label)
+    return headers
+
+
+def _format_reference_range(calc):
+    """Human-readable acceptable range for a calculation, e.g. "0.5 - 1.0", ">= 3", "<= 0.2"."""
+    lower, upper = calc.lower_bound, calc.upper_bound
+    if lower is not None and upper is not None:
+        return f"{lower} - {upper}"
+    if lower is not None:
+        return f">= {lower}"
+    if upper is not None:
+        return f"<= {upper}"
+    return ""
 
 
 def _export_cell_value(results, calc_name):
