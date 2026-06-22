@@ -79,6 +79,7 @@ class CalcColumn(columns.Column):
     def __init__(self, calc_name, tooltip="", **kw):
         self.calc_name = calc_name
         self.calc_tooltip = tooltip
+        kw.setdefault("attrs", {"th": {"class": "whitespace-normal align-bottom w-28"}})
         super().__init__(empty_values=(), orderable=False, **kw)
 
     @property
@@ -144,6 +145,7 @@ class AuditReportEntryTable(OrgContextTable):
     user = columns.Column(
         accessor="opportunity_access__user__name",
         verbose_name=_l("Connect Worker"),
+        attrs={"th": {"class": "whitespace-normal align-bottom w-40"}},
     )
 
     class Meta:
