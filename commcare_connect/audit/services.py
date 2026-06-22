@@ -24,7 +24,7 @@ def stream_audit_report_csv(report, name_filter=""):
 
     entries = entries_for_export(report, name_filter)
     for entry in entries.iterator(chunk_size=STREAM_CHUNK_SIZE):
-        cells = [_export_cell_value(entry.results, name) for name, _label in columns]
+        cells = [_export_cell_value(entry.results, name) for name, _label, _tooltip in columns]
         yield writer.writerow([entry.opportunity_access.user.name, *cells])
 
 
@@ -32,7 +32,7 @@ def _column_headers(columns):
     """Header label per calculation, with its acceptable range appended when known."""
     calcs = {c.name: c for c in get_registered_calculations()}
     headers = []
-    for name, label in columns:
+    for name, label, _tooltip in columns:
         reference_range = _format_reference_range(calcs[name]) if name in calcs else ""
         headers.append(f"{label} ({reference_range})" if reference_range else label)
     return headers
