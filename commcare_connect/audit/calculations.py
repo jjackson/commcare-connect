@@ -115,6 +115,21 @@ class AuditCalculation(ABC):
         return True
 
 
+def format_value(result: dict, with_fraction: bool = False) -> str:
+    """Format a calculation result dict for display. Reads ``value`` and,
+    for percentages, ``numerator``/``denominator``."""
+    value = result.get("value")
+    if value is None:
+        return "-"
+    if result.get("numerator") is not None:
+        if with_fraction:
+            return f"{round(value)}% ({result['numerator']}/{result['denominator']})"
+        return f"{round(value)}%"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
 def register_calculation(cls):
     """Class decorator: instantiate ``cls`` once and add the instance to the registry."""
     _REGISTRY.append(cls())

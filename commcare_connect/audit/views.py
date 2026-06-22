@@ -9,6 +9,7 @@ from django.utils.translation import gettext as _
 from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import RequestConfig
 
+from commcare_connect.audit.calculations import format_value
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
 from commcare_connect.audit.services import column_specs, stream_audit_report_csv
 from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTable
@@ -154,7 +155,11 @@ def audit_report_task_modal(request, org_slug, opp_id, audit_report_id, entry_id
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
     entry = get_object_or_404(AuditReportEntry, audit_report_entry_id=entry_id, audit_report=report)
 
-    failed = [(name, r) for name, r in entry.results.items() if r.get("has_sufficient_data") and not r.get("in_range")]
+    failed = [
+        {"label": r["label"], "value": format_value(r)}
+        for r in entry.results.values()
+        if r.get("has_sufficient_data") and not r.get("in_range")
+    ]
     task_types = TaskType.objects.filter(opportunity=opportunity).order_by("name")
 
     return render(
