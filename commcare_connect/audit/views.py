@@ -88,14 +88,18 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
-    name_filter = request.GET.get("filter", "").strip()
-    qs = report.entries.select_related("opportunity_access__user")
-    if name_filter:
-        qs = qs.filter(opportunity_access__user__name__icontains=name_filter)
-    entries = list(qs.order_by("opportunity_access__user__name"))
-
-    all_entries = list(report.entries.all())
+    all_entries = list(
+        report.entries.select_related("opportunity_access__user").order_by("opportunity_access__user__name")
+    )
     columns_spec = _column_specs(all_entries)
+
+    worker_filter_choices = [(str(e.opportunity_access_id), e.opportunity_access.user.name) for e in all_entries]
+
+    selected_workers = request.GET.getlist("worker")
+    if selected_workers:
+        entries = [e for e in all_entries if str(e.opportunity_access_id) in selected_workers]
+    else:
+        entries = list(all_entries)
 
     # If no sorting given, apply default to float workers that need review to the top of the table
     if not request.GET.get("sort"):
@@ -133,10 +137,11 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
         "opportunity": opportunity,
         "report": report,
         "table": table,
+        "worker_filter_choices": worker_filter_choices,
+        "selected_workers": selected_workers,
         "reviewed_count": reviewed_count,
         "total_flagged": total_flagged,
         "can_complete": total_flagged == reviewed_count and report.status == AuditReport.Status.PENDING,
-        "name_filter": name_filter,
         "path": path,
         "org_slug": org_slug,
     }
