@@ -126,6 +126,36 @@ def test_detail_lists_all_workers_in_one_table(client, program_manager_org_user_
 
 
 @pytest.mark.django_db
+def test_detail_sorts_by_calculation_column(client, program_manager_org_user_admin, audit_opp):
+    client.force_login(program_manager_org_user_admin)
+    report = AuditReportFactory(opportunity=audit_opp)
+
+    def _scored_entry(name, value):
+        access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
+        access.user.name = name
+        access.user.save(update_fields=["name"])
+        return AuditReportEntryFactory(
+            audit_report=report,
+            opportunity_access=access,
+            flagged=False,
+            results={"fake": {"value": value, "has_sufficient_data": True, "in_range": True, "label": "Fake"}},
+        )
+
+    _scored_entry("High", 0.9)
+    _scored_entry("Low", 0.1)
+    _scored_entry("Mid", 0.5)
+
+    response = client.get(_detail_url(audit_opp, report), {"sort": "fake"})
+    assert response.status_code == 200
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert rendered_rows == ["Low", "Mid", "High"]
+
+    response = client.get(_detail_url(audit_opp, report), {"sort": "-fake"})
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert rendered_rows == ["High", "Mid", "Low"]
+
+
+@pytest.mark.django_db
 def test_detail_filter_limits_table_server_side(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)

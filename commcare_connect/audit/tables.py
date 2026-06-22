@@ -80,7 +80,7 @@ class CalcColumn(columns.Column):
         self.calc_name = calc_name
         self.calc_tooltip = tooltip
         kw.setdefault("attrs", {"th": {"class": "whitespace-normal align-bottom w-28"}})
-        super().__init__(empty_values=(), orderable=False, **kw)
+        super().__init__(empty_values=(), order_by=(f"results__{calc_name}__value",), **kw)
 
     @property
     def header(self):
