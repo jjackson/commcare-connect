@@ -7,6 +7,8 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils.timezone import now
 from rest_framework.test import APIClient
 
@@ -1404,3 +1406,29 @@ def test_work_area_update_invalid_photo_evidence(
         oauth_application=oauth_application,
     )
     assert WorkAreaInaccessibilityRequest.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_deliver_form_locks_claim_limit_row(
+    user_with_connectid_link: User, api_client: APIClient, opportunity: Opportunity
+):
+    """Regression guard for the daily-limit race condition fix."""
+    oauth_application = opportunity.hq_server.oauth_application
+    form_json = _create_opp_and_form_json(opportunity, user=user_with_connectid_link)
+
+    with CaptureQueriesContext(connection) as ctx:
+        make_request(api_client, form_json, user_with_connectid_link, oauth_application=oauth_application)
+
+    locking_queries = [
+        q["sql"]
+        for q in ctx.captured_queries
+        if "for update" in q["sql"].lower() and "opportunityclaimlimit" in q["sql"].lower()
+    ]
+    assert locking_queries, (
+        "Expected a 'SELECT ... FOR UPDATE' on the OpportunityClaimLimit row to serialize "
+        "concurrent submissions, but none was issued. The daily-limit race condition guard "
+        "may have been removed from process_deliver_unit."
+    )
+
+    # Sanity check the form was actually processed (the lock guards a real save path).
+    assert UserVisit.objects.filter(user=user_with_connectid_link).count() == 1
