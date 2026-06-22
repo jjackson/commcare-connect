@@ -8,7 +8,7 @@ from django_tables2 import columns, tables
 WARD_LABEL_COLUMNS = (("ward", _("Ward")),)
 
 WARD_METRIC_COLUMNS = (
-    ("target_population", _("Ward Population Target")),
+    ("expected_visit_total", _("Expected Visit Count")),
     ("building_count", _("Building Count")),
     ("num_work_areas", _("Work Areas")),
     ("visits_approved", _("Approved Visits")),
@@ -48,7 +48,7 @@ WAG_LABEL_COLUMNS = (
 )
 
 WAG_METRIC_COLUMNS = (
-    ("target_population", _("Population Target")),
+    ("expected_visit_total", _("Expected Visit Count")),
     ("pct_visits_approved", _("% Visits Completed")),
     ("pct_visits_approved_last_week", _("% Visits Completed (Last Week)")),
     ("pct_WAs_evc_reached", _("% WAs EVC Reached")),
