@@ -23,13 +23,16 @@
       <input type="hidden" name="action" x-ref="actionInput" />
       <div class="grid grid-cols-2 gap-6 p-6">
         <div>
-          <h4 class="font-semibold mb-2">{% trans "Audit Results" %}</h4>
+          <h4 class="font-semibold mb-2 flex items-center gap-2">
+            <i class="fa-solid fa-circle-xmark text-red-600"></i>
+            {% trans "Audit Results Out of Acceptable Range" %}
+          </h4>
           {% if failed %}
             <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
-              {% for name, result in failed %}
+              {% for result in failed %}
                 <li>
                   <strong>{{ result.label }}:</strong>
-                  {{ result.value }} {% trans "(out of acceptable range)" %}
+                  {{ result.value }}
                 </li>
               {% endfor %}
             </ul>

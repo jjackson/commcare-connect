@@ -1,5 +1,33 @@
+import pytest
+
 from commcare_connect.audit import calculations
-from commcare_connect.audit.calculations import AuditCalculation, CalculationResult, Measurement, register_calculation
+from commcare_connect.audit.calculations import (
+    AuditCalculation,
+    CalculationResult,
+    Measurement,
+    format_value,
+    register_calculation,
+)
+
+
+@pytest.mark.parametrize(
+    "result, with_fraction, expected",
+    [
+        ({"value": None}, False, "-"),
+        ({"value": 0.564356}, False, "0.56"),
+        ({"value": 0.5}, False, "0.50"),
+        ({"value": 12.0}, False, "12.00"),
+        ({"value": 56.44543, "numerator": 56, "denominator": 100}, False, "56%"),
+        ({"value": 56.6, "numerator": 57, "denominator": 100}, False, "57%"),
+        ({"value": 3}, False, "3"),
+        ({"value": "n/a"}, False, "n/a"),
+        ({"value": 56.44543, "numerator": 3, "denominator": 5}, True, "56% (3/5)"),
+        ({"value": 0.564356}, True, "0.56"),
+        ({"value": None}, True, "-"),
+    ],
+)
+def test_format_value(result, with_fraction, expected):
+    assert format_value(result, with_fraction=with_fraction) == expected
 
 
 def test_calculation_result_to_dict():
