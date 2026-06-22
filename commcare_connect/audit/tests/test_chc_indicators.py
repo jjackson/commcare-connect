@@ -162,18 +162,17 @@ class BaseIndicatorTest:
         return self.calc.run(access, PERIOD_START, PERIOD_END)
 
     def assert_insufficient_data(self, access):
-        _, sample = self.compute(access)
-        assert sample == 0
+        assert self.compute(access).sample_size == 0
 
     def assert_compute_result(self, access, *, value=None, sample=None, in_range=None):
-        actual_value, actual_sample = self.compute(access)
+        m = self.compute(access)
         if sample is not None:
-            assert actual_sample == sample
+            assert m.sample_size == sample
         if value is not None:
-            assert actual_value == pytest.approx(value)
+            assert m.value == pytest.approx(value)
         if in_range is not None:
-            assert self.calc._in_range(actual_value) is in_range
-        return actual_value, actual_sample
+            assert self.calc._in_range(m.value) is in_range
+        return m
 
     def assert_insufficient_run(self, access):
         assert self.run(access).has_sufficient_data is False
@@ -212,7 +211,7 @@ class BaseIndicatorTest:
 )
 def test_fresh_access_returns_insufficient_data(calc):
     access = OpportunityAccessFactory()
-    _, sample = calc.compute(access, PERIOD_START, PERIOD_END)
+    sample = calc.compute(access, PERIOD_START, PERIOD_END).sample_size
     assert sample == 0
 
 
@@ -309,7 +308,7 @@ class TestMUACPhotoCompliance(BaseIndicatorTest):
     def test_no_consent_still_in_denominator(self):
         access = OpportunityAccessFactory()
         make_visit(access, form_json={"form": {"additional_case_info": {"childs_age_in_months": "12"}}})
-        _, sample = self.compute(access)
+        sample = self.compute(access).sample_size
         assert sample == 1  # consent is irrelevant; age ≥6 makes this visit eligible
 
     @pytest.mark.parametrize(
@@ -412,7 +411,7 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             expected_visit_count=100,
         )
         make_visit(access, work_area=wa)
-        value, _ = self.compute(access)
+        value = self.compute(access).value
         assert value > 1.4
 
     def test_low_coverage_high_visits_out_of_range(self):
@@ -425,7 +424,7 @@ class TestWACoverageToVisitRatio(BaseIndicatorTest):
             expected_visit_count=1,
         )
         make_visits(10, access, work_area=wa)
-        value, _ = self.compute(access)
+        value = self.compute(access).value
         assert value < 0.6
 
     def test_excluded_wa_not_counted_in_eligible_but_inaccessible_is(self):
@@ -494,16 +493,28 @@ class TestInaccessibleWARateEarlyWarning(BaseIndicatorTest):
     @pytest.mark.parametrize(
         "inaccessible, reached, not_visited, expected_value, in_range",
         [
-            (1, 5, 1, 14.29, True),  # ~14%, below 25% threshold
-            (4, 1, 1, 66.67, False),  # ~67%, above 25% threshold
+            (1, 5, 1, 14.29, True),  # 1/7 of all assigned WAs, below 25% threshold
+            (4, 1, 1, 66.67, False),  # 4/6 of all assigned WAs, above 25% threshold
+            (2, 4, 2, 25.0, True),  # exactly 25% (2/8) is in range — boundary is inclusive
         ],
-        ids=["below_threshold", "above_threshold"],
+        ids=["below_threshold", "above_threshold", "at_threshold"],
     )
     def test_inaccessible_rate_threshold(self, inaccessible, reached, not_visited, expected_value, in_range):
         access, wag = make_access_and_wag()
         first_wa = make_was(wag, access, inaccessible=inaccessible, reached=reached, not_visited=not_visited)
         make_visit(access, work_area=first_wa)  # visit needed so _find_active_wag can locate this WAG
+        # sample_size is the gating count (terminal WAs); the rate divides by all assigned WAs.
         self.assert_compute_result(access, sample=inaccessible + reached, value=expected_value, in_range=in_range)
+
+    def test_run_reports_numerator_over_all_assigned_was(self):
+        access, wag = make_access_and_wag()
+        first_wa = make_was(wag, access, inaccessible=2, reached=4, not_visited=2)
+        make_visit(access, work_area=first_wa)
+        result = self.run(access)
+        # numerator = inaccessible WAs; denominator = all assigned WAs (not the terminal sample).
+        assert result.numerator == 2
+        assert result.denominator == 8
+        assert result.value == pytest.approx(25.0)
 
     def test_fully_closed_wag_not_treated_as_active(self):
         access, wag = make_access_and_wag()
@@ -715,22 +726,23 @@ class TestMUACDistributionPatternIndex(BaseIndicatorTest):
     def test_realistic_distribution_passes_most_features(self):
         access = OpportunityAccessFactory()
         make_muac_visits(access)
-        value, sample = self.compute(access)
-        assert sample == 100
+        m = self.compute(access)
+        assert m.sample_size == 100
+        value = m.value
         assert value >= 5
         assert self.calc._in_range(value)
 
     def test_single_bin_distribution_fails_multiple_features(self):
         access = OpportunityAccessFactory()
         make_muac_visits(access, [13.0] * 100)
-        value, _ = self.compute(access)
+        value = self.compute(access).value
         assert value < 5
         assert not self.calc._in_range(value)
 
     def test_score_is_integer_between_0_and_6(self):
         access = OpportunityAccessFactory()
         make_muac_visits(access)
-        value, _ = self.compute(access)
+        value = self.compute(access).value
         assert isinstance(value, int)
         assert 0 <= value <= 6
 

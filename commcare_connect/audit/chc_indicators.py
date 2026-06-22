@@ -6,7 +6,7 @@ from django.db.models import Count, F, IntegerField, Max, Q, Sum, Value
 from django.db.models.fields.json import KeyTextTransform
 from django.db.models.functions import Cast, NullIf
 
-from commcare_connect.audit.calculations import AuditCalculation, register_calculation
+from commcare_connect.audit.calculations import AuditCalculation, Measurement, register_calculation
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit
 
@@ -131,6 +131,7 @@ class CampingRatio(AuditCalculation):
 
     name = "camping_ratio"
     label = "Camping (Visit:Building Ratio)"
+    tooltip = "Flagged if visits exceed 12 per building in any single Work Area in the past week."
     min_sample_size = 1
     upper_bound = 0
 
@@ -153,7 +154,7 @@ class CampingRatio(AuditCalculation):
             for row in wa_visit_counts
             if row["visit_count"] > MAX_VISITS_PER_BUILDING * row["work_area__building_count"]
         )
-        return camping_count, total_evaluated
+        return Measurement(camping_count, total_evaluated)
 
 
 @register_calculation
@@ -165,6 +166,8 @@ class GenderRatioDeviation(AuditCalculation):
 
     name = "gender_ratio_deviation"
     label = "Gender Ratio Deviation"
+    tooltip = "Flagged if female or male ratio falls below 40% or exceeds 60%."
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 40
     upper_bound = 60
@@ -180,8 +183,8 @@ class GenderRatioDeviation(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["female"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["female"], total), total)
 
 
 @register_calculation
@@ -194,6 +197,8 @@ class MUACPhotoCompliance(AuditCalculation):
 
     name = "muac_photo_compliance"
     label = "MUAC Photo Compliance"
+    tooltip = "Flagged if MUAC photo taken in fewer than 72% of eligible visits (children ≥6 months)."
+    is_percentage = True
     min_sample_size = 70
     lower_bound = 72
 
@@ -213,8 +218,8 @@ class MUACPhotoCompliance(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["with_photo"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["with_photo"], total), total)
 
 
 @register_calculation
@@ -227,6 +232,8 @@ class AgeHeaping(AuditCalculation):
 
     name = "age_heaping"
     label = "Age Heaping"
+    tooltip = "Flagged if more than 19% of recorded ages are exactly 12, 24, 36, or 48 months."
+    is_percentage = True
     min_sample_size = 97
     upper_bound = 19
 
@@ -242,8 +249,8 @@ class AgeHeaping(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["heaped"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["heaped"], total), total)
 
 
 @register_calculation
@@ -257,6 +264,7 @@ class WACoverageToVisitRatio(AuditCalculation):
 
     name = "wa_coverage_to_visit_ratio"
     label = "WA Coverage to Visit Ratio"
+    tooltip = "Flagged if ratio falls below 0.6 or exceeds 1.4."
     min_sample_size = 1
     lower_bound = 0.6
     upper_bound = 1.4
@@ -281,11 +289,11 @@ class WACoverageToVisitRatio(AuditCalculation):
         ).count()
 
         if not (total_eligible and expected_visits and actual_visits):
-            return None, 0
+            return Measurement(None, 0)
 
         coverage_ratio = wa_stats["visited_count"] / total_eligible
         visit_ratio = actual_visits / expected_visits
-        return coverage_ratio / visit_ratio, total_eligible
+        return Measurement(coverage_ratio / visit_ratio, total_eligible)
 
 
 @register_calculation
@@ -297,13 +305,15 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
 
     name = "inaccessible_wa_rate_early_warning"
     label = "Inaccessible WA Rate – Early Warning"
+    tooltip = "Flagged if more than 25% of Work Areas in the current active WAG are marked Inaccessible."
+    is_percentage = True
     min_sample_size = 5
     upper_bound = 25
 
     def compute(self, opportunity_access, period_start, period_end):
         active_wag = _find_active_wag(opportunity_access, period_end)
         if active_wag is None:
-            return None, 0
+            return Measurement(None, 0)
 
         stats = WorkArea.objects.filter(work_area_group=active_wag, opportunity_access=opportunity_access).aggregate(
             total=Count("id"),
@@ -312,9 +322,16 @@ class InaccessibleWARateEarlyWarning(AuditCalculation):
         )
 
         if not stats["total"]:
-            return None, 0
+            return Measurement(None, 0)
 
-        return _percent(stats["inaccessible_count"], stats["total"]), stats["terminal_count"]
+        # Rate is over all assigned WAs (total), but evaluation is gated on ≥5
+        # terminal WAs — so the display denominator (total) differs from the
+        # gating sample_size (terminal_count).
+        return Measurement(
+            value=_percent(stats["inaccessible_count"], stats["total"]),
+            sample_size=stats["terminal_count"],
+            denominator=stats["total"],
+        )
 
 
 @register_calculation
@@ -326,13 +343,15 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
     name = "inaccessible_wa_rate_last_completed_wag"
     label = "Inaccessible WA Rate – Last Completed WAG"
+    tooltip = "Flagged if more than 15% of Work Areas in the most recently closed WAG are marked Inaccessible."
+    is_percentage = True
     min_sample_size = 5
     upper_bound = 15
 
     def compute(self, opportunity_access, period_start, period_end):
         last_wag = _find_last_closed_wag(opportunity_access, period_end)
         if last_wag is None:
-            return None, 0
+            return Measurement(None, 0)
 
         stats = (
             WorkArea.objects.filter(
@@ -351,9 +370,9 @@ class InaccessibleWARateLastCompletedWAG(AuditCalculation):
 
         total = stats["total"]
         if total == 0:
-            return None, 0
+            return Measurement(None, 0)
 
-        return _percent(stats["inaccessible_count"], total), total
+        return Measurement(_percent(stats["inaccessible_count"], total), total)
 
 
 @register_calculation
@@ -365,6 +384,8 @@ class VaccineRate(AuditCalculation):
 
     name = "vaccine_rate"
     label = "Vaccine Rate"
+    tooltip = "Flagged if fewer than 58% of visits record at least one vaccine received."
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 58
 
@@ -379,8 +400,8 @@ class VaccineRate(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["vaccinated"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["vaccinated"], total), total)
 
 
 @register_calculation
@@ -394,6 +415,8 @@ class VaccineCardPhotoCompliance(AuditCalculation):
 
     name = "vaccine_card_photo_compliance"
     label = "Vaccine Card Photo Compliance"
+    tooltip = "Flagged if vaccine card photo taken in fewer than 38% of visits where child was vaccinated."
+    is_percentage = True
     min_sample_size = 97
     lower_bound = 38
 
@@ -409,8 +432,8 @@ class VaccineCardPhotoCompliance(AuditCalculation):
         )
         total = result["total"]
         if not total:
-            return None, 0
-        return _percent(result["with_photo"], total), total
+            return Measurement(None, 0)
+        return Measurement(_percent(result["with_photo"], total), total)
 
 
 # ── MUAC distribution helpers (ported from MLFeatureAggregationReport.py) ────
@@ -518,6 +541,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
 
     name = "muac_distribution_pattern_index"
     label = "MUAC Distribution Pattern Index (MDPI)"
+    tooltip = "Flagged if fewer than 5 of 6 distribution shape tests pass."
     min_sample_size = 100
     lower_bound = 5
 
@@ -543,8 +567,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
 
         if out_of_range:
             logger.warning(
-                "MUAC out-of-range values for opportunity_access=%s period=%s–%s: "
-                "%d value(s) outside 9.5–21.5 cm: %s",
+                "MUAC out-of-range values for opportunity_access=%s period=%s–%s: %d value(s) outside 9.5–21.5 cm: %s",
                 opportunity_access.id,
                 period_start,
                 period_end,
@@ -554,7 +577,7 @@ class MUACDistributionPatternIndex(AuditCalculation):
 
         total = len(measurements)
         if total < self.min_sample_size:
-            return None, total
+            return Measurement(None, total)
 
         bin_counts = _muac_build_bins(measurements)
         max_count = max(bin_counts)
@@ -572,4 +595,4 @@ class MUACDistributionPatternIndex(AuditCalculation):
                 max_count / total <= 0.42,
             ]
         )
-        return score, total
+        return Measurement(score, total)

@@ -124,7 +124,7 @@ class BaseDataExportListView(BaseDataExportView):
 
     @extend_schema(
         description=(
-            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
+            "v1.0: Returns CSV text StreamingHttpResponse. v2.0: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
