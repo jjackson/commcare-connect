@@ -105,7 +105,7 @@ def _detail_url(audit_opp, report):
 
 
 @pytest.mark.django_db
-def test_detail_splits_flagged_and_unflagged(client, program_manager_org_user_admin, audit_opp):
+def test_detail_lists_all_workers_in_one_table(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
 
@@ -115,9 +115,12 @@ def test_detail_splits_flagged_and_unflagged(client, program_manager_org_user_ad
     response = client.get(_detail_url(audit_opp, report))
     assert response.status_code == 200
     html = response.content.decode()
-    # Both user names appear.
-    assert flagged_entry.opportunity_access.user.name in html
-    assert unflagged_entry.opportunity_access.user.name in html
+    # Both flagged and no-action workers appear in the single merged table.
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert flagged_entry.opportunity_access.user.name in rendered_rows
+    assert unflagged_entry.opportunity_access.user.name in rendered_rows
+    # The flagged worker (still needing review) is ordered ahead of the no-action one.
+    assert rendered_rows[0] == flagged_entry.opportunity_access.user.name
     # Progress indicator "0 of 1 workers reviewed" — only flagged rows are counted.
     assert "0 of 1" in html
 

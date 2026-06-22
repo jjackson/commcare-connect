@@ -150,7 +150,6 @@ class AuditReportEntryTable(OrgContextTable):
         model = AuditReportEntry
         fields = ("user",)
         empty_text = _l("No workers.")
-        order_by = ("user",)
 
     def __init__(self, data, *, opportunity, report, columns_spec, **kw):
         self.opportunity = opportunity

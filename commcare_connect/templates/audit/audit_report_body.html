@@ -25,12 +25,9 @@
            hx-trigger="input changed delay:200ms, search"
            hx-target="#detail-body"
            hx-swap="outerHTML"
-           hx-vals='{"review-page": "1", "noaction-page": "1"}' />
+           hx-vals='{"page": "1"}' />
   </div>
-  <h2 class="text-xl font-semibold">{% trans "Workers to Review" %}</h2>
-  {% render_table review_table %}
-  <h2 class="text-xl font-semibold mt-4">{% trans "No Action" %}</h2>
-  {% render_table no_action_table %}
+  {% render_table table %}
   <div class="flex justify-end mt-6">
     <button type="button"
             class="button button-md primary-dark"
