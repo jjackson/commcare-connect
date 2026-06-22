@@ -9,7 +9,7 @@ from commcare_connect.opportunity.app_xml import DeliverUnit as DeliverUnitData
 from commcare_connect.opportunity.app_xml import Module
 from commcare_connect.opportunity.models import CommCareApp, HQApiKey, Opportunity
 from commcare_connect.opportunity.tests.factories import DeliveryTypeFactory, HQApiKeyFactory
-from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
+from commcare_connect.program.models import Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 
 
@@ -486,7 +486,7 @@ class TestManagedOpportunityCreate:
                 format="json",
             )
         assert response.status_code == 502
-        assert not ManagedOpportunity.objects.filter(program=program).exists()
+        assert not Opportunity.objects.filter(program=program).exists()
         assert not CommCareApp.objects.filter(cc_app_id="learn-app-123").exists()
         assert not CommCareApp.objects.filter(cc_app_id="deliver-app-456").exists()
         mock_send_email.assert_not_called()

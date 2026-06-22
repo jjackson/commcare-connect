@@ -311,7 +311,7 @@
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
-          <form hx-post="{% url "opportunity:approve_visits" org_slug=request.org.slug opp_id=user_visit.opportunity.opportunity_id %}"
+          <form hx-post="{% url 'opportunity:approve_visits' org_slug=request.org.slug opp_id=user_visit.opportunity.opportunity_id %}"
                 hx-swap="none"
                 @submit="showApproveModal = false">
             {% csrf_token %}

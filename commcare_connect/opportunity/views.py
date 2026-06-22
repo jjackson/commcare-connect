@@ -1823,7 +1823,7 @@ def invoice_update_status(request, org_slug, opp_id):
 @opportunity_required
 @require_POST
 def invoice_pay(request, org_slug, opp_id):
-    if not (request.org_membership and request.org_membership.is_program_manager):
+    if not request.is_opportunity_pm:
         return HttpResponse(
             status=302,
             headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
