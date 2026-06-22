@@ -8,20 +8,42 @@ _REGISTRY: list[AuditCalculation] = []
 
 
 @dataclass
+class Measurement:
+    """Raw result of a calculation's ``compute()``: a ``value`` over a sample.
+
+    ``sample_size`` is the gating quantity compared against ``min_sample_size``.
+    ``denominator`` overrides the displayed fraction's denominator for percentage
+    calculations whose rate is taken over a different population than the gate;
+    when ``None`` the denominator defaults to ``sample_size``.
+    """
+
+    value: Any
+    sample_size: int
+    denominator: int | None = None
+
+
+@dataclass
 class CalculationResult:
     name: str
     label: str
     value: Any
     has_sufficient_data: bool
     in_range: bool
+    numerator: int | None = None
+    denominator: int | None = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "value": self.value,
             "has_sufficient_data": self.has_sufficient_data,
             "in_range": self.in_range,
             "label": self.label,
         }
+        if self.numerator is not None:
+            d["numerator"] = self.numerator
+        if self.denominator is not None:
+            d["denominator"] = self.denominator
+        return d
 
 
 class AuditCalculation(ABC):
@@ -44,19 +66,22 @@ class AuditCalculation(ABC):
 
     name: ClassVar[str]
     label: ClassVar[str]
+    tooltip: ClassVar[str] = ""
+    is_percentage: ClassVar[bool] = False
     min_sample_size: ClassVar[int] = 1
     lower_bound: ClassVar[float | None] = None
     upper_bound: ClassVar[float | None] = None
 
     @abstractmethod
-    def compute(self, opportunity_access, period_start, period_end) -> tuple[Any, int]:
-        """Return ``(value, sample_size)``. ``value`` may be ``None`` when
-        ``sample_size == 0``.
+    def compute(self, opportunity_access, period_start, period_end) -> Measurement:
+        """Return a :class:`Measurement`. ``value`` may be ``None`` when
+        ``sample_size == 0``. Set ``denominator`` only when a percentage's rate
+        is taken over a different population than the gating ``sample_size``.
         """
 
     def run(self, opportunity_access, period_start, period_end) -> CalculationResult:
-        value, sample_size = self.compute(opportunity_access, period_start, period_end)
-        has_sufficient_data = sample_size >= self.min_sample_size
+        m = self.compute(opportunity_access, period_start, period_end)
+        has_sufficient_data = m.sample_size >= self.min_sample_size
         if not has_sufficient_data:
             return CalculationResult(
                 name=self.name,
@@ -65,12 +90,21 @@ class AuditCalculation(ABC):
                 has_sufficient_data=False,
                 in_range=True,
             )
+        numerator = None
+        denominator = None
+        if self.is_percentage and m.value is not None:
+            # Denominator defaults to the gating sample unless compute() overrode
+            # it; the numerator is derived from value so the two never diverge.
+            denominator = m.sample_size if m.denominator is None else m.denominator
+            numerator = round(m.value * denominator / 100)
         return CalculationResult(
             name=self.name,
             label=self.label,
-            value=value,
+            value=m.value,
             has_sufficient_data=True,
-            in_range=self._in_range(value),
+            in_range=self._in_range(m.value),
+            numerator=numerator,
+            denominator=denominator,
         )
 
     def _in_range(self, value) -> bool:

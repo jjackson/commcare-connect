@@ -75,16 +75,36 @@ class CalcColumn(columns.Column):
     negative badge when ``in_range`` is False.
     """
 
-    def __init__(self, calc_name, **kw):
+    def __init__(self, calc_name, tooltip="", **kw):
         self.calc_name = calc_name
+        self.calc_tooltip = tooltip
         super().__init__(empty_values=(), orderable=False, **kw)
+
+    @property
+    def header(self):
+        label = self.verbose_name
+        if not self.calc_tooltip:
+            return label
+        return format_html(
+            '{} <span x-data x-tooltip.raw="{}" class="inline-flex items-center cursor-help">'
+            '<i class="fa-solid fa-circle-info text-xs text-gray-400"></i></span>',
+            label,
+            self.calc_tooltip,
+        )
 
     def render(self, record):
         r = record.results.get(self.calc_name, {})
         if not r.get("has_sufficient_data"):
             return format_html('<span class="text-gray-400">{}</span>', _("N/A"))
-        value = r.get("value", "-")
-        display = f"{value:.2f}" if isinstance(value, float) else str(value) if value is not None else ""
+        value = r.get("value")
+        if value is None:
+            display = "-"
+        elif r.get("numerator") is not None:
+            display = f"{round(value)}% ({r['numerator']}/{r['denominator']})"
+        elif isinstance(value, float):
+            display = f"{value:.2f}"
+        else:
+            display = str(value)
         if not r.get("in_range"):
             return format_html('<span class="badge badge-md negative-dark">{}</span>', display)
         return display
@@ -142,6 +162,9 @@ class AuditReportEntryTable(OrgContextTable):
     def __init__(self, data, *, opportunity, report, columns_spec, **kw):
         self.opportunity = opportunity
         self.report = report
-        extra = [(name, CalcColumn(calc_name=name, verbose_name=label)) for name, label in columns_spec]
+        extra = [
+            (name, CalcColumn(calc_name=name, verbose_name=label, tooltip=tooltip))
+            for name, label, tooltip in columns_spec
+        ]
         extra.append(("action", ActionColumn()))
         super().__init__(data, extra_columns=extra, **kw)
