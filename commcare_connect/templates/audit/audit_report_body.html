@@ -42,7 +42,6 @@
               class="button button-md primary-dark"
               {% if not can_complete %}disabled{% endif %}
               hx-post="{% url 'opportunity:audit:audit_report_complete' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
-              hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
               hx-swap="none"
               hx-on::after-request="if (event.detail.successful) window.location.reload()">
         {% trans "Complete Audit" %}
