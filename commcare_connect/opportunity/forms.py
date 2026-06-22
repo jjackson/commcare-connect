@@ -614,6 +614,7 @@ class OpportunityInitForm(forms.ModelForm):
         opportunity.organization = self.cleaned_data.get("organization")
         opportunity.program = self.program
         opportunity.currency = self.program.currency
+        opportunity.country = self.program.country
         opportunity.delivery_type = self.program.delivery_type
         opportunity.managed = True
 
@@ -734,6 +735,8 @@ class OpportunityInitUpdateForm(OpportunityInitForm):
     def save(self, commit=True):
         opportunity = self.instance
         opportunity.organization = self.cleaned_data.get("organization")
+        opportunity.currency = self.program.currency
+        opportunity.country = self.program.country
 
         created_by = opportunity.created_by or self.user.email
         hq_server = self.cleaned_data["hq_server"]
