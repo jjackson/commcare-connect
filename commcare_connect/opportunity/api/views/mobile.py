@@ -40,7 +40,7 @@ class OpportunityViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Opportunity.objects.filter(opportunityaccess__user=self.request.user)
+        return Opportunity.objects.filter(opportunityaccess__user=self.request.user, archived=False)
 
 
 class UserLearnProgressView(RetrieveAPIView):
