@@ -23,6 +23,7 @@ from commcare_connect.opportunity.models import (
 from commcare_connect.opportunity.tasks import (
     _get_inactive_message,
     add_connect_users,
+    auto_archive_test_opportunities,
     auto_deactivate_ended_opportunities,
     download_inaccessibility_request_attachments,
     download_user_visit_attachments,
@@ -427,6 +428,42 @@ class TestAutoDeactivateEndedOpportunities:
             deactivation_event.pgh_context.metadata["action"]
             == "commcare_connect.opportunity.tasks.auto_deactivate_ended_opportunities"
         )
+
+
+@pytest.mark.django_db
+class TestAutoArchiveTestOpportunities:
+    def test_archives_test_opps_30_days_after_end(self):
+        cutoff = datetime.date.today() - datetime.timedelta(days=30)
+        opp_to_archive = OpportunityFactory(is_test=True, archived=False, end_date=cutoff)
+        opp_not_yet_ended = OpportunityFactory(is_test=True, archived=False, end_date=datetime.date.today())
+        opp_already_archived = OpportunityFactory(is_test=True, archived=True, end_date=cutoff)
+        opp_not_test = OpportunityFactory(is_test=False, archived=False, end_date=cutoff)
+
+        auto_archive_test_opportunities()
+
+        opp_to_archive.refresh_from_db()
+        opp_not_yet_ended.refresh_from_db()
+        opp_already_archived.refresh_from_db()
+        opp_not_test.refresh_from_db()
+
+        assert opp_to_archive.archived is True
+        assert opp_not_yet_ended.archived is False
+        assert opp_already_archived.archived is True  # unchanged
+        assert opp_not_test.archived is False
+
+    @pytest.mark.parametrize(
+        "is_test,end_date,expected_archived",
+        [
+            (True, datetime.date.today() - datetime.timedelta(days=30), True),
+            (True, datetime.date.today() - datetime.timedelta(days=29), False),
+            (False, datetime.date.today() - datetime.timedelta(days=30), False),
+        ],
+    )
+    def test_archive_boundary_conditions(self, is_test, end_date, expected_archived):
+        opp = OpportunityFactory(is_test=is_test, archived=False, end_date=end_date)
+        auto_archive_test_opportunities()
+        opp.refresh_from_db()
+        assert opp.archived is expected_archived
 
 
 @mock.patch("commcare_connect.opportunity.tasks.send_message")
