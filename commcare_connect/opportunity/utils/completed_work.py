@@ -97,11 +97,8 @@ class CompletedWorkUpdater:
             required_deliver_units, optional_deliver_units = self._get_deliver_units_for_payment_unit(payment_unit_id)
 
             number_completed = min([unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
-            # TODO: all opportunities will be managed going forward; remove this check
-            # and always use "agree" once that changes lands.
-            billable_count_key = "agree" if self.opportunity.managed else "approved"
             number_approved = min(
-                [approved_unit_counts[deliver_id][billable_count_key] for deliver_id in required_deliver_units],
+                [approved_unit_counts[deliver_id]["agree"] for deliver_id in required_deliver_units],
                 default=0,
             )
 
@@ -110,7 +107,7 @@ class CompletedWorkUpdater:
                 number_completed = min(number_completed, optional_completed)
 
                 optional_approved = sum(
-                    approved_unit_counts[deliver_id][billable_count_key] for deliver_id in optional_deliver_units
+                    approved_unit_counts[deliver_id]["agree"] for deliver_id in optional_deliver_units
                 )
                 number_approved = min(number_approved, optional_approved)
 

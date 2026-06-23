@@ -751,11 +751,7 @@ class CompletedWork(models.Model):
 
     @property
     def approved_count(self):
-        qs = self.uservisit_set.filter(status=VisitValidationStatus.approved)
-        # TODO: all opportunities will be managed going forward; remove this check
-        # and always filter by review_status=agree once that changes lands.
-        if self.opportunity_access.opportunity.managed:
-            qs = qs.filter(review_status=VisitReviewStatus.agree)
+        qs = self.uservisit_set.filter(status=VisitValidationStatus.approved, review_status=VisitReviewStatus.agree)
         visits = qs.values_list("deliver_unit_id", flat=True)
         return self.calculate_completed(visits, approved=True)
 
