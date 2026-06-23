@@ -1732,26 +1732,28 @@ class InvoiceLineItemsTable(tables.Table):
     month = tables.Column()
     payment_unit_name = tables.Column(verbose_name="Payment Unit")
     number_approved = tables.Column()
-    amount_per_unit = tables.Column(
-        verbose_name="Payment Unit Amount (local)",
-    )
-    total_amount_local = tables.Column(
-        verbose_name="Total Amount (local)",
-    )
+    flw_amount_local = tables.Column(verbose_name="FLW Pay (local)")
+    org_amount_local = tables.Column(verbose_name="Org Pay (local)")
+    total_amount_local = tables.Column(verbose_name="Total Pay (local)")
     exchange_rate = tables.Column()
-    total_amount_usd = tables.Column(
-        verbose_name=header_with_tooltip(
-            "Total Amount (USD)",
-            "Approved count × (payment unit amount ÷ exchange rate at time of approval) "
-            "rounded to 2 decimals for each delivery",
-        ),
-    )
+    total_amount_usd = tables.Column(verbose_name="Total Pay (USD)")
 
-    def __init__(self, currency, *args, **kwargs):
+    def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
         if currency:
-            self.columns["amount_per_unit"].column.verbose_name = f"Payment Unit Amount ({currency})"
-            self.columns["total_amount_local"].column.verbose_name = f"Total Amount ({currency})"
+            self.columns["flw_amount_local"].column.verbose_name = f"FLW Pay ({currency})"
+            self.columns["org_amount_local"].column.verbose_name = f"Org Pay ({currency})"
+            self.columns["total_amount_local"].column.verbose_name = f"Total Pay ({currency})"
+        if show_org:
+            usd_tooltip = (
+                "Sum of FLW pay and org pay (USD), each converted at the exchange rate "
+                "at the delivery's approval time."
+            )
+        else:
+            self.columns["flw_amount_local"].column.visible = False
+            self.columns["org_amount_local"].column.visible = False
+            usd_tooltip = "FLW pay (USD), converted at the exchange rate at the delivery's approval time."
+        self.columns["total_amount_usd"].column.verbose_name = header_with_tooltip("Total Pay (USD)", usd_tooltip)
 
     class Meta:
         orderable = False

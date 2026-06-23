@@ -4,13 +4,32 @@ from django_tables2 import RequestConfig
 
 from commcare_connect.opportunity.helpers import get_worker_tasks_base_queryset
 from commcare_connect.opportunity.models import AssignedTaskStatus
-from commcare_connect.opportunity.tables import WorkerTasksTable
+from commcare_connect.opportunity.tables import InvoiceLineItemsTable, WorkerTasksTable
 from commcare_connect.opportunity.tests.factories import (
     AssignedTaskFactory,
     OpportunityAccessFactory,
     TaskTypeFactory,
     UserInviteFactory,
 )
+
+
+def test_invoice_line_items_table_hides_org_columns_when_not_show_org():
+    table = InvoiceLineItemsTable("KES", [], show_org=False)
+    visible = [column.name for column in table.columns]
+    assert "flw_amount_local" not in visible
+    assert "org_amount_local" not in visible
+    assert "total_amount_local" in visible
+    assert table.columns["total_amount_local"].column.verbose_name == "Total Pay (KES)"
+
+
+def test_invoice_line_items_table_shows_org_columns_when_show_org():
+    table = InvoiceLineItemsTable("KES", [], show_org=True)
+    visible = [column.name for column in table.columns]
+    assert "flw_amount_local" in visible
+    assert "org_amount_local" in visible
+    assert table.columns["flw_amount_local"].column.verbose_name == "FLW Pay (KES)"
+    assert table.columns["org_amount_local"].column.verbose_name == "Org Pay (KES)"
+    assert table.columns["total_amount_local"].column.verbose_name == "Total Pay (KES)"
 
 
 def _make_table(opportunity, per_page=25):
