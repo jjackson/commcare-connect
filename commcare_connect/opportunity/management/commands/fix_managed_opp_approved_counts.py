@@ -2,6 +2,7 @@ import argparse
 
 from django.core.management import BaseCommand
 from django.db import transaction
+from django.db.models import Prefetch
 
 from commcare_connect.opportunity.models import CompletedWork, OpportunityAccess
 from commcare_connect.opportunity.utils.completed_work import update_status
@@ -21,20 +22,23 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
-        accesses = OpportunityAccess.objects.filter(
-            opportunity__managed=True,
-            opportunity__active=True,
-        ).select_related("opportunity")
+
+        affected_works = CompletedWork.objects.filter(
+            invoice__isnull=True,
+            saved_approved_count__gt=1,
+        ).select_related("payment_unit")
+        accesses = (
+            OpportunityAccess.objects.filter(
+                opportunity__managed=True,
+                opportunity__active=True,
+            )
+            .select_related("opportunity")
+            .prefetch_related(Prefetch("completedwork_set", queryset=affected_works))
+        )
 
         affected = 0
-        for access in accesses:
-            works = list(
-                CompletedWork.objects.filter(
-                    opportunity_access=access,
-                    invoice__isnull=True,
-                    saved_approved_count__gt=1,  # the correction is needed only for duplicated completed works
-                ).select_related("payment_unit")
-            )
+        for access in accesses.iterator(chunk_size=200):
+            works = list(access.completedwork_set.all())
             if not works:
                 continue
             affected += self._preview(access, works) if dry_run else self._recalculate(access, works)
@@ -60,8 +64,8 @@ class Command(BaseCommand):
 
         Wrapped in a transaction so a crash can't leave a single access half-corrected.
         """
-        work_ids = [work.id for work in works]
         before = {work.id: (work.saved_approved_count, work.saved_payment_accrued) for work in works}
+        work_ids = before.keys()
 
         with transaction.atomic():
             update_status(
