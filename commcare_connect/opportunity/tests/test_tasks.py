@@ -21,6 +21,7 @@ from commcare_connect.opportunity.models import (
     UserInvite,
 )
 from commcare_connect.opportunity.tasks import (
+    OPPORTUNITY_AUTO_ARCHIVE_DAYS,
     _get_inactive_message,
     add_connect_users,
     auto_archive_test_opportunities,
@@ -432,34 +433,16 @@ class TestAutoDeactivateEndedOpportunities:
 
 @pytest.mark.django_db
 class TestAutoArchiveTestOpportunities:
-    def test_archives_test_opps_30_days_after_end(self):
-        cutoff = datetime.date.today() - datetime.timedelta(days=30)
-        opp_to_archive = OpportunityFactory(is_test=True, archived=False, end_date=cutoff)
-        opp_not_yet_ended = OpportunityFactory(is_test=True, archived=False, end_date=datetime.date.today())
-        opp_already_archived = OpportunityFactory(is_test=True, archived=True, end_date=cutoff)
-        opp_not_test = OpportunityFactory(is_test=False, archived=False, end_date=cutoff)
-
-        auto_archive_test_opportunities()
-
-        opp_to_archive.refresh_from_db()
-        opp_not_yet_ended.refresh_from_db()
-        opp_already_archived.refresh_from_db()
-        opp_not_test.refresh_from_db()
-
-        assert opp_to_archive.archived is True
-        assert opp_not_yet_ended.archived is False
-        assert opp_already_archived.archived is True  # unchanged
-        assert opp_not_test.archived is False
-
     @pytest.mark.parametrize(
-        "is_test,end_date,expected_archived",
+        "is_test,days_ago,expected_archived",
         [
-            (True, datetime.date.today() - datetime.timedelta(days=30), True),
-            (True, datetime.date.today() - datetime.timedelta(days=29), False),
-            (False, datetime.date.today() - datetime.timedelta(days=30), False),
+            (True, OPPORTUNITY_AUTO_ARCHIVE_DAYS, True),
+            (True, OPPORTUNITY_AUTO_ARCHIVE_DAYS - 1, False),
+            (False, OPPORTUNITY_AUTO_ARCHIVE_DAYS, False),
         ],
     )
-    def test_archive_boundary_conditions(self, is_test, end_date, expected_archived):
+    def test_archive_boundary_conditions(self, is_test, days_ago, expected_archived):
+        end_date = datetime.date.today() - datetime.timedelta(days=days_ago)
         opp = OpportunityFactory(is_test=is_test, archived=False, end_date=end_date)
         auto_archive_test_opportunities()
         opp.refresh_from_db()

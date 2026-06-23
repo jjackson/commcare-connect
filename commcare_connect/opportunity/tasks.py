@@ -73,6 +73,7 @@ from config import celery_app
 logger = logging.getLogger(__name__)
 
 OPPORTUNITY_AUTO_DEACTIVATION_DAYS = 30
+OPPORTUNITY_AUTO_ARCHIVE_DAYS = 30
 SYSTEM = "system"
 
 
@@ -278,7 +279,7 @@ def auto_deactivate_ended_opportunities():
 
 @celery_app.task()
 def auto_archive_test_opportunities():
-    cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_DEACTIVATION_DAYS)
+    cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_ARCHIVE_DAYS)
     Opportunity.objects.filter(is_test=True, archived=False, end_date__lte=cutoff).update(archived=True)
 
 
