@@ -19,9 +19,7 @@ def is_program_manager(request):
 def is_program_manager_of_opportunity(request, opp_id) -> bool:
     managed_opp = get_managed_opp(opp_id)
     return bool(
-        managed_opp
-        and managed_opp.program.organization.slug == request.org.slug
-        and is_program_manager(request)
+        managed_opp and managed_opp.program.organization.slug == request.org.slug and is_program_manager(request)
     )
 
 
