@@ -63,19 +63,23 @@ class Command(BaseCommand):
         """Recompute saved counts, logging each before/after delta.
 
         Wrapped in a transaction so a crash can't leave a single access half-corrected.
+        Re-fetches the works under a row lock and re-checks invoice__isnull to avoid racing
+        with a concurrent invoicing that could attach one of these works to an invoice between
+        the initial query and this update (which would leave the invoice billed on a stale count).
         """
         before = {work.id: (work.saved_approved_count, work.saved_payment_accrued) for work in works}
         work_ids = before.keys()
 
         with transaction.atomic():
-            update_status(
-                CompletedWork.objects.filter(id__in=work_ids).select_related("payment_unit"),
-                access,
-                compute_payment=True,
+            still_uninvoiced = (
+                CompletedWork.objects.filter(id__in=work_ids, invoice__isnull=True)
+                .select_for_update(of=("self",))
+                .select_related("payment_unit")
             )
+            update_status(still_uninvoiced, access, compute_payment=True)
 
             changed = 0
-            for work in CompletedWork.objects.filter(id__in=work_ids):
+            for work in CompletedWork.objects.filter(id__in=work_ids, invoice__isnull=True):
                 old = before[work.id]
                 new = (work.saved_approved_count, work.saved_payment_accrued)
                 if old != new:
