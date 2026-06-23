@@ -116,8 +116,6 @@ class TestOpportunityChangeForm:
             "name",
             "description",
             "short_description",
-            "currency",
-            "country",
         ],
     )
     def test_required_fields(self, valid_opportunity, field, base_form_data):
@@ -210,10 +208,9 @@ class TestOpportunityChangeForm:
     @pytest.mark.parametrize(
         "data_updates,expected_valid",
         [
-            ({"currency": "USD", "additional_users": 5}, True),
-            ({"currency": "EUR", "additional_users": 10}, True),
-            ({"currency": "INVALID", "additional_users": 5}, False),
-            ({"currency": "USD", "additional_users": -5}, True),
+            ({"additional_users": 5}, True),
+            ({"additional_users": 10}, True),
+            ({"additional_users": -5}, True),
         ],
     )
     def test_valid_combinations(self, valid_opportunity, base_form_data, data_updates, expected_valid):
@@ -221,6 +218,21 @@ class TestOpportunityChangeForm:
         data.update(data_updates)
         form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert form.is_valid() == expected_valid
+
+    @pytest.mark.parametrize("submitted_currency", ["EUR", "INVALID"])
+    def test_currency_and_country_are_immutable(self, valid_opportunity, base_form_data, submitted_currency):
+        """currency and country are disabled fields, so submitted values are ignored and the instance is preserved."""
+        original_currency = valid_opportunity.currency
+        original_country = valid_opportunity.country
+
+        data = base_form_data.copy()
+        data.update({"currency": submitted_currency, "country": "INVALID"})
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
+
+        assert form.is_valid()
+        opp = form.save()
+        assert opp.currency == original_currency
+        assert opp.country == original_country
 
     def test_for_incomplete_opp(self, base_form_data, valid_opportunity):
         data = data = base_form_data.copy()
@@ -400,7 +412,8 @@ class TestOpportunityInitUpdateForm:
         assert updated_opportunity.deliver_app_id == deliver_app.id
         assert deliver_app.name == "updated deliver app"
 
-        assert updated_opportunity.currency.code == "EUR"
+        # currency is always taken from the program, ignoring the submitted "EUR" value
+        assert updated_opportunity.currency == opportunity.program.currency
 
     def test_switching_to_new_apps_creates_fresh_records(self, opportunity):
         original_learn_app = opportunity.learn_app
