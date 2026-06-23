@@ -48,7 +48,7 @@ def _get_additional_tracking_context(request):
     opportunity = getattr(request, "opportunity", None)
 
     program_slug = None
-    if opportunity and opportunity.program:
+    if opportunity:
         program_slug = opportunity.program.slug
 
     org_slug = None

@@ -1687,8 +1687,8 @@ class PaymentUnitTable(OrgContextTable):
     org_amount = tables.Column(verbose_name="Org pay per delivery")
 
     def __init__(self, *args, **kwargs):
-        self.can_edit = kwargs.pop("can_edit", False)
-        if not kwargs.pop("is_program_manager", False):
+        self.can_edit = kwargs.pop("is_program_manager", False)
+        if not self.can_edit:
             kwargs["exclude"] = "org_amount"
         super().__init__(*args, **kwargs)
 

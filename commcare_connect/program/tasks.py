@@ -190,9 +190,9 @@ def _send_org_email_for_opportunities(organization, opportunities, recipient_ema
 
 def send_opportunity_expiry_reminder_emails(days_before: int):
     target_date = datetime.date.today() + datetime.timedelta(days=days_before)
-    opportunities = Opportunity.objects.filter(
-        end_date=target_date, active=True, program__isnull=False
-    ).select_related("program__organization", "organization")
+    opportunities = Opportunity.objects.filter(end_date=target_date, active=True).select_related(
+        "program__organization", "organization"
+    )
 
     # Group by PM org
     pm_orgs = {}

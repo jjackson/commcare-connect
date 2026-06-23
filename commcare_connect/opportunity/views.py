@@ -233,9 +233,7 @@ _NEXT_WORKER_TASKS = "worker_tasks"
 def get_opportunity_or_404(pk, org_slug):
     opp = get_object_by_uuid_or_int(Opportunity.objects.all(), str(pk), uuid_field="opportunity_id")
 
-    if (opp.organization and opp.organization.slug == org_slug) or (
-        opp.program and opp.program.organization.slug == org_slug
-    ):
+    if opp.organization.slug == org_slug or opp.program.organization.slug == org_slug:
         return opp
 
     raise Http404("Opportunity not found.")
@@ -2896,7 +2894,6 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OpportunityObjectMi
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["org_slug"] = self.request.org.slug
-        kwargs["can_edit"] = self.request.is_opportunity_pm
         kwargs["is_program_manager"] = self.request.is_opportunity_pm
         return kwargs
 

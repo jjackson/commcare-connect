@@ -177,7 +177,7 @@ class DeliveryStatsReportView(tables.SingleTableMixin, KPIReportMixin, NonModelF
 class InvoiceReportFilter(django_filters.FilterSet):
     opportunity_name = django_filters.ModelChoiceFilter(
         field_name="opportunity",
-        queryset=Opportunity.objects.filter(program__isnull=False).only("id", "name"),
+        queryset=Opportunity.objects.only("id", "name"),
         label=_("Opportunity"),
         widget=forms.Select(
             attrs={
