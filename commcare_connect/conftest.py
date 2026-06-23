@@ -16,7 +16,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
 )
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import (
     ConnectIdUserLinkFactory,
@@ -70,10 +70,7 @@ def opportunity(request, organization):
         "organization": organization,
     }
     opp_options.update(getattr(request, "param", {}).get("opp_options", {}))
-    if opp_options.get("managed", False):
-        factory = ManagedOpportunityFactory(**opp_options)
-    else:
-        factory = OpportunityFactory(**opp_options)
+    factory = OpportunityFactory(**opp_options)
     OpportunityVerificationFlagsFactory(opportunity=factory, **verification_flags)
     return factory
 
@@ -115,10 +112,7 @@ def mobile_user_with_connect_link(db, opportunity, paymentunit_options) -> User:
     payment_units = PaymentUnitFactory.create_batch(
         2, opportunity=opportunity, parent_payment_unit=None, **(paymentunit_options)
     )
-    if opportunity.managed:
-        budget_per_user = sum(p.max_total * (p.amount + p.org_amount) for p in payment_units)
-    else:
-        budget_per_user = sum(p.max_total * p.amount for p in payment_units)
+    budget_per_user = sum(p.max_total * (p.amount + p.org_amount) for p in payment_units)
     opportunity.total_budget = budget_per_user
     opportunity.save(update_fields=["total_budget"])
     OpportunityClaimLimit.create_claim_limits(opportunity, claim)
@@ -148,7 +142,7 @@ def program_manager_org(db) -> Organization:
 @pytest.fixture
 def managed_opportunity(organization, program_manager_org):
     program = ProgramFactory(organization=program_manager_org)
-    return ManagedOpportunityFactory(program=program, organization=organization)
+    return OpportunityFactory(program=program, organization=organization)
 
 
 @pytest.fixture

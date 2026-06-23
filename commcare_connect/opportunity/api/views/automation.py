@@ -14,7 +14,6 @@ from commcare_connect.opportunity.api.serializers.automation import (
 from commcare_connect.opportunity.models import Opportunity, PaymentUnit
 from commcare_connect.opportunity.tasks import add_connect_users
 from commcare_connect.organization.decorators import user_is_org_admin
-from commcare_connect.program.models import ManagedOpportunity
 
 
 class OpportunityAPIView(APIView):
@@ -23,11 +22,10 @@ class OpportunityAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get_opportunity(self):
-        opportunity = get_object_or_404(Opportunity, opportunity_id=self.kwargs["opportunity_id"])
-        allowed_orgs = [opportunity.organization]
-        if opportunity.managed:
-            managed = ManagedOpportunity.objects.get(pk=opportunity.pk)
-            allowed_orgs.append(managed.program.organization)
+        opportunity = get_object_or_404(
+            Opportunity.objects.select_related("program__organization"), opportunity_id=self.kwargs["opportunity_id"]
+        )
+        allowed_orgs = [opportunity.organization, opportunity.program.organization]
         if not any(user_is_org_admin(self.request.user, org) for org in allowed_orgs):
             self.permission_denied(self.request)
         return opportunity

@@ -155,10 +155,7 @@ class CompletedWorkUpdater:
         return updated
 
     def _is_delivery_approved(self, approved_unit_counts, delivery_id):
-        if self.opportunity.managed:
-            return approved_unit_counts[delivery_id]["approved"] > 0 and approved_unit_counts[delivery_id]["agree"] > 0
-        else:
-            return approved_unit_counts[delivery_id]["approved"] > 0
+        return approved_unit_counts[delivery_id]["approved"] > 0 and approved_unit_counts[delivery_id]["agree"] > 0
 
     def _is_completed_work_approved(self, completed_work):
         approved_unit_counts = self.completed_works_unit_approvals[completed_work.id]
@@ -194,10 +191,8 @@ class CompletedWorkUpdater:
                 amount_accrued = approved_count * completed_work.payment_unit.amount
                 exchange_rate = get_exchange_rate(self.opportunity.currency_code, completed_work.status_modified_date)
                 amount_accrued_usd = amount_accrued / exchange_rate
-                # if it's a managed opportunity we also need to update the org payment amounts
-                if self.opportunity.managed:
-                    org_amount_accrued = approved_count * completed_work.payment_unit.org_amount
-                    org_amount_accrued_usd = org_amount_accrued / exchange_rate
+                org_amount_accrued = approved_count * completed_work.payment_unit.org_amount
+                org_amount_accrued_usd = org_amount_accrued / exchange_rate
 
             completed_work.saved_completed_count = completed_count
             completed_work.saved_approved_count = approved_count

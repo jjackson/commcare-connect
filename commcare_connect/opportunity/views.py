@@ -14,6 +14,7 @@ from crispy_forms.utils import render_crispy_form
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.humanize.templatetags.humanize import intcomma
 from django.core.cache import cache
 from django.core.files.storage import default_storage, storages
@@ -206,9 +207,7 @@ from commcare_connect.organization.decorators import (
     org_member_required,
     org_program_manager_required,
     org_viewer_required,
-    request_user_is_program_manager,
 )
-from commcare_connect.program.forms import ManagedOpportunityInitUpdateForm
 from commcare_connect.program.utils import is_program_manager
 from commcare_connect.users.models import User
 from commcare_connect.utils.analytics import GA_CUSTOM_DIMENSIONS, Event, GATrackingInfo, send_event_to_ga
@@ -234,9 +233,7 @@ _NEXT_WORKER_TASKS = "worker_tasks"
 def get_opportunity_or_404(pk, org_slug):
     opp = get_object_by_uuid_or_int(Opportunity.objects.all(), str(pk), uuid_field="opportunity_id")
 
-    if (opp.organization and opp.organization.slug == org_slug) or (
-        opp.managed and opp.managedopportunity.program.organization.slug == org_slug
-    ):
+    if opp.organization.slug == org_slug or opp.program.organization.slug == org_slug:
         return opp
 
     raise Http404("Opportunity not found.")
@@ -254,9 +251,11 @@ class OpportunityObjectMixin:
         return self.get_opportunity()
 
 
-class ManagedOpportunityPMRequiredMixin(OpportunityObjectMixin):
+class ManagedOpportunityPMRequiredMixin(LoginRequiredMixin, OpportunityObjectMixin):
     def dispatch(self, request, *args, **kwargs):
-        if self.get_opportunity().managed and not request.is_opportunity_pm:
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not request.is_opportunity_pm:
             raise Http404(_("This page is not available."))
         return super().dispatch(request, *args, **kwargs)
 
@@ -330,15 +329,6 @@ class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMi
     form_class = OpportunityInitUpdateForm
     context_object_name = "opportunity"
 
-    def get_form_class(self):
-        opportunity = getattr(self, "object", None)
-        if opportunity is None:
-            opportunity = self.get_object()
-            self.object = opportunity
-        if getattr(opportunity, "managed", False):
-            return ManagedOpportunityInitUpdateForm
-        return super().get_form_class()
-
     def get_success_url(self):
         return reverse("opportunity:add_payment_units", args=(self.request.org.slug, self.object.opportunity_id))
 
@@ -350,8 +340,7 @@ class OpportunityInitUpdate(OpportunityObjectMixin, OrganizationProgramManagerMi
             self.object = opportunity
         kwargs["user"] = self.request.user
         kwargs["org_slug"] = self.request.org.slug
-        if getattr(opportunity, "managed", False):
-            kwargs["program"] = opportunity.managedopportunity.program
+        kwargs["program"] = opportunity.program
         return kwargs
 
     def get_context_data(self, **kwargs):
@@ -438,13 +427,6 @@ class OpportunityFinalize(OpportunityObjectMixin, OrganizationProgramManagerMixi
         kwargs["payment_units_max_total"] = payment_units_max_total
         kwargs["cumulative_pu_budget_per_user"] = cumulative_pu_budget_per_user
         return kwargs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        opportunity = self.object
-        if opportunity.managed:
-            context["program"] = opportunity.managedopportunity.program
-        return context
 
     def form_valid(self, form):
         opportunity = form.instance
@@ -683,8 +665,6 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
             user_text = f"{len(selected_users)} worker{'s' if len(selected_users) != 1 else ''}"
             change_type = "Increased" if adjustment_type == form.AdjustmentType.INCREASE_VISITS else "Decreased"
             message_parts.append(f"{change_type} {visit_text} for {user_text}.")
-            if not request.opportunity.managed:
-                message_parts.append(f"Budget {change_type.lower()} by {abs(form.budget_change):.2f}.")
 
         if end_date:
             message_parts.append(f"Extended opportunity end date to {end_date} for selected workers.")
@@ -698,8 +678,7 @@ def add_budget_existing_users(request, org_slug=None, opp_id=None):
             "label": "Existing Connect Workers",
         },
     ]
-    # Nm are not allowed to increase the managed opportunity budget so do not provide that tab.
-    if not request.opportunity.managed or request.is_opportunity_pm:
+    if request.is_opportunity_pm:
         tabs.append(
             {
                 "key": "new_workers",
@@ -817,11 +796,10 @@ def add_payment_units(request, org_slug=None, opp_id=None):
         return add_payment_unit(request, org_slug=org_slug, opp_id=opp_id)
     opportunity = request.opportunity
     paymentunit_count = PaymentUnit.objects.filter(opportunity=opportunity).count()
-    program = opportunity.managedopportunity.program if opportunity.managed else None
     return render(
         request,
         "opportunity/add_payment_units.html",
-        dict(opportunity=opportunity, paymentunit_count=paymentunit_count, program=program),
+        dict(opportunity=opportunity, paymentunit_count=paymentunit_count),
     )
 
 
@@ -891,7 +869,7 @@ def add_payment_unit(request, org_slug=None, opp_id=None):
 @org_member_required
 @opportunity_required
 def edit_payment_unit(request, org_slug=None, opp_id=None, pk=None):
-    if request.opportunity.managed and not request.is_opportunity_pm:
+    if not request.is_opportunity_pm:
         return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
     payment_unit = get_object_or_404(PaymentUnit, payment_unit_id=pk, opportunity=request.opportunity)
     deliver_units = DeliverUnit.objects.filter(
@@ -1089,19 +1067,18 @@ def approve_visits(request, org_slug, opp_id):
     today = now()
     for visit in visits:
         visit.status = VisitValidationStatus.approved
-        if visit.opportunity.managed:
-            visit.review_created_on = today
-            if visit.review_status == VisitReviewStatus.disagree:
-                visit.review_status = VisitReviewStatus.pending
-            if visit.flagged:
-                justification = request.POST.get("justification")
-                if not justification:
-                    return HttpResponse(
-                        "Justification is mandatory for flagged visits.",
-                        status=400,
-                        headers={"HX-Trigger": "form_error"},
-                    )
-                visit.justification = justification
+        visit.review_created_on = today
+        if visit.review_status == VisitReviewStatus.disagree:
+            visit.review_status = VisitReviewStatus.pending
+        if visit.flagged:
+            justification = request.POST.get("justification")
+            if not justification:
+                return HttpResponse(
+                    "Justification is mandatory for flagged visits.",
+                    status=400,
+                    headers={"HX-Trigger": "form_error"},
+                )
+            visit.justification = justification
         if visit.work_area:
             work_areas_to_update.append(visit.work_area)
 
@@ -1169,7 +1146,7 @@ def fetch_attachment(request, org_slug, opp_id, blob_id):
 @org_member_required
 @opportunity_required
 def verification_flags_config(request, org_slug=None, opp_id=None):
-    if request.opportunity.managed and not request.is_opportunity_pm:
+    if not request.is_opportunity_pm:
         return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
     verification_flags = OpportunityVerificationFlags.objects.filter(opportunity=request.opportunity).first()
     form = OpportunityVerificationFlagsConfigForm(
@@ -1322,7 +1299,7 @@ class EditTaskType(ManagedOpportunityPMRequiredMixin, OrganizationUserMemberRole
 @require_http_methods(["DELETE"])
 @opportunity_required
 def delete_form_json_rule(request, org_slug=None, opp_id=None, pk=None):
-    if request.opportunity.managed and not request.is_opportunity_pm:
+    if not request.is_opportunity_pm:
         return redirect("opportunity:detail", org_slug=org_slug, opp_id=opp_id)
 
     form_json_rule = get_object_or_404(
@@ -1382,7 +1359,7 @@ def update_completed_work_status_import(request, org_slug=None, opp_id=None):
 @opportunity_required
 @require_POST
 def suspend_user(request, org_slug=None, opp_id=None, pk=None):
-    if not (request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)):
+    if not (request.is_opportunity_pm):
         raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = True
@@ -1401,7 +1378,7 @@ def suspend_user(request, org_slug=None, opp_id=None, pk=None):
 @login_required
 @opportunity_required
 def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
-    if not (request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)):
+    if not (request.is_opportunity_pm):
         raise Http404()
     access = get_object_or_404(OpportunityAccess, opportunity=request.opportunity, opportunity_access_id=pk)
     access.suspended = False
@@ -1413,21 +1390,17 @@ def revoke_user_suspension(request, org_slug=None, opp_id=None, pk=None):
 @org_member_required
 @opportunity_required
 def suspended_users_list(request, org_slug=None, opp_id=None):
-    has_suspension_perm = (
-        request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)
-    )
     access_objects = OpportunityAccess.objects.filter(opportunity=request.opportunity, suspended=True)
-    table = SuspendedUsersTable(access_objects, has_suspension_perm=has_suspension_perm)
+    table = SuspendedUsersTable(access_objects, has_suspension_perm=request.is_opportunity_pm)
     RequestConfig(request, paginate={"per_page": get_validated_page_size(request)}).configure(table)
     path = []
-    if request.opportunity.managed:
-        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
-        path.append(
-            {
-                "title": request.opportunity.managedopportunity.program.name,
-                "url": reverse("program:home", args=(org_slug,)),
-            }
-        )
+    path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+    path.append(
+        {
+            "title": request.opportunity.program.name,
+            "url": reverse("program:home", args=(org_slug,)),
+        }
+    )
     path.extend(
         [
             {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
@@ -1509,9 +1482,6 @@ def user_visit_review(request, org_slug, opp_id):
 def payment_report(request, org_slug, opp_id):
     usd = request.GET.get("usd", False)
 
-    if not request.opportunity.managed:
-        return redirect("opportunity:detail", org_slug, opp_id)
-
     amount_field = "amount"
     currency = request.opportunity.currency_code
     if usd:
@@ -1572,9 +1542,6 @@ def payment_report(request, org_slug, opp_id):
 @org_member_required
 @opportunity_required
 def invoice_list(request, org_slug, opp_id):
-    if not request.opportunity.managed:
-        return redirect("opportunity:detail", org_slug, opp_id)
-
     filter_kwargs = dict(opportunity=request.opportunity)
 
     highlight_invoice_number = request.GET.get("highlight")
@@ -1674,8 +1641,7 @@ class InvoiceCreateView(OrganizationUserMixin, OpportunityObjectMixin, CreateVie
         return "New Custom Invoice"
 
     def post(self, request, org_slug, opp_id, **kwargs):
-        opportunity = self.get_opportunity()
-        if not opportunity.managed or request.is_opportunity_pm:
+        if request.is_opportunity_pm:
             return redirect("opportunity:detail", org_slug, opp_id)
 
         form = self.get_form()
@@ -1814,7 +1780,7 @@ def invoice_update_status(request, org_slug, opp_id):
     - Network Manager: PENDING_NM_REVIEW -> PENDING_PM_REVIEW (submit to PM) or CANCELLED_BY_NM (cancel)
     - Program Manager: PENDING_PM_REVIEW -> READY_TO_PAY (approve for payment) or REJECTED_BY_PM (reject)
     """
-    if not (request.opportunity.managed and request.org_membership):
+    if not request.org_membership:
         return HttpResponse(
             status=302,
             headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
@@ -1855,7 +1821,7 @@ def invoice_update_status(request, org_slug, opp_id):
 @opportunity_required
 @require_POST
 def invoice_pay(request, org_slug, opp_id):
-    if not request.opportunity.managed or not (request.org_membership and request.org_membership.is_program_manager):
+    if not request.is_opportunity_pm:
         return HttpResponse(
             status=302,
             headers={"HX-Redirect": reverse("opportunity:detail", args=[org_slug, opp_id])},
@@ -2058,14 +2024,13 @@ class WorkerPageView(OrganizationUserMixin, OpportunityObjectMixin, TemplateView
         org_slug = self.kwargs["org_slug"]
         opp_id = self.kwargs["opp_id"]
         path = []
-        if self.opportunity.managed:
-            path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
-            path.append(
-                {
-                    "title": self.opportunity.managedopportunity.program.name,
-                    "url": reverse("program:home", args=(org_slug,)),
-                }
-            )
+        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+        path.append(
+            {
+                "title": self.opportunity.program.name,
+                "url": reverse("program:home", args=(org_slug,)),
+            }
+        )
         path.extend(
             [
                 {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
@@ -2085,7 +2050,7 @@ class WorkerPageView(OrganizationUserMixin, OpportunityObjectMixin, TemplateView
             for flag, _description in visit.flag_reason.get("flags", []):
                 flag_label = FlagLabels.get_label(flag)
                 if visit.status == VisitValidationStatus.approved:
-                    if self.opportunity.managed and visit.review_created_on is not None:
+                    if visit.review_created_on is not None:
                         if visit.review_status == VisitReviewStatus.agree:
                             flagged_info[flag_label]["approved"] += 1
                         else:
@@ -2128,11 +2093,7 @@ class WorkerPageView(OrganizationUserMixin, OpportunityObjectMixin, TemplateView
                 "opportunity": self.opportunity,
                 "opportunity_access": self.opportunity_access,
                 "path": self.get_path(),
-                "has_suspension_perm": (
-                    self.request.is_opportunity_pm
-                    if self.opportunity.managed
-                    else request_user_is_program_manager(self.request)
-                ),
+                "has_suspension_perm": self.request.is_opportunity_pm,
             }
         )
         return context
@@ -2150,7 +2111,7 @@ class UserVisitVerificationView(WorkerPageView):
 
 
 def _can_manage_tasks(request, opportunity):
-    return _request_user_is_member(request) and (not opportunity.managed or request.is_opportunity_pm)
+    return _request_user_is_member(request) and request.is_opportunity_pm
 
 
 def _task_redirect_url(request, org_slug, opp_id):
@@ -2247,36 +2208,30 @@ class WorkerCompletedTaskTableView(WorkerTableView, FilterMixin):
 
 
 def get_user_visit_counts(opportunity, queryset):
-    visit_count_kwargs = {}
-    if opportunity.managed:
-        visit_count_kwargs = dict(
-            pending_review=Count(
-                "id",
-                filter=Q(
-                    review_status=VisitReviewStatus.pending,
-                    status=VisitValidationStatus.approved,
-                    review_created_on__isnull=False,
-                ),
-            ),
-            disagree=Count(
-                "id",
-                filter=Q(
-                    review_status=VisitReviewStatus.disagree,
-                    review_created_on__isnull=False,
-                ),
-            ),
-            agree=Count(
-                "id",
-                filter=Q(
-                    status=VisitValidationStatus.approved,
-                    review_status=VisitReviewStatus.agree,
-                    review_created_on__isnull=False,
-                ),
-            ),
-        )
-
     user_visit_counts = queryset.aggregate(
-        **visit_count_kwargs,
+        pending_review=Count(
+            "id",
+            filter=Q(
+                review_status=VisitReviewStatus.pending,
+                status=VisitValidationStatus.approved,
+                review_created_on__isnull=False,
+            ),
+        ),
+        disagree=Count(
+            "id",
+            filter=Q(
+                review_status=VisitReviewStatus.disagree,
+                review_created_on__isnull=False,
+            ),
+        ),
+        agree=Count(
+            "id",
+            filter=Q(
+                status=VisitValidationStatus.approved,
+                review_status=VisitReviewStatus.agree,
+                review_created_on__isnull=False,
+            ),
+        ),
         approved=Count("id", filter=Q(status=VisitValidationStatus.approved)),
         pending=Count("id", filter=Q(status__in=[VisitValidationStatus.pending, VisitValidationStatus.duplicate])),
         rejected=Count("id", filter=Q(status=VisitValidationStatus.rejected)),
@@ -2342,13 +2297,10 @@ class VisitVerificationTableView(WorkerVisitTableView):
             else:
                 return ["approved", "rejected", "all"]
 
-        if opportunity.managed:
-            if self.request.is_opportunity_pm:
-                return ["pending_review", "disagree", "agree", "all"]
-            else:
-                return ["pending", "pending_review", "disagree", "agree", "rejected", "all"]
-
-        return ["pending", "approved", "rejected", "all"]
+        if self.request.is_opportunity_pm:
+            return ["pending_review", "disagree", "agree", "all"]
+        else:
+            return ["pending", "pending_review", "disagree", "agree", "rejected", "all"]
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -2628,14 +2580,13 @@ class BaseWorkerListView(OrganizationUserMixin, OpportunityObjectMixin, View):
 
     def get_context_data(self, opportunity, org_slug):
         path = []
-        if opportunity.managed:
-            path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
-            path.append(
-                {
-                    "title": opportunity.program.name,
-                    "url": reverse("program:home", args=(org_slug,)),
-                }
-            )
+        path.append({"title": "Programs", "url": reverse("program:home", args=(org_slug,))})
+        path.append(
+            {
+                "title": opportunity.program.name,
+                "url": reverse("program:home", args=(org_slug,)),
+            }
+        )
         path.extend(
             [
                 {"title": "Opportunities", "url": reverse("opportunity:list", args=(org_slug,))},
@@ -2729,18 +2680,16 @@ class WorkerDeliverView(BaseWorkerListView, FilterMixin):
                 ),
                 "import_url": reverse(
                     "opportunity:review_visit_import"
-                    if (opportunity.managed and self.request.is_opportunity_pm)
+                    if self.request.is_opportunity_pm
                     else "opportunity:visit_import",
                     args=(org_slug, opportunity.opportunity_id),
                 ),
             },
             "import_visit_helper_text": _(
-                'The file must contain at least the "Visit ID"{extra} and "Status" column. The import is case-insensitive.'  # noqa: E501
-            ).format(extra=_(', "Justification"') if opportunity.managed else ""),
+                'The file must contain at least the "Visit ID", "Justification" and "Status" column. The import is case-insensitive.'  # noqa: E501
+            ),
             "export_user_visit_title": _(
-                "Import PM Review Sheet"
-                if (opportunity.managed and self.request.is_opportunity_pm)
-                else "Import Verified Visits"
+                "Import PM Review Sheet" if self.request.is_opportunity_pm else "Import Verified Visits"
             ),
         }
         context.update(self.get_filter_context())
@@ -2858,9 +2807,7 @@ def worker_learn_status_view(request, org_slug, opp_id, access_id):
             "table": table,
             "access": access,
             "path": path,
-            "has_suspension_perm": (
-                request.is_opportunity_pm if request.opportunity.managed else request_user_is_program_manager(request)
-            ),
+            "has_suspension_perm": (request.is_opportunity_pm),
         },
     )
 
@@ -2947,13 +2894,7 @@ class OpportunityPaymentUnitTableView(OrganizationUserMixin, OpportunityObjectMi
     def get_table_kwargs(self):
         kwargs = super().get_table_kwargs()
         kwargs["org_slug"] = self.request.org.slug
-        program_manager = self.request.is_opportunity_pm
-        kwargs["can_edit"] = (
-            not self.get_opportunity().managed
-            and self.request.org_membership
-            and not self.request.org_membership.is_viewer
-        ) or program_manager
-        kwargs["is_program_manager"] = program_manager
+        kwargs["is_program_manager"] = self.request.is_opportunity_pm
         return kwargs
 
 

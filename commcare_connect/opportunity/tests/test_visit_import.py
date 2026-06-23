@@ -29,6 +29,7 @@ from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     PaymentFactory,
     PaymentUnitFactory,
     UserVisitFactory,
@@ -50,7 +51,6 @@ from commcare_connect.opportunity.visit_import import (
     get_missing_justification_message,
     update_payment_accrued,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import OrganizationFactory
 
@@ -768,7 +768,7 @@ def _validate_saved_fields(opportunity_access: OpportunityAccess):
 class TestBulkReviewVisitImport:
     def setup_method(self):
         self.organization = OrganizationFactory.create()
-        self.opp = ManagedOpportunityFactory.create(organization=self.organization)
+        self.opp = OpportunityFactory.create(organization=self.organization)
         self.now_time = now()
 
     def _prepare_dataset(self, visits, status):

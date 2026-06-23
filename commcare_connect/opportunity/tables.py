@@ -688,15 +688,11 @@ class OpportunityTable(BaseOpportunityList):
                 "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -790,14 +786,12 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
+        actions.append(
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            }
+        )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -967,7 +961,7 @@ class UserVisitVerificationTable(WorkerVisitTable):
             return self.get_icons([record.status])
 
         status = []
-        if record.opportunity.managed and record.review_status and record.review_created_on:
+        if record.review_status and record.review_created_on:
             if (
                 record.review_status == VisitReviewStatus.pending.value
                 and record.status == VisitValidationStatus.approved
@@ -1693,8 +1687,8 @@ class PaymentUnitTable(OrgContextTable):
     org_amount = tables.Column(verbose_name="Org pay per delivery")
 
     def __init__(self, *args, **kwargs):
-        self.can_edit = kwargs.pop("can_edit", False)
-        if not kwargs.pop("is_program_manager", False):
+        self.can_edit = kwargs.pop("is_program_manager", False)
+        if not self.can_edit:
             kwargs["exclude"] = "org_amount"
         super().__init__(*args, **kwargs)
 
