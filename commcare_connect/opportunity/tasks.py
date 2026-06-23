@@ -276,6 +276,12 @@ def auto_deactivate_ended_opportunities():
         opportunities.update(active=False)
 
 
+@celery_app.task()
+def auto_archive_test_opportunities():
+    cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_DEACTIVATION_DAYS)
+    Opportunity.objects.filter(is_test=True, archived=False, end_date__lte=cutoff).update(archived=True)
+
+
 def _get_inactive_message(access: OpportunityAccess):
     has_claimed_opportunity = OpportunityClaim.objects.filter(opportunity_access=access).exists()
     if has_claimed_opportunity:
