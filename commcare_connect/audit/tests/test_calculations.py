@@ -1,5 +1,33 @@
+import pytest
+
 from commcare_connect.audit import calculations
-from commcare_connect.audit.calculations import AuditCalculation, CalculationResult, register_calculation
+from commcare_connect.audit.calculations import (
+    AuditCalculation,
+    CalculationResult,
+    Measurement,
+    format_value,
+    register_calculation,
+)
+
+
+@pytest.mark.parametrize(
+    "result, with_fraction, expected",
+    [
+        ({"value": None}, False, "-"),
+        ({"value": 0.564356}, False, "0.56"),
+        ({"value": 0.5}, False, "0.50"),
+        ({"value": 12.0}, False, "12.00"),
+        ({"value": 56.44543, "numerator": 56, "denominator": 100}, False, "56%"),
+        ({"value": 56.6, "numerator": 57, "denominator": 100}, False, "57%"),
+        ({"value": 3}, False, "3"),
+        ({"value": "n/a"}, False, "n/a"),
+        ({"value": 56.44543, "numerator": 3, "denominator": 5}, True, "56% (3/5)"),
+        ({"value": 0.564356}, True, "0.56"),
+        ({"value": None}, True, "-"),
+    ],
+)
+def test_format_value(result, with_fraction, expected):
+    assert format_value(result, with_fraction=with_fraction) == expected
 
 
 def test_calculation_result_to_dict():
@@ -30,7 +58,7 @@ class _FakeCalc(AuditCalculation):
         self._sample_size = sample_size
 
     def compute(self, opportunity_access, period_start, period_end):
-        return self._value, self._sample_size
+        return Measurement(self._value, self._sample_size)
 
 
 def _run(value, sample_size):
@@ -61,6 +89,33 @@ def test_value_inside_bounds_is_in_range():
     assert result.in_range is True
 
 
+class _PctCalc(AuditCalculation):
+    name = "pct"
+    label = "Pct"
+    is_percentage = True
+    min_sample_size = 5
+
+    def __init__(self, measurement):
+        self._measurement = measurement
+
+    def compute(self, opportunity_access, period_start, period_end):
+        return self._measurement
+
+
+def test_percentage_denominator_defaults_to_sample_size():
+    result = _PctCalc(Measurement(25.0, 8)).run(None, None, None)
+    assert result.denominator == 8
+    assert result.numerator == 2  # round(25.0 * 8 / 100)
+
+
+def test_percentage_denominator_override_decouples_from_gating_sample():
+    # Gate on sample_size=6 (>= min 5), but report the rate over 8.
+    result = _PctCalc(Measurement(25.0, 6, denominator=8)).run(None, None, None)
+    assert result.has_sufficient_data is True
+    assert result.denominator == 8
+    assert result.numerator == 2  # round(25.0 * 8 / 100), derived from value not sample_size
+
+
 def test_register_calculation_appends_instance():
     original = list(calculations._REGISTRY)
     try:
@@ -72,7 +127,7 @@ def test_register_calculation_appends_instance():
             label = "Dummy"
 
             def compute(self, opportunity_access, period_start, period_end):
-                return 1, 1
+                return Measurement(1, 1)
 
         registered = calculations.get_registered_calculations()
         assert len(registered) == 1

@@ -468,7 +468,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         review_button = (
             f'<a href="{invoice_review_url}" '
             f'class="button button-md outline-style !inline-flex justify-center">'
-            f'{_("Review")}</a>'
+            f"{_('Review')}</a>"
         )
         pay_button = ""
         if self.is_pm:
@@ -557,7 +557,7 @@ class BaseOpportunityList(OrgContextTable):
 
     status = tables.Column(verbose_name="Status", accessor="status", orderable=True)
 
-    program = tables.Column()
+    program = tables.Column(accessor="program_name")
     start_date = DMYTColumn()
     end_date = DMYTColumn()
 
@@ -597,7 +597,7 @@ class BaseOpportunityList(OrgContextTable):
         return date.strftime("%d-%b-%Y") if date else "--"
 
     def _render_div(self, value, extra_classes=""):
-        base_classes = "flex text-sm font-normal truncate text-brand-deep-purple " "overflow-clip overflow-ellipsis"
+        base_classes = "flex text-sm font-normal truncate text-brand-deep-purple overflow-clip overflow-ellipsis"
         all_classes = f"{base_classes} {extra_classes}".strip()
         return format_html('<div class="{}">{}</div>', all_classes, value)
 
@@ -688,15 +688,11 @@ class OpportunityTable(BaseOpportunityList):
                 "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -790,14 +786,12 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
+        actions.append(
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            }
+        )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -967,7 +961,7 @@ class UserVisitVerificationTable(WorkerVisitTable):
             return self.get_icons([record.status])
 
         status = []
-        if record.opportunity.managed and record.review_status and record.review_created_on:
+        if record.review_status and record.review_created_on:
             if (
                 record.review_status == VisitReviewStatus.pending.value
                 and record.status == VisitValidationStatus.approved
@@ -1053,24 +1047,24 @@ class StatusIndicatorColumn(tables.Column):
     def render(self, record):
         if self._is_suspended(record):
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-minus-square text-black-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-minus-square text-black-600"></i></span>',
                 _("User suspended"),
             )
 
         if record.status == UserInviteStatus.accepted:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-check text-green-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-circle-check text-green-600"></i></span>',
                 _("Invite accepted"),
             )
         elif record.status in [UserInviteStatus.invited, UserInviteStatus.sms_delivered]:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-regular fa-clock text-orange-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-regular fa-clock text-orange-600"></i></span>',
                 _("Invite pending"),
             )
 
         if record.status in [UserInviteStatus.not_found, UserInviteStatus.sms_not_delivered]:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-xmark text-red-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-circle-xmark text-red-600"></i></span>',
                 _("User not found") if record.status == UserInviteStatus.not_found else _("Invite failed"),
             )
 
@@ -1693,8 +1687,8 @@ class PaymentUnitTable(OrgContextTable):
     org_amount = tables.Column(verbose_name="Org pay per delivery")
 
     def __init__(self, *args, **kwargs):
-        self.can_edit = kwargs.pop("can_edit", False)
-        if not kwargs.pop("is_program_manager", False):
+        self.can_edit = kwargs.pop("is_program_manager", False)
+        if not self.can_edit:
             kwargs["exclude"] = "org_amount"
         super().__init__(*args, **kwargs)
 
@@ -1847,8 +1841,7 @@ class AssignedTaskListTable(OpportunityContextTable):
     def render_assigned_task_id(self, value):
         # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
         return format_html(
-            '<a href="#" class="text-brand-indigo hover:underline">'
-            '<span class="text-sm font-medium">#{}</span></a>',
+            '<a href="#" class="text-brand-indigo hover:underline"><span class="text-sm font-medium">#{}</span></a>',
             value,
         )
 

@@ -5,15 +5,15 @@ from unittest import mock
 import pytest
 
 from commcare_connect.opportunity.exceptions import TaskAlreadyAssignedError
-from commcare_connect.opportunity.models import OpportunityActiveEvent  # added via pghistory
-from commcare_connect.opportunity.models import PaymentInvoiceStatusEvent  # added via pghistory
 from commcare_connect.opportunity.models import (
     AssignedTask,
     AssignedTaskStatus,
     InvoiceStatus,
     Opportunity,
+    OpportunityActiveEvent,  # added via pghistory
     OpportunityClaimLimit,
     PaymentInvoice,
+    PaymentInvoiceStatusEvent,  # added via pghistory
 )
 from commcare_connect.opportunity.tests.factories import (
     AssignedTaskFactory,
@@ -140,10 +140,7 @@ def test_opportunity_stats(opportunity: Opportunity, user: User):
         payment_unit_sub.id,
     }
     payment_units = [payment_unit_sub, payment_unit1, payment_unit2]
-    budget_per_user = sum(pu.max_total * pu.amount for pu in payment_units)
-
-    if opportunity.managed:
-        budget_per_user += sum(pu.max_total * pu.org_amount for pu in payment_units)
+    budget_per_user = sum(pu.max_total * (pu.amount + pu.org_amount) for pu in payment_units)
     opportunity.total_budget = budget_per_user * 3
 
     payment_units = [payment_unit1, payment_unit2, payment_unit_sub]
@@ -160,18 +157,18 @@ def test_opportunity_stats(opportunity: Opportunity, user: User):
     ocl1 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit1)
     ocl2 = OpportunityClaimLimitFactory(opportunity_claim=claim, payment_unit=payment_unit2)
 
-    assert opportunity.claimed_budget == (
-        ocl1.max_visits * (payment_unit1.amount + (payment_unit1.org_amount if opportunity.managed else 0))
-    ) + (ocl2.max_visits * (payment_unit2.amount + (payment_unit2.org_amount if opportunity.managed else 0)))
+    assert opportunity.claimed_budget == (ocl1.max_visits * (payment_unit1.amount + payment_unit1.org_amount)) + (
+        ocl2.max_visits * (payment_unit2.amount + payment_unit2.org_amount)
+    )
     assert opportunity.remaining_budget == opportunity.total_budget - opportunity.claimed_budget
 
 
 @pytest.mark.django_db
 def test_claim_limits(opportunity: Opportunity):
-    payment_unit_sub = PaymentUnitFactory(opportunity=opportunity, parent_payment_unit=None)
-    payment_units = PaymentUnitFactory.create_batch(2, opportunity=opportunity, parent_payment_unit=None) + [
-        payment_unit_sub
-    ]
+    payment_unit_sub = PaymentUnitFactory(opportunity=opportunity, parent_payment_unit=None, org_amount=0)
+    payment_units = PaymentUnitFactory.create_batch(
+        2, opportunity=opportunity, parent_payment_unit=None, org_amount=0
+    ) + [payment_unit_sub]
     payment_unit_sub.parent_payment_unit = payment_units[0]
     budget_per_user = sum([p.max_total * p.amount for p in payment_units])
     # budget not enough for more than 2 users

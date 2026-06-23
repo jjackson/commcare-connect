@@ -30,6 +30,7 @@ from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     PaymentFactory,
     PaymentUnitFactory,
     UserVisitFactory,
@@ -51,7 +52,6 @@ from commcare_connect.opportunity.visit_import import (
     get_missing_justification_message,
     update_payment_accrued,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import OrganizationFactory
 
@@ -489,25 +489,25 @@ def test_bulk_update_catchments(opportunity, dataset, new_catchments, old_catchm
 
     import_status = _bulk_update_catchments(opportunity, dataset)
 
-    assert import_status.seen_catchments == {
-        str(catchment.id) for catchment in old_catchments
-    }, "Mismatch in updated catchments"
+    assert import_status.seen_catchments == {str(catchment.id) for catchment in old_catchments}, (
+        "Mismatch in updated catchments"
+    )
     assert import_status.new_catchments == len(new_catchments), "Incorrect number of new catchments"
 
     for catchment in old_catchments:
         updated_catchment = CatchmentArea.objects.get(site_code=catchment.site_code)
-        assert (
-            updated_catchment.name == f"{name_change} {catchment.name}"
-        ), f"Name not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.radius == catchment.radius + radius_change
-        ), f"Radius not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.latitude == catchment.latitude + latitude_change
-        ), f"Latitude not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.longitude == catchment.longitude + longitude_change
-        ), f"Longitude not updated correctly for catchment {catchment.id}"
+        assert updated_catchment.name == f"{name_change} {catchment.name}", (
+            f"Name not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.radius == catchment.radius + radius_change, (
+            f"Radius not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.latitude == catchment.latitude + latitude_change, (
+            f"Latitude not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.longitude == catchment.longitude + longitude_change, (
+            f"Longitude not updated correctly for catchment {catchment.id}"
+        )
         assert updated_catchment.active, f"Active status not updated correctly for catchment {catchment.id}"
 
 
@@ -769,7 +769,7 @@ def _validate_saved_fields(opportunity_access: OpportunityAccess):
 class TestBulkReviewVisitImport:
     def setup_method(self):
         self.organization = OrganizationFactory.create()
-        self.opp = ManagedOpportunityFactory.create(organization=self.organization)
+        self.opp = OpportunityFactory.create(organization=self.organization)
         self.now_time = now()
 
     def _prepare_dataset(self, visits, status):

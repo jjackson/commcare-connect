@@ -193,9 +193,10 @@ def test_download_attachments(mobile_user: User, opportunity: Opportunity):
         opportunity=opportunity,
         form_json={"attachments": {"myimage.jpg": {"content_type": "image/jpeg", "length": 20}}},
     )
-    with mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response, mock.patch(
-        "commcare_connect.opportunity.tasks.default_storage.save"
-    ) as save_blob:
+    with (
+        mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response,
+        mock.patch("commcare_connect.opportunity.tasks.default_storage.save") as save_blob,
+    ):
         get_response.return_value.content = b"asdas"
         download_user_visit_attachments.run(user_visit.id)
         blob_meta = BlobMeta.objects.first()
@@ -221,9 +222,10 @@ def test_download_inaccessibility_request_attachments_creates_blobs(opportunity)
         "photo.jpg": {"content_type": "image/jpeg", "length": 20},
     }
 
-    with mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response, mock.patch(
-        "commcare_connect.opportunity.tasks.default_storage.save"
-    ) as save_blob:
+    with (
+        mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response,
+        mock.patch("commcare_connect.opportunity.tasks.default_storage.save") as save_blob,
+    ):
         get_response.return_value.content = b"imgdata"
         download_inaccessibility_request_attachments.run(xform_id, attachments)
 
@@ -252,9 +254,10 @@ def test_download_inaccessibility_request_attachments_skips_existing_blobs(oppor
     )
     attachments = {"photo.jpg": {"content_type": "image/jpeg", "length": 20}}
 
-    with mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response, mock.patch(
-        "commcare_connect.opportunity.tasks.default_storage.save"
-    ) as save_blob:
+    with (
+        mock.patch("commcare_connect.opportunity.tasks.httpx.get") as get_response,
+        mock.patch("commcare_connect.opportunity.tasks.default_storage.save") as save_blob,
+    ):
         download_inaccessibility_request_attachments.run(xform_id, attachments)
 
     get_response.assert_not_called()
@@ -290,12 +293,8 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
             yield
 
     def test_generate_invoice_for_two_active_managed_opportunities(self):
-        opportunity1 = OpportunityFactory(
-            active=True, managed=True, is_test=False, start_date=datetime.date(2026, 1, 1)
-        )
-        opportunity2 = OpportunityFactory(
-            active=True, managed=True, is_test=False, start_date=datetime.date(2026, 12, 1)
-        )
+        opportunity1 = OpportunityFactory(active=True, is_test=False, start_date=datetime.date(2026, 1, 1))
+        opportunity2 = OpportunityFactory(active=True, is_test=False, start_date=datetime.date(2026, 12, 1))
 
         payment_unit1 = PaymentUnitFactory(opportunity=opportunity1, amount=Decimal("100.00"))
         payment_unit2 = PaymentUnitFactory(opportunity=opportunity2, amount=Decimal("50.00"))
@@ -345,9 +344,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert completed_work2.invoice == invoice2
 
     def test_no_invoice_for_inactive_opportunities(self):
-        inactive_opportunity = OpportunityFactory(
-            active=False, managed=True, is_test=False, start_date=datetime.date(2026, 1, 1)
-        )
+        inactive_opportunity = OpportunityFactory(active=False, is_test=False, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=inactive_opportunity)
         access = OpportunityAccessFactory(opportunity=inactive_opportunity)
         completed_work = CompletedWorkFactory(
@@ -366,30 +363,8 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert PaymentInvoice.objects.count() == 0
         assert completed_work.invoice is None
 
-    def test_no_invoice_for_active_unmanaged_opportunity(self):
-        unmanaged_opportunity = OpportunityFactory(
-            active=True, managed=False, is_test=False, start_date=datetime.date(2026, 1, 1)
-        )
-        payment_unit = PaymentUnitFactory(opportunity=unmanaged_opportunity, amount=Decimal("100.00"))
-        access = OpportunityAccessFactory(opportunity=unmanaged_opportunity)
-        completed_work = CompletedWorkFactory(
-            opportunity_access=access,
-            payment_unit=payment_unit,
-            status=CompletedWorkStatus.approved,
-            status_modified_date=datetime.date(2024, 1, 5),
-        )
-        completed_work.saved_payment_accrued = Decimal("100.00")
-        completed_work.save()
-
-        generate_automated_service_delivery_invoice()
-
-        assert PaymentInvoice.objects.count() == 0
-        assert completed_work.invoice is None
-
     def test_no_invoice_with_no_approved_work(self):
-        opportunity = OpportunityFactory(
-            active=True, managed=True, is_test=False, start_date=datetime.date(2026, 1, 1)
-        )
+        opportunity = OpportunityFactory(active=True, is_test=False, start_date=datetime.date(2026, 1, 1))
 
         generate_automated_service_delivery_invoice()
 
@@ -397,9 +372,7 @@ class TestGenerateAutomatedServiceDeliveryInvoice:
         assert len(invoice) == 0
 
     def test_no_invoice_for_test_opportunity(self):
-        test_opportunity = OpportunityFactory(
-            active=True, managed=True, is_test=True, start_date=datetime.date(2026, 1, 1)
-        )
+        test_opportunity = OpportunityFactory(active=True, is_test=True, start_date=datetime.date(2026, 1, 1))
         payment_unit = PaymentUnitFactory(opportunity=test_opportunity, amount=Decimal("100.00"))
         access = OpportunityAccessFactory(opportunity=test_opportunity)
         completed_work = CompletedWorkFactory(

@@ -10,9 +10,10 @@ from commcare_connect.opportunity.tests.factories import (
     DeliverUnitFactory,
     DeliveryTypeFactory,
     HQApiKeyFactory,
+    OpportunityFactory,
     PaymentUnitFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def managed_opp_with_deliver_units(program_manager_org, organization):
     hq_server = HQServerFactory()
     learn_app = CommCareAppFactory(organization=organization, hq_server=hq_server)
     deliver_app = CommCareAppFactory(organization=organization, hq_server=hq_server)
-    opportunity = ManagedOpportunityFactory(
+    opportunity = OpportunityFactory(
         program=program,
         organization=organization,
         learn_app=learn_app,
@@ -38,7 +39,7 @@ def managed_opp_with_deliver_units(program_manager_org, organization):
 @pytest.fixture
 def active_managed_opportunity(program_manager_org, organization):
     program = ProgramFactory(organization=program_manager_org)
-    return ManagedOpportunityFactory(program=program, organization=organization, active=True)
+    return OpportunityFactory(program=program, organization=organization, active=True)
 
 
 @pytest.mark.django_db
@@ -262,7 +263,7 @@ class TestActivateOpportunity:
         self, api_client, program_manager_org_user_admin, program_manager_org, organization
     ):
         program = ProgramFactory(organization=program_manager_org)
-        opportunity = ManagedOpportunityFactory(
+        opportunity = OpportunityFactory(
             program=program,
             organization=organization,
             active=False,

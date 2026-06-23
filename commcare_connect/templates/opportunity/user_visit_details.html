@@ -260,10 +260,7 @@
                 {% if request.org_membership.is_viewer %} disabled {% else %} {% if user_visit.status == "rejected" or user_visit.review_status == "agree" %} disabled {% else %} @click="showRejectModal = true; showApproveModal = false;" {% endif %}
                 {% endif %}>{% translate "Reject" %}</button>
         <button class="button button-md positive-light"
-                {% if request.org_membership.is_viewer %} disabled {% else %} {% if user_visit.status != "approved" or user_visit.review_status == "disagree" %} {% if user_visit.opportunity.managed %} @click="showRejectModal = false; showApproveModal = true;" {% else %} hx-post="{% url "opportunity:approve_visits" org_slug=request.org.slug opp_id=user_visit.opportunity.opportunity_id %}" hx-vals='{"visit_ids[]": "{{ user_visit.id }}"}' hx-swap="none" {% endif %}
-                {% else %}
-                disabled
-                {% endif %}
+                {% if request.org_membership.is_viewer %} disabled {% else %} {% if user_visit.status != "approved" or user_visit.review_status == "disagree" %} @click="showRejectModal = false; showApproveModal = true;" {% else %} disabled {% endif %}
                 {% endif %}>{% translate "Approve" %}</button>
       </div>
       <div x-cloak
@@ -301,43 +298,41 @@
           </form>
         </div>
       </div>
-      {% if user_visit.opportunity.managed %}
-        <div x-cloak
-             x-show="showApproveModal"
-             x-transition.opacity
-             class="modal-backdrop">
-          <div @click.away="showApproveModal = false" x-transition class="modal">
-            <div class="header flex justify-between items-center">
-              <h2 class="title">{% translate "Justification for Approval" %}</h2>
-              <button @click="showApproveModal = false"
-                      class="button-icon"
-                      aria-label="Close">
-                <i class="fa-solid fa-xmark"></i>
-              </button>
-            </div>
-            <form hx-post="{% url "opportunity:approve_visits" org_slug=request.org.slug opp_id=user_visit.opportunity.opportunity_id %}"
-                  hx-swap="none"
-                  @submit="showApproveModal = false">
-              {% csrf_token %}
-              <div class="py-4">
-                <textarea required
-                          class="base-textarea"
-                          id="justification"
-                          rows="3"
-                          name="justification"
-                          placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
-              </div>
-              <input type="hidden" name="visit_ids[]" value="{{ user_visit.id }}">
-              <div class="footer flex justify-end">
-                <button @click="showApproveModal = false"
-                        type="button"
-                        class="button button-md outline-style">{% translate "Close" %}</button>
-                <button type="submit" class="button button-md positive-dark">{% translate "Approve" %}</button>
-              </div>
-            </form>
+      <div x-cloak
+           x-show="showApproveModal"
+           x-transition.opacity
+           class="modal-backdrop">
+        <div @click.away="showApproveModal = false" x-transition class="modal">
+          <div class="header flex justify-between items-center">
+            <h2 class="title">{% translate "Justification for Approval" %}</h2>
+            <button @click="showApproveModal = false"
+                    class="button-icon"
+                    aria-label="Close">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
           </div>
+          <form hx-post="{% url 'opportunity:approve_visits' org_slug=request.org.slug opp_id=user_visit.opportunity.opportunity_id %}"
+                hx-swap="none"
+                @submit="showApproveModal = false">
+            {% csrf_token %}
+            <div class="py-4">
+              <textarea required
+                        class="base-textarea"
+                        id="justification"
+                        rows="3"
+                        name="justification"
+                        placeholder="Please provide a reason for approving flagged visits.">{{ justification }}</textarea>
+            </div>
+            <input type="hidden" name="visit_ids[]" value="{{ user_visit.id }}">
+            <div class="footer flex justify-end">
+              <button @click="showApproveModal = false"
+                      type="button"
+                      class="button button-md outline-style">{% translate "Close" %}</button>
+              <button type="submit" class="button button-md positive-dark">{% translate "Approve" %}</button>
+            </div>
+          </form>
         </div>
-      {% endif %}
+      </div>
     {% endif %}
   {% endif %}
 </div>
