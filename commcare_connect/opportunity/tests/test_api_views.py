@@ -224,6 +224,20 @@ def test_opportunity_list_endpoint(
     assert all(all(field in unit for field in payment_unit_fields) for unit in payment_units)
 
 
+@pytest.mark.django_db
+def test_opportunity_list_endpoint_excludes_archived(
+    mobile_user_with_connect_link: User,
+    api_client: APIClient,
+    opportunity: Opportunity,
+):
+    opportunity.archived = True
+    opportunity.save()
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    response = api_client.get("/api/opportunity/")
+    assert response.status_code == 200
+    assert len(response.data) == 0
+
+
 def test_delivery_progress_endpoint(
     mobile_user_with_connect_link: User, api_client: APIClient, opportunity: Opportunity
 ):
