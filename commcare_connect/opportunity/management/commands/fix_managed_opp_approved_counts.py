@@ -1,5 +1,6 @@
 import argparse
 
+from django.core.cache import cache
 from django.core.management import BaseCommand
 from django.db import transaction
 from django.db.models import Prefetch
@@ -66,11 +67,14 @@ class Command(BaseCommand):
         Re-fetches the works under a row lock and re-checks invoice__isnull to avoid racing
         with a concurrent invoicing that could attach one of these works to an invoice between
         the initial query and this update (which would leave the invoice billed on a stale count).
+        Held under the same per-access cache lock as the live payment recompute path
+        (update_payment_accrued_for_user) so the access's payment_accrued isn't clobbered by a
+        concurrent recompute reading a stale sum.
         """
         before = {work.id: (work.saved_approved_count, work.saved_payment_accrued) for work in works}
         work_ids = before.keys()
 
-        with transaction.atomic():
+        with cache.lock(f"update_payment_accrued_lock_{access.id}", timeout=900), transaction.atomic():
             still_uninvoiced = (
                 CompletedWork.objects.filter(id__in=work_ids, invoice__isnull=True)
                 .select_for_update(of=("self",))
