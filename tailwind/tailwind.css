@@ -628,6 +628,20 @@
   .base-table tbody td {
     @apply whitespace-nowrap border-b-[1px] border-gray-100 p-4 text-left;
   }
+
+  .base-table th.col-action,
+  .base-table td.col-action {
+    @apply sticky right-0;
+  }
+
+  .base-table tbody td.col-action {
+    @apply bg-white;
+  }
+
+  .base-table tbody tr:hover td.col-action,
+  .base-table tbody tr.active td.col-action {
+    @apply bg-gray-100;
+  }
 }
 
 /*------------ Tabs --------------*/
