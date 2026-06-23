@@ -1111,7 +1111,7 @@ class AddBudgetExistingUsersForm(forms.Form):
             number_of_visits = -number_of_visits
         budget_change = 0
         for claim in self.claim_limits:
-            org_amount = claim.payment_unit.org_amount if self.opportunity.program_id else 0
+            org_amount = claim.payment_unit.org_amount
             budget_change += (claim.payment_unit.amount + org_amount) * number_of_visits
         return budget_change
 
@@ -1203,18 +1203,14 @@ class AddBudgetNewUsersForm(forms.Form):
 
     def _validate_budget(self, add_users, total_budget):
         increased_budget = 0
-        total_program_budget = 0
-        claimed_program_budget = 0
-
-        if self.opportunity.program_id:
-            program = self.opportunity.program
-            total_program_budget = program.budget
-            claimed_program_budget = (
-                Opportunity.objects.filter(program=program)
-                .exclude(id=self.opportunity.id)
-                .aggregate(total=Sum("total_budget"))["total"]
-                or 0
-            )
+        program = self.opportunity.program
+        total_program_budget = program.budget
+        claimed_program_budget = (
+            Opportunity.objects.filter(program=program)
+            .exclude(id=self.opportunity.id)
+            .aggregate(total=Sum("total_budget"))["total"]
+            or 0
+        )
 
         if add_users:
             for payment_unit in self.payments_units:

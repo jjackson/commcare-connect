@@ -688,14 +688,11 @@ class OpportunityTable(BaseOpportunityList):
                 "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
-        ]
-
-        actions.append(
             {
                 "title": "View Invoices",
                 "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-            }
-        )
+            },
+        ]
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
