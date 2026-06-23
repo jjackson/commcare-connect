@@ -115,6 +115,7 @@ class Opportunity(BaseModel):
     is_test = models.BooleanField(default=True)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
+    program = models.ForeignKey("program.Program", on_delete=models.DO_NOTHING, null=True)
     hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
@@ -224,10 +225,6 @@ class Opportunity(BaseModel):
     @property
     def is_active(self):
         return bool(self.active and self.end_date and self.end_date >= now().date())
-
-    @property
-    def program_name(self):
-        return self.managedopportunity.program.name if self.managed else None
 
     @property
     def has_ended(self):
