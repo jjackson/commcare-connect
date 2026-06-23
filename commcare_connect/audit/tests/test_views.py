@@ -105,7 +105,7 @@ def _detail_url(audit_opp, report):
 
 
 @pytest.mark.django_db
-def test_detail_splits_flagged_and_unflagged(client, program_manager_org_user_admin, audit_opp):
+def test_detail_lists_all_workers_in_one_table(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
 
@@ -115,15 +115,48 @@ def test_detail_splits_flagged_and_unflagged(client, program_manager_org_user_ad
     response = client.get(_detail_url(audit_opp, report))
     assert response.status_code == 200
     html = response.content.decode()
-    # Both user names appear.
-    assert flagged_entry.opportunity_access.user.name in html
-    assert unflagged_entry.opportunity_access.user.name in html
+    # Both flagged and no-action workers appear in the single merged table.
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert flagged_entry.opportunity_access.user.name in rendered_rows
+    assert unflagged_entry.opportunity_access.user.name in rendered_rows
+    # The flagged worker (still needing review) is ordered ahead of the no-action one.
+    assert rendered_rows[0] == flagged_entry.opportunity_access.user.name
     # Progress indicator "0 of 1 workers reviewed" — only flagged rows are counted.
     assert "0 of 1" in html
 
 
 @pytest.mark.django_db
-def test_detail_filter_limits_tables_server_side(client, program_manager_org_user_admin, audit_opp):
+def test_detail_sorts_by_calculation_column(client, program_manager_org_user_admin, audit_opp):
+    client.force_login(program_manager_org_user_admin)
+    report = AuditReportFactory(opportunity=audit_opp)
+
+    def _scored_entry(name, value):
+        access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
+        access.user.name = name
+        access.user.save(update_fields=["name"])
+        return AuditReportEntryFactory(
+            audit_report=report,
+            opportunity_access=access,
+            flagged=False,
+            results={"fake": {"value": value, "has_sufficient_data": True, "in_range": True, "label": "Fake"}},
+        )
+
+    _scored_entry("High", 0.9)
+    _scored_entry("Low", 0.1)
+    _scored_entry("Mid", 0.5)
+
+    response = client.get(_detail_url(audit_opp, report), {"sort": "fake"})
+    assert response.status_code == 200
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert rendered_rows == ["Low", "Mid", "High"]
+
+    response = client.get(_detail_url(audit_opp, report), {"sort": "-fake"})
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert rendered_rows == ["High", "Mid", "Low"]
+
+
+@pytest.mark.django_db
+def test_detail_filter_limits_table_server_side(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
 
@@ -142,16 +175,19 @@ def test_detail_filter_limits_tables_server_side(client, program_manager_org_use
             results={"fake": {"value": 0.5, "has_sufficient_data": True, "in_range": False, "label": "Fake"}},
         )
 
-    # htmx-style partial request with a filter.
+    # htmx-style partial request filtered to a single selected worker.
     response = client.get(
         _detail_url(audit_opp, report),
-        {"filter": "alice"},
+        {"worker": str(alice_access.pk)},
         HTTP_HX_REQUEST="true",
     )
     assert response.status_code == 200
-    html = response.content.decode()
-    assert "Alice Smith" in html
-    assert "Bob Jones" not in html
+    rendered_rows = [e.opportunity_access.user.name for e in response.context["table"].page.object_list.data]
+    assert rendered_rows == ["Alice Smith"]
+    # Both workers remain available as filter options.
+    option_names = [name for _, name in response.context["worker_filter_choices"]]
+    assert "Alice Smith" in option_names
+    assert "Bob Jones" in option_names
 
 
 @pytest.mark.django_db
