@@ -435,15 +435,15 @@ class OpportunityData:
         today = now().date()
         base_filter = Q(organization=organization)
         if program_manager:
-            base_filter |= Q(managedopportunity__program__organization=organization)
+            base_filter |= Q(program__organization=organization)
         is_test = filters.get("is_test", None)
         if is_test not in ["", None]:
             base_filter &= Q(is_test=is_test)
         programs = filters.get("program", [])
         if programs:
-            base_filter &= Q(managedopportunity__program__slug__in=programs)
+            base_filter &= Q(program__slug__in=programs)
         queryset = Opportunity.objects.filter(base_filter).annotate(
-            program=F("managedopportunity__program__name"),
+            program_name=F("program__name"),
             status=Case(
                 When(Q(active=True) & Q(end_date__gte=today), then=Value(0)),  # Active
                 When(Q(active=True) & Q(end_date__lt=today), then=Value(1)),  # Ended
@@ -479,7 +479,7 @@ class OpportunityData:
         )
 
         queryset = Opportunity.objects.filter(id__in=opp_ids).annotate(
-            program=F("managedopportunity__program__name"),
+            program_name=F("program__name"),
             pending_invites=pending_invites_subquery(),
             pending_approvals=Coalesce(pending_approvals_sq, Value(0)),
             total_accrued=total_accrued_sq(),

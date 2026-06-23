@@ -79,7 +79,8 @@ class CalcColumn(columns.Column):
     def __init__(self, calc_name, tooltip="", **kw):
         self.calc_name = calc_name
         self.calc_tooltip = tooltip
-        super().__init__(empty_values=(), orderable=False, **kw)
+        kw.setdefault("attrs", {"th": {"class": "whitespace-normal align-bottom w-28"}})
+        super().__init__(empty_values=(), order_by=(f"results__{calc_name}__value",), **kw)
 
     @property
     def header(self):
@@ -144,13 +145,13 @@ class AuditReportEntryTable(OrgContextTable):
     user = columns.Column(
         accessor="opportunity_access__user__name",
         verbose_name=_l("Connect Worker"),
+        attrs={"th": {"class": "whitespace-normal align-bottom w-40"}},
     )
 
     class Meta:
         model = AuditReportEntry
         fields = ("user",)
         empty_text = _l("No workers.")
-        order_by = ("user",)
 
     def __init__(self, data, *, opportunity, report, columns_spec, **kw):
         self.opportunity = opportunity

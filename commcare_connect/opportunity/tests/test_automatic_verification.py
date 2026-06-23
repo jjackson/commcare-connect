@@ -18,7 +18,7 @@ from commcare_connect.opportunity.models import (
     VisitValidationStatus,
 )
 from commcare_connect.opportunity.tests.factories import DeliverUnitFactory, OpportunityFactory, UserVisitFactory
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.tests.factories import OrganizationFactory
 
 
@@ -150,10 +150,8 @@ class TestProgramHomePendingReview:
     def test_pm_home_excludes_auto_verified(self, client, program_manager_org, program_manager_org_user_admin):
         program = ProgramFactory(organization=program_manager_org)
         nm_org = OrganizationFactory()
-        manual_opp = ManagedOpportunityFactory(
-            organization=nm_org, program=program, automatic_visit_verification=False
-        )
-        auto_opp = ManagedOpportunityFactory(organization=nm_org, program=program, automatic_visit_verification=True)
+        manual_opp = OpportunityFactory(organization=nm_org, program=program, automatic_visit_verification=False)
+        auto_opp = OpportunityFactory(organization=nm_org, program=program, automatic_visit_verification=True)
         for opp in (manual_opp, auto_opp):
             UserVisitFactory(
                 opportunity=opp,
@@ -175,12 +173,8 @@ class TestProgramHomePendingReview:
 
     def test_nm_home_excludes_auto_verified(self, client, organization, program_manager_org, org_user_admin):
         program = ProgramFactory(organization=program_manager_org)
-        manual_opp = ManagedOpportunityFactory(
-            organization=organization, program=program, automatic_visit_verification=False
-        )
-        auto_opp = ManagedOpportunityFactory(
-            organization=organization, program=program, automatic_visit_verification=True
-        )
+        manual_opp = OpportunityFactory(organization=organization, program=program, automatic_visit_verification=False)
+        auto_opp = OpportunityFactory(organization=organization, program=program, automatic_visit_verification=True)
         for opp in (manual_opp, auto_opp):
             UserVisitFactory(opportunity=opp, status=VisitValidationStatus.pending)
 
@@ -221,14 +215,14 @@ class TestAutomaticVerificationBackendGuards:
 @pytest.mark.django_db
 class TestReviewVisitImportRequirePost:
     def test_get_is_rejected(self, client, organization, org_user_member):
-        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False, managed=False)
+        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False)
         client.force_login(org_user_member)
         url = reverse("opportunity:review_visit_import", args=(organization.slug, opp.opportunity_id))
         response = client.get(url)
         assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED
 
     def test_non_member_is_rejected(self, client, organization, user):
-        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False, managed=False)
+        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False)
         client.force_login(user)  # authenticated but not a member of `organization`
         url = reverse("opportunity:review_visit_import", args=(organization.slug, opp.opportunity_id))
         response = client.post(url)
@@ -237,20 +231,26 @@ class TestReviewVisitImportRequirePost:
 
 @pytest.mark.django_db
 class TestVerificationConfigPageTitle:
-    def test_renders_rules_wording_when_auto_verify(self, client, organization, org_user_admin):
-        opp = OpportunityFactory(organization=organization, automatic_visit_verification=True)
-        client.force_login(org_user_admin)
-        url = reverse("opportunity:verification_flags_config", args=(organization.slug, opp.opportunity_id))
+    def test_renders_rules_wording_when_auto_verify(
+        self, client, organization, program_manager_org, program_manager_org_user_admin
+    ):
+        program = ProgramFactory(organization=program_manager_org)
+        opp = OpportunityFactory(program=program, organization=organization, automatic_visit_verification=True)
+        client.force_login(program_manager_org_user_admin)
+        url = reverse("opportunity:verification_flags_config", args=(program_manager_org.slug, opp.opportunity_id))
         response = client.get(url)
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()
         assert "Verification Rules Configuration" in content
         assert "Deliver Unit Rules" in content
 
-    def test_renders_flags_wording_when_manual(self, client, organization, org_user_admin):
-        opp = OpportunityFactory(organization=organization, automatic_visit_verification=False)
-        client.force_login(org_user_admin)
-        url = reverse("opportunity:verification_flags_config", args=(organization.slug, opp.opportunity_id))
+    def test_renders_flags_wording_when_manual(
+        self, client, organization, program_manager_org, program_manager_org_user_admin
+    ):
+        program = ProgramFactory(organization=program_manager_org)
+        opp = OpportunityFactory(program=program, organization=organization, automatic_visit_verification=False)
+        client.force_login(program_manager_org_user_admin)
+        url = reverse("opportunity:verification_flags_config", args=(program_manager_org.slug, opp.opportunity_id))
         response = client.get(url)
         assert response.status_code == HTTPStatus.OK
         content = response.content.decode()

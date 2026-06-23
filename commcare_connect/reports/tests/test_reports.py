@@ -24,7 +24,7 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     UserVisitFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.reports import urls as reports_urls
 from commcare_connect.reports.decorators import KPIReportMixin, kpi_report_access_required
 from commcare_connect.reports.helpers import get_table_data_for_year_month
@@ -513,8 +513,8 @@ class TestInvoiceReportFilter:
     def setup(self):
         self.org = OrganizationFactory()
         self.program = ProgramFactory(organization=self.org)
-        self.opp1 = ManagedOpportunityFactory(program=self.program)
-        self.opp2 = ManagedOpportunityFactory(program=self.program)
+        self.opp1 = OpportunityFactory(program=self.program)
+        self.opp2 = OpportunityFactory(program=self.program)
         self.invoice1 = PaymentInvoiceFactory(opportunity=self.opp1, status=InvoiceStatus.PENDING_NM_REVIEW)
         self.invoice2 = PaymentInvoiceFactory(opportunity=self.opp2, status=InvoiceStatus.PAID)
 
@@ -582,7 +582,7 @@ class TestInvoiceReportFilter:
         ids=["member_user", "privileged_user"],
     )
     def test_opportunity_queryset_scoping(self, use_member_user, other_opp_visible):
-        other_opp = ManagedOpportunityFactory(program=ProgramFactory(organization=OrganizationFactory()))
+        other_opp = OpportunityFactory(program=ProgramFactory(organization=OrganizationFactory()))
 
         if use_member_user:
             user = UserFactory()

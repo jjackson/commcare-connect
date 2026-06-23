@@ -107,7 +107,7 @@ class Flag(AbstractUserFlag):
         opportunity = getattr(request, "opportunity", None)
         if opportunity and self.is_active_for(opportunity):
             return True
-        program = _get_program_for_opportunity(opportunity)
+        program = opportunity.program if opportunity else None
         if program and self.is_active_for(program):
             return True
         org = getattr(request, "org", None)
@@ -115,13 +115,6 @@ class Flag(AbstractUserFlag):
             return True
 
         return False
-
-
-def _get_program_for_opportunity(opportunity):
-    if not (opportunity and opportunity.managed):
-        return None
-    managed_opp = getattr(opportunity, "managedopportunity", None)
-    return managed_opp.program if managed_opp else None
 
 
 def _flush_flag_relation_cache(sender, instance, action, **kwargs):

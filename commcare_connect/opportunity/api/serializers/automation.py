@@ -26,8 +26,8 @@ class PaymentUnitItemSerializer(serializers.Serializer):
     def validate(self, data):
         opportunity = self.context["opportunity"]
 
-        if opportunity.managed and data.get("org_amount") is None:
-            raise serializers.ValidationError({"org_amount": _("org_amount is required for managed opportunities.")})
+        if data.get("org_amount") is None:
+            raise serializers.ValidationError({"org_amount": _("org_amount is required.")})
 
         if data["start_date"] and data["end_date"] and data["end_date"] < data["start_date"]:
             raise serializers.ValidationError({"end_date": _("End date cannot be earlier than start date.")})

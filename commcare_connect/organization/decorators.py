@@ -88,9 +88,7 @@ def opportunity_program_manager_required(view_func):
 
 
 def managed_opportunity_pm_required(view_func):
-    return _get_decorated_function(
-        view_func, lambda request: not request.opportunity.managed or request.is_opportunity_pm
-    )
+    return _get_decorated_function(view_func, lambda request: request.is_opportunity_pm)
 
 
 def _get_decorated_function(view_func, permission_test_function):
@@ -125,9 +123,7 @@ def opportunity_required(view_func):
 
         opp = get_object_by_uuid_or_int(Opportunity.objects.all(), opp_id, uuid_field="opportunity_id")
 
-        if (opp.organization and opp.organization.slug == org_slug) or (
-            opp.managed and opp.managedopportunity.program.organization.slug == org_slug
-        ):
+        if opp.organization.slug == org_slug or opp.program.organization.slug == org_slug:
             request.opportunity = opp
             return view_func(request, org_slug=org_slug, opp_id=opp_id, *args, **kwargs)
 

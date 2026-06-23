@@ -76,39 +76,34 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
-    name_filter = request.GET.get("filter", "").strip()
-    qs = report.entries.select_related("opportunity_access__user")
-    if name_filter:
-        qs = qs.filter(opportunity_access__user__name__icontains=name_filter)
-    entries = list(qs.order_by("opportunity_access__user__name"))
-
-    all_entries = list(report.entries.all())
+    all_entries = list(
+        report.entries.select_related("opportunity_access__user").order_by("opportunity_access__user__name")
+    )
     columns_spec = column_specs(all_entries)
 
-    to_review = [e for e in entries if e.flagged and not e.reviewed]
-    no_action = [e for e in entries if not e.flagged or e.reviewed]
+    worker_filter_choices = [(str(e.opportunity_access_id), e.opportunity_access.user.name) for e in all_entries]
+
+    selected_workers = request.GET.getlist("worker")
+    if selected_workers:
+        entries = [e for e in all_entries if str(e.opportunity_access_id) in selected_workers]
+    else:
+        entries = list(all_entries)
+
+    # If no sorting given, apply default to float workers that need review to the top of the table
+    if not request.GET.get("sort"):
+        entries.sort(key=lambda e: (not (e.flagged and not e.reviewed), e.opportunity_access.user.name.lower()))
 
     total_flagged = sum(1 for e in all_entries if e.flagged)
     reviewed_count = sum(1 for e in all_entries if e.flagged and e.reviewed)
 
-    review_table = AuditReportEntryTable(
-        to_review,
+    table = AuditReportEntryTable(
+        entries,
         opportunity=opportunity,
         report=report,
         columns_spec=columns_spec,
-        prefix="review-",
         org_slug=org_slug,
     )
-    no_action_table = AuditReportEntryTable(
-        no_action,
-        opportunity=opportunity,
-        report=report,
-        columns_spec=columns_spec,
-        prefix="noaction-",
-        org_slug=org_slug,
-    )
-    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(review_table)
-    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(no_action_table)
+    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(table)
 
     path = [
         {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
@@ -129,12 +124,12 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     context = {
         "opportunity": opportunity,
         "report": report,
-        "review_table": review_table,
-        "no_action_table": no_action_table,
+        "table": table,
+        "worker_filter_choices": worker_filter_choices,
+        "selected_workers": selected_workers,
         "reviewed_count": reviewed_count,
         "total_flagged": total_flagged,
         "can_complete": total_flagged == reviewed_count and report.status == AuditReport.Status.PENDING,
-        "name_filter": name_filter,
         "path": path,
         "org_slug": org_slug,
     }
@@ -253,10 +248,11 @@ def export_audit_report(request, org_slug, opp_id, audit_report_id):
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
     name_filter = request.GET.get("filter", "").strip()
+    selected_workers = request.GET.getlist("worker")
     filename = f"weekly_performance_report_{opportunity.opportunity_id}_{report.period_start}_{report.period_end}.csv"
 
     response = StreamingHttpResponse(
-        stream_audit_report_csv(report, name_filter),
+        stream_audit_report_csv(report, name_filter, selected_workers),
         content_type="text/csv",
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
