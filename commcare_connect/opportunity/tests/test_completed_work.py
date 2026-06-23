@@ -697,7 +697,7 @@ class TestUpdateStatus:
         An approved-but-unagreed duplicate must not raise the billable count.
         """
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         deliver_unit = DeliverUnitFactory(
@@ -743,7 +743,7 @@ class TestUpdateStatus:
     def test_managed_opp_billable_count_is_min_agreed_across_required_deliver_units(self):
         """Billable count is the minimum agreed count across required deliver units."""
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         du1 = DeliverUnitFactory(app=opp_access.opportunity.deliver_app, payment_unit=payment_unit)
@@ -788,7 +788,7 @@ class TestUpdateStatus:
     def test_managed_opp_billable_count_caps_at_agreed_optional_visits(self):
         """Optional unit's agreed count caps the billable total, not its approved count."""
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         required_du = DeliverUnitFactory(app=opp_access.opportunity.deliver_app, payment_unit=payment_unit)

@@ -163,6 +163,7 @@ def test_payment_accrued(opportunity: Opportunity):
                     status=VisitValidationStatus.approved.value,
                     opportunity_access=access,
                     completed_work=completed_work,
+                    review_status=VisitReviewStatus.agree.value,
                 )
     update_payment_accrued(opportunity, [mobile_user.id for mobile_user in mobile_users])
     for access in access_objects:
@@ -192,6 +193,7 @@ def test_duplicate_payment(opportunity: Opportunity, mobile_user: User):
         status=VisitValidationStatus.approved.value,
         opportunity_access=access,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -220,6 +222,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
                     deliver_unit=deliver_unit,
                     status=VisitValidationStatus.approved.value,
                     completed_work=completed_work,
+                    review_status=VisitReviewStatus.agree.value,
                 )
             optional_deliver_unit = random.choice(payment_unit.deliver_units.filter(optional=True))
             UserVisitFactory(
@@ -228,6 +231,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
                 deliver_unit=optional_deliver_unit,
                 status=VisitValidationStatus.approved.value,
                 completed_work=completed_work,
+                review_status=VisitReviewStatus.agree.value,
             )
     update_payment_accrued(opportunity, [access.user.id for access in access_objects])
     for access in access_objects:
@@ -253,6 +257,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=deliver_unit,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     optional_deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=True)
     UserVisitFactory.create_batch(
@@ -262,6 +267,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=optional_deliver_unit,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -274,6 +280,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=optional_deliver_unit_2,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -650,6 +657,7 @@ def create_user_visits_for_completed_work(opportunity, user, access, payment_uni
             status=VisitValidationStatus.approved.value,
             opportunity_access=access,
             completed_work=completed_work,
+            review_status=VisitReviewStatus.agree.value,
         )
 
 
