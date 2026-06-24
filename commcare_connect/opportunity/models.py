@@ -113,6 +113,7 @@ class Opportunity(BaseModel):
     auto_approve_payments = models.BooleanField(default=True)
     automatic_visit_verification = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
+    archived = models.BooleanField(default=False)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
     program = models.ForeignKey("program.Program", on_delete=models.DO_NOTHING, null=True)
@@ -220,7 +221,7 @@ class Opportunity(BaseModel):
 
     @property
     def is_active(self):
-        return bool(self.active and self.end_date and self.end_date >= now().date())
+        return bool(not self.archived and self.active and self.end_date and self.end_date >= now().date())
 
     @property
     def has_ended(self):

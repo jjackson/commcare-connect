@@ -21,8 +21,10 @@ from commcare_connect.opportunity.models import (
     UserInvite,
 )
 from commcare_connect.opportunity.tasks import (
+    OPPORTUNITY_AUTO_ARCHIVE_DAYS,
     _get_inactive_message,
     add_connect_users,
+    auto_archive_test_opportunities,
     auto_deactivate_ended_opportunities,
     download_inaccessibility_request_attachments,
     download_user_visit_attachments,
@@ -427,6 +429,24 @@ class TestAutoDeactivateEndedOpportunities:
             deactivation_event.pgh_context.metadata["action"]
             == "commcare_connect.opportunity.tasks.auto_deactivate_ended_opportunities"
         )
+
+
+@pytest.mark.django_db
+class TestAutoArchiveTestOpportunities:
+    @pytest.mark.parametrize(
+        "is_test,days_ago,expected_archived",
+        [
+            (True, OPPORTUNITY_AUTO_ARCHIVE_DAYS, True),
+            (True, OPPORTUNITY_AUTO_ARCHIVE_DAYS - 1, False),
+            (False, OPPORTUNITY_AUTO_ARCHIVE_DAYS, False),
+        ],
+    )
+    def test_archive_boundary_conditions(self, is_test, days_ago, expected_archived):
+        end_date = datetime.date.today() - datetime.timedelta(days=days_ago)
+        opp = OpportunityFactory(is_test=is_test, archived=False, end_date=end_date)
+        auto_archive_test_opportunities()
+        opp.refresh_from_db()
+        assert opp.archived is expected_archived
 
 
 @mock.patch("commcare_connect.opportunity.tasks.send_message")

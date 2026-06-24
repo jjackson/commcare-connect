@@ -644,6 +644,16 @@ def test_get_opportunity_list_data_all_annotations(organization, filters, expect
 
 
 @pytest.mark.django_db
+def test_opportunity_list_excludes_archived(organization):
+    today = now().date()
+    OpportunityFactory(organization=organization, end_date=today + timedelta(days=1), active=True, archived=False)
+    OpportunityFactory(organization=organization, end_date=today + timedelta(days=1), active=True, archived=True)
+
+    queryset = OpportunityData(organization, False, {}).get_data()
+    assert queryset.count() == 1
+
+
+@pytest.mark.django_db
 def test_tiered_queryset_basic():
     users = [User.objects.create(username=f"user{i}") for i in range(5)]
     user_ids = [u.id for u in users]

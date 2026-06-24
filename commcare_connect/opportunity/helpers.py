@@ -436,6 +436,7 @@ class OpportunityData:
         base_filter = Q(organization=organization)
         if program_manager:
             base_filter |= Q(program__organization=organization)
+        base_filter &= Q(archived=False)
         is_test = filters.get("is_test", None)
         if is_test not in ["", None]:
             base_filter &= Q(is_test=is_test)
