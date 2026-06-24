@@ -18,39 +18,25 @@ from commcare_connect.opportunity.tests.factories import (
 )
 
 
-def test_invoice_line_items_table_hides_org_columns_when_not_show_org():
-    table = InvoiceLineItemsTable("KES", [], show_org=False)
+@pytest.mark.parametrize("show_org", [False, True])
+def test_invoice_line_items_table_org_column_visibility(show_org):
+    table = InvoiceLineItemsTable("KES", [], show_org=show_org)
     visible = [column.name for column in table.columns]
-    assert "flw_amount_local" not in visible
-    assert "org_amount_local" not in visible
+    assert ("flw_amount_local" in visible) is show_org
+    assert ("org_amount_local" in visible) is show_org
     assert "total_amount_local" in visible
     assert table.columns["total_amount_local"].column.verbose_name == "Total Pay (KES)"
+    if show_org:
+        assert table.columns["flw_amount_local"].column.verbose_name == "FLW Pay (KES)"
+        assert table.columns["org_amount_local"].column.verbose_name == "Org Pay (KES)"
 
 
-def test_invoice_line_items_table_shows_org_columns_when_show_org():
-    table = InvoiceLineItemsTable("KES", [], show_org=True)
-    visible = [column.name for column in table.columns]
-    assert "flw_amount_local" in visible
-    assert "org_amount_local" in visible
-    assert table.columns["flw_amount_local"].column.verbose_name == "FLW Pay (KES)"
-    assert table.columns["org_amount_local"].column.verbose_name == "Org Pay (KES)"
-    assert table.columns["total_amount_local"].column.verbose_name == "Total Pay (KES)"
-
-
-def test_invoice_deliveries_table_hides_org_columns_when_not_show_org():
-    table = InvoiceDeliveriesTable("KES", [], show_org=False)
+@pytest.mark.parametrize("show_org", [False, True])
+def test_invoice_deliveries_table_org_column_visibility(show_org):
+    table = InvoiceDeliveriesTable("KES", [], show_org=show_org)
     headers = next(table.as_values())
-    assert "FLW Pay (KES)" not in headers
-    assert "Org Pay (KES)" not in headers
-    assert "Total Pay (KES)" in headers
-    assert "Total Pay (USD)" in headers
-
-
-def test_invoice_deliveries_table_shows_org_columns_when_show_org():
-    table = InvoiceDeliveriesTable("KES", [], show_org=True)
-    headers = next(table.as_values())
-    assert "FLW Pay (KES)" in headers
-    assert "Org Pay (KES)" in headers
+    assert ("FLW Pay (KES)" in headers) is show_org
+    assert ("Org Pay (KES)" in headers) is show_org
     assert "Total Pay (KES)" in headers
     assert "Total Pay (USD)" in headers
 
