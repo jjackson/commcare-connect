@@ -1729,31 +1729,33 @@ class PaymentUnitTable(OrgContextTable):
 
 
 class InvoiceLineItemsTable(tables.Table):
-    month = tables.Column()
-    payment_unit_name = tables.Column(verbose_name="Payment Unit")
-    number_approved = tables.Column()
-    flw_amount_local = tables.Column(verbose_name="FLW Pay (local)")
-    org_amount_local = tables.Column(verbose_name="Org Pay (local)")
-    total_amount_local = tables.Column(verbose_name="Total Pay (local)")
-    exchange_rate = tables.Column()
-    total_amount_usd = tables.Column(verbose_name="Total Pay (USD)")
+    month = tables.Column(verbose_name=gettext_lazy("Month"))
+    payment_unit_name = tables.Column(verbose_name=gettext_lazy("Payment Unit"))
+    number_approved = tables.Column(verbose_name=gettext_lazy("Number Approved"))
+    flw_amount_local = tables.Column(verbose_name=gettext_lazy("FLW Pay (local)"))
+    org_amount_local = tables.Column(verbose_name=gettext_lazy("Org Pay (local)"))
+    total_amount_local = tables.Column(verbose_name=gettext_lazy("Total Pay (local)"))
+    exchange_rate = tables.Column(verbose_name=gettext_lazy("Exchange Rate"))
+    total_amount_usd = tables.Column(verbose_name=gettext_lazy("Total Pay (USD)"))
 
     def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
         if currency:
-            self.columns["flw_amount_local"].column.verbose_name = f"FLW Pay ({currency})"
-            self.columns["org_amount_local"].column.verbose_name = f"Org Pay ({currency})"
-            self.columns["total_amount_local"].column.verbose_name = f"Total Pay ({currency})"
+            self.columns["flw_amount_local"].column.verbose_name = _("FLW Pay (%(currency)s)") % {"currency": currency}
+            self.columns["org_amount_local"].column.verbose_name = _("Org Pay (%(currency)s)") % {"currency": currency}
+            self.columns["total_amount_local"].column.verbose_name = _("Total Pay (%(currency)s)") % {
+                "currency": currency
+            }
         if show_org:
-            usd_tooltip = (
+            usd_tooltip = _(
                 "Sum of FLW pay and org pay (USD), each converted at the exchange rate "
                 "at the delivery's approval time."
             )
         else:
             self.columns["flw_amount_local"].column.visible = False
             self.columns["org_amount_local"].column.visible = False
-            usd_tooltip = "FLW pay (USD), converted at the exchange rate at the delivery's approval time."
-        self.columns["total_amount_usd"].column.verbose_name = header_with_tooltip("Total Pay (USD)", usd_tooltip)
+            usd_tooltip = _("FLW pay (USD), converted at the exchange rate at the delivery's approval time.")
+        self.columns["total_amount_usd"].column.verbose_name = header_with_tooltip(_("Total Pay (USD)"), usd_tooltip)
 
     class Meta:
         orderable = False
@@ -1766,25 +1768,29 @@ class InvoiceLineItemsTable(tables.Table):
 
 
 class InvoiceDeliveriesTable(tables.Table):
-    date_approved = DMYTColumn(verbose_name=_("Date Approved"), accessor="status_modified_date")
-    opportunity = tables.Column(verbose_name=_("Opportunity"), accessor="payment_unit__opportunity__name")
-    approved_count = tables.Column(verbose_name=_("Approved Deliveries"), accessor="saved_approved_count")
-    flw_amount_local = tables.Column(verbose_name=_("FLW Pay"), accessor="saved_payment_accrued")
-    org_amount_local = tables.Column(verbose_name=_("Org Pay"), accessor="saved_org_payment_accrued")
-    total_amount_local = tables.Column(verbose_name=_("Total Pay"), accessor="saved_payment_accrued", empty_values=())
-    total_amount_usd = tables.Column(
-        verbose_name=_("Total Pay (USD)"), accessor="saved_payment_accrued_usd", empty_values=()
+    date_approved = DMYTColumn(verbose_name=gettext_lazy("Date Approved"), accessor="status_modified_date")
+    opportunity = tables.Column(verbose_name=gettext_lazy("Opportunity"), accessor="payment_unit__opportunity__name")
+    approved_count = tables.Column(verbose_name=gettext_lazy("Approved Deliveries"), accessor="saved_approved_count")
+    flw_amount_local = tables.Column(verbose_name=gettext_lazy("FLW Pay"), accessor="saved_payment_accrued")
+    org_amount_local = tables.Column(verbose_name=gettext_lazy("Org Pay"), accessor="saved_org_payment_accrued")
+    total_amount_local = tables.Column(
+        verbose_name=gettext_lazy("Total Pay"), accessor="saved_payment_accrued", empty_values=()
     )
-    entity_name = tables.Column(verbose_name=_("Beneficiary"), accessor="entity_name")
-    date_created = DMYTColumn(verbose_name=_("Date of Delivery"), accessor="date_created")
-    username = tables.Column(verbose_name=_("Worker"), accessor="opportunity_access__user__name")
+    total_amount_usd = tables.Column(
+        verbose_name=gettext_lazy("Total Pay (USD)"), accessor="saved_payment_accrued_usd", empty_values=()
+    )
+    entity_name = tables.Column(verbose_name=gettext_lazy("Beneficiary"), accessor="entity_name")
+    date_created = DMYTColumn(verbose_name=gettext_lazy("Date of Delivery"), accessor="date_created")
+    username = tables.Column(verbose_name=gettext_lazy("Worker"), accessor="opportunity_access__user__name")
 
     def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
         if currency:
-            self.columns["flw_amount_local"].column.verbose_name = f"FLW Pay ({currency})"
-            self.columns["org_amount_local"].column.verbose_name = f"Org Pay ({currency})"
-            self.columns["total_amount_local"].column.verbose_name = f"Total Pay ({currency})"
+            self.columns["flw_amount_local"].column.verbose_name = _("FLW Pay (%(currency)s)") % {"currency": currency}
+            self.columns["org_amount_local"].column.verbose_name = _("Org Pay (%(currency)s)") % {"currency": currency}
+            self.columns["total_amount_local"].column.verbose_name = _("Total Pay (%(currency)s)") % {
+                "currency": currency
+            }
         if not show_org:
             self.columns["flw_amount_local"].column.exclude_from_export = True
             self.columns["org_amount_local"].column.exclude_from_export = True
