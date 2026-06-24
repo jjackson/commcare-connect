@@ -1769,15 +1769,25 @@ class InvoiceDeliveriesTable(tables.Table):
     date_approved = DMYTColumn(verbose_name=_("Date Approved"), accessor="status_modified_date")
     opportunity = tables.Column(verbose_name=_("Opportunity"), accessor="payment_unit__opportunity__name")
     approved_count = tables.Column(verbose_name=_("Approved Deliveries"), accessor="saved_approved_count")
-    payment_accrued = tables.Column(verbose_name=_("Payment Accrued"), accessor="saved_payment_accrued")
-    payment_accrued_usd = tables.Column(verbose_name=_("Payment Accrued (USD)"), accessor="saved_payment_accrued_usd")
+    flw_amount_local = tables.Column(verbose_name=_("FLW Pay"), accessor="saved_payment_accrued")
+    org_amount_local = tables.Column(verbose_name=_("Org Pay"), accessor="saved_org_payment_accrued")
+    total_amount_local = tables.Column(verbose_name=_("Total Pay"), accessor="saved_payment_accrued", empty_values=())
+    total_amount_usd = tables.Column(
+        verbose_name=_("Total Pay (USD)"), accessor="saved_payment_accrued_usd", empty_values=()
+    )
     entity_name = tables.Column(verbose_name=_("Beneficiary"), accessor="entity_name")
     date_created = DMYTColumn(verbose_name=_("Date of Delivery"), accessor="date_created")
     username = tables.Column(verbose_name=_("Worker"), accessor="opportunity_access__user__name")
 
-    def __init__(self, currency, *args, **kwargs):
+    def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.columns["payment_accrued"].column.verbose_name = f"Payment Accrued ({currency})"
+        if currency:
+            self.columns["flw_amount_local"].column.verbose_name = f"FLW Pay ({currency})"
+            self.columns["org_amount_local"].column.verbose_name = f"Org Pay ({currency})"
+            self.columns["total_amount_local"].column.verbose_name = f"Total Pay ({currency})"
+        if not show_org:
+            self.columns["flw_amount_local"].column.exclude_from_export = True
+            self.columns["org_amount_local"].column.exclude_from_export = True
 
     class Meta:
         model = CompletedWork
@@ -1790,9 +1800,17 @@ class InvoiceDeliveriesTable(tables.Table):
             "date_created",
             "date_approved",
             "approved_count",
-            "payment_accrued",
-            "payment_accrued_usd",
+            "flw_amount_local",
+            "org_amount_local",
+            "total_amount_local",
+            "total_amount_usd",
         )
+
+    def value_total_amount_local(self, record):
+        return (record.saved_payment_accrued or 0) + (record.saved_org_payment_accrued or 0)
+
+    def value_total_amount_usd(self, record):
+        return (record.saved_payment_accrued_usd or 0) + (record.saved_org_payment_accrued_usd or 0)
 
 
 _task_select_td_extra = {

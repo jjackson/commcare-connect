@@ -3285,7 +3285,8 @@ def download_invoice_line_items(request, org_slug, opp_id):
     else:
         deliveries = get_uninvoiced_completed_works_qs(request.opportunity, start_date, end_date)
 
-    table = InvoiceDeliveriesTable(request.opportunity.currency_code, deliveries)
+    show_org = deliveries.filter(saved_org_payment_accrued__gt=0).exists()
+    table = InvoiceDeliveriesTable(request.opportunity.currency_code, deliveries, show_org=show_org)
     export_format = "csv"
     exporter = TableExport(export_format, table)
     filename = f"invoice_line_items_{start_date}_{end_date}.csv"
