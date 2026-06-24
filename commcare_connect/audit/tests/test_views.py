@@ -407,45 +407,6 @@ def test_modal_submit_rejects_cross_opportunity_task_type(
 
 
 @pytest.mark.django_db
-def test_export_streams_filtered_csv(client, program_manager_org_user_admin, audit_opp):
-    client.force_login(program_manager_org_user_admin)
-    report = AuditReportFactory(opportunity=audit_opp)
-
-    alice_access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
-    alice_access.user.name = "Alice Smith"
-    alice_access.user.save(update_fields=["name"])
-    bob_access = OpportunityAccessFactory(opportunity=audit_opp, accepted=True)
-    bob_access.user.name = "Bob Jones"
-    bob_access.user.save(update_fields=["name"])
-    for access in (alice_access, bob_access):
-        AuditReportEntryFactory(
-            audit_report=report,
-            opportunity_access=access,
-            flagged=True,
-            results={"fake": {"value": 0.5, "has_sufficient_data": True, "in_range": False, "label": "Fake"}},
-        )
-
-    url = reverse(
-        "opportunity:audit:export_audit_report",
-        kwargs={
-            "org_slug": audit_opp.organization.slug,
-            "opp_id": audit_opp.opportunity_id,
-            "audit_report_id": report.audit_report_id,
-        },
-    )
-    response = client.get(url, {"filter": "alice"})
-
-    assert response.status_code == 200
-    assert response["Content-Type"] == "text/csv"
-    assert "attachment" in response["Content-Disposition"]
-    assert ".csv" in response["Content-Disposition"]
-    body = b"".join(response.streaming_content).decode()
-    assert "Fake" in body  # header column
-    assert "Alice Smith" in body
-    assert "Bob Jones" not in body  # name filter applied
-
-
-@pytest.mark.django_db
 def test_export_streams_worker_filtered_csv(client, program_manager_org_user_admin, audit_opp):
     client.force_login(program_manager_org_user_admin)
     report = AuditReportFactory(opportunity=audit_opp)
@@ -475,7 +436,11 @@ def test_export_streams_worker_filtered_csv(client, program_manager_org_user_adm
     response = client.get(url, {"worker": str(alice_access.pk)})
 
     assert response.status_code == 200
+    assert response["Content-Type"] == "text/csv"
+    assert "attachment" in response["Content-Disposition"]
+    assert ".csv" in response["Content-Disposition"]
     body = b"".join(response.streaming_content).decode()
+    assert "Fake" in body  # header column
     assert "Alice Smith" in body
     assert "Bob Jones" not in body  # worker filter applied
 

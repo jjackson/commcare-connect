@@ -104,12 +104,12 @@ def test_period_for_returns_previous_completed_week(today, expected_start, expec
 
 
 @pytest.mark.django_db
-def test_entries_for_export_filters_by_worker_name(make_audit_entry):
+def test_entries_for_export_filters_by_selected_workers(make_audit_entry):
     report = AuditReportFactory()
-    for name in ("Bob", "Bobby", "Carol"):
-        make_audit_entry(report, name, 1)
+    entries = {name: make_audit_entry(report, name, 1) for name in ("Bob", "Bobby", "Carol")}
 
-    rows = entries_for_export(report, name_filter="bob")
+    selected = [entries["Bob"].opportunity_access_id, entries["Bobby"].opportunity_access_id]
+    rows = entries_for_export(report, selected_workers=selected)
 
     worker_names = {entry.opportunity_access.user.name for entry in rows}
     assert worker_names == {"Bob", "Bobby"}
@@ -129,12 +129,11 @@ def test_stream_audit_report_csv_outputs_header_and_rows(make_audit_entry):
 
 
 @pytest.mark.django_db
-def test_stream_audit_report_csv_applies_name_filter(make_audit_entry):
+def test_stream_audit_report_csv_applies_selected_workers(make_audit_entry):
     report = AuditReportFactory()
-    for name in ("Bob", "Bobby", "Carol"):
-        make_audit_entry(report, name, 1)
+    entries = {name: make_audit_entry(report, name, 1) for name in ("Bob", "Bobby", "Carol")}
 
-    csv_text = "".join(stream_audit_report_csv(report, name_filter="carol"))
+    csv_text = "".join(stream_audit_report_csv(report, selected_workers=[entries["Carol"].opportunity_access_id]))
 
     assert "Carol" in csv_text
     assert "Bob" not in csv_text

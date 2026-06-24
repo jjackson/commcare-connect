@@ -15,14 +15,14 @@ from commcare_connect.utils.file import EchoWriter
 STREAM_CHUNK_SIZE = 2000
 
 
-def stream_audit_report_csv(report, name_filter="", selected_workers=None):
+def stream_audit_report_csv(report, selected_workers=None):
     # A single entry is enough to determine the columns -- no need to load them all.
     columns = column_specs(report.entries.all()[:1])
     writer = csv.writer(EchoWriter())
 
     yield writer.writerow([gettext("Connect Worker"), *_column_headers(columns)])
 
-    entries = entries_for_export(report, name_filter, selected_workers)
+    entries = entries_for_export(report, selected_workers)
     for entry in entries.iterator(chunk_size=STREAM_CHUNK_SIZE):
         cells = [_export_cell_value(entry.results, name) for name, _label, _tooltip in columns]
         yield writer.writerow([entry.opportunity_access.user.name, *cells])
@@ -70,11 +70,9 @@ def column_specs(entries):
     return ordered + leftovers
 
 
-def entries_for_export(report, name_filter="", selected_workers=None):
+def entries_for_export(report, selected_workers=None):
     """Report entries for CSV export, filtered to match the detail view, ordered by name."""
     rows = report.entries.select_related("opportunity_access__user")
-    if name_filter:
-        rows = rows.filter(opportunity_access__user__name__icontains=name_filter)
     if selected_workers:
         rows = rows.filter(opportunity_access_id__in=selected_workers)
     return rows.order_by("opportunity_access__user__name")

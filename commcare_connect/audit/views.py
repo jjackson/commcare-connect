@@ -247,12 +247,11 @@ def export_audit_report(request, org_slug, opp_id, audit_report_id):
     _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
-    name_filter = request.GET.get("filter", "").strip()
     selected_workers = request.GET.getlist("worker")
     filename = f"weekly_performance_report_{opportunity.opportunity_id}_{report.period_start}_{report.period_end}.csv"
 
     response = StreamingHttpResponse(
-        stream_audit_report_csv(report, name_filter, selected_workers),
+        stream_audit_report_csv(report, selected_workers),
         content_type="text/csv",
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
