@@ -38,8 +38,6 @@ class Command(BaseCommand):
     help = "Backfill missing hq_user_uuid values on ConnectIDUserLink records via the CommCare HQ API."
 
     def add_arguments(self, parser):
-        parser.add_argument("--opp", help="Limit to this opportunity (opportunity_id UUID).")
-        parser.add_argument("--org", help="Limit to opportunities of this organization (slug).")
         parser.add_argument(
             "--batch-size", type=int, default=100, help="Save resolved UUIDs in batches of this size (default 100)."
         )
@@ -56,7 +54,7 @@ class Command(BaseCommand):
             self.stdout.write("No ConnectIDUserLink records are missing hq_user_uuid.")
             return
 
-        api_keys = self._api_keys_by_server_and_domain(options.get("opp"), options.get("org"))
+        api_keys = self._api_keys_by_server_and_domain()
         resolvable = {
             server_and_domain: links
             for server_and_domain, links in links_by_server_and_domain.items()
@@ -90,18 +88,13 @@ class Command(BaseCommand):
             links_by_server_and_domain[(link.hq_server_id, link.domain)].append(link)
         return links_by_server_and_domain
 
-    def _api_keys_by_server_and_domain(self, opportunity_id, org_slug):
+    def _api_keys_by_server_and_domain(self):
         """Map each (hq_server, domain) to an opportunity API key that can list that domain's users.
 
         The API key is an opportunity-level admin credential (not the mobile worker), so any
         opportunity on the same server and domain provides a key that lists all its users.
         """
-        filter_kwargs = {"api_key__isnull": False}
-        if opportunity_id:
-            filter_kwargs["opportunity_id"] = opportunity_id
-        if org_slug:
-            filter_kwargs["organization__slug"] = org_slug
-        opportunities = Opportunity.objects.filter(**filter_kwargs).select_related(
+        opportunities = Opportunity.objects.filter(api_key__isnull=False).select_related(
             "api_key", "api_key__user", "api_key__hq_server", "deliver_app", "learn_app"
         )
         api_keys = {}

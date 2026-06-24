@@ -43,28 +43,10 @@ class TestBackfillHqUserUuid:
     def test_api_keys_keyed_by_server_and_domain(self):
         opportunity = OpportunityFactory()
 
-        api_keys = Command()._api_keys_by_server_and_domain(None, None)
+        api_keys = Command()._api_keys_by_server_and_domain()
 
         server_and_domain = (opportunity.api_key.hq_server_id, opportunity.deliver_app.cc_domain)
         assert api_keys[server_and_domain] == opportunity.api_key
-
-    def test_filters_by_opportunity_id(self):
-        target = OpportunityFactory()
-        other = OpportunityFactory()
-
-        api_keys = Command()._api_keys_by_server_and_domain(target.opportunity_id, None)
-
-        assert (target.api_key.hq_server_id, target.deliver_app.cc_domain) in api_keys
-        assert (other.api_key.hq_server_id, other.deliver_app.cc_domain) not in api_keys
-
-    def test_filters_by_organization_slug(self):
-        target = OpportunityFactory()
-        other = OpportunityFactory()
-
-        api_keys = Command()._api_keys_by_server_and_domain(None, target.organization.slug)
-
-        assert (target.api_key.hq_server_id, target.deliver_app.cc_domain) in api_keys
-        assert (other.api_key.hq_server_id, other.deliver_app.cc_domain) not in api_keys
 
     def test_backfills_missing_uuid_and_writes_reference_file(self, monkeypatch, tmp_path):
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
