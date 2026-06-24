@@ -170,14 +170,17 @@ class TestBackfillHqUserUuid:
         monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
         opportunity = OpportunityFactory()
         link = self._link_for(opportunity)
+        out = StringIO()
 
         with (
             mock.patch(FETCH_HQ_USER_UUIDS, return_value={link.commcare_username: "u1"}) as fetch,
             mock.patch("builtins.input", side_effect=["y", "n"]),
         ):
-            call_command("backfill_hq_user_uuid")
+            call_command("backfill_hq_user_uuid", stdout=out)
 
         fetch.assert_called_once()
         link.refresh_from_db()
         assert not link.hq_user_uuid
         assert list(tmp_path.glob("hq_user_uuid_backfill_*.csv"))
+        assert "Aborted before saving." in out.getvalue()
+        assert "Updated" not in out.getvalue()

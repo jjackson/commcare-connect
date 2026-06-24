@@ -70,9 +70,9 @@ class Command(BaseCommand):
             len(links) for links in resolvable.values()
         )
         reference_path = self._save(to_be_updated, options["batch_size"], dry_run)
-        self._report(len(to_be_updated), not_found, no_key, errors, dry_run)
+        self._report(not_found, no_key, errors)
         if reference_path:
-            self.stdout.write(f"Reference of updated users: {reference_path}")
+            self.stdout.write(f"Reference CSV written to {reference_path}")
 
     def _links_missing_uuid_by_server_and_domain(self):
         links = (
@@ -191,9 +191,8 @@ class Command(BaseCommand):
                     self.style.WARNING(f"Save failed (attempt {attempt}/{SAVE_ATTEMPTS}), retrying: {e}")
                 )
 
-    def _report(self, updated, not_found, no_key, errors, dry_run):
-        verb = "Would update" if dry_run else "Updated"
-        self.stdout.write(self.style.SUCCESS(f"{verb} {updated} records total."))
+    def _report(self, not_found, no_key, errors):
+        """Report lookup outcomes; the save outcome is reported by _save itself."""
         if not_found:
             self.stdout.write(f"{not_found} users not found on CommCare HQ.")
         if no_key:
