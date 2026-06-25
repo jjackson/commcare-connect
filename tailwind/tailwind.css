@@ -613,22 +613,16 @@
 
   .base-table tbody tr::after {
     content: '';
-    @apply -translate-1/2 absolute left-1/2 -z-10 w-[99%] -translate-y-1/2 rounded-lg bg-gray-100 opacity-0;
+    @apply -translate-1/2 absolute left-1/2 -z-10 w-[99%] rounded-lg bg-gray-100 opacity-0;
     top: var(--row-hl-top);
     height: var(--row-hl-height);
   }
 
-  .base-table tbody tr:hover::after {
-    @apply opacity-100;
-  }
-
+  .base-table tbody tr:hover::after,
   .base-table tbody tr.active::after {
     @apply opacity-100;
   }
 
-  /* .base-table tbody tr:hover{
-      @apply bg-gray-100 rounded-lg;
-  }  */
   .base-table tbody td {
     @apply whitespace-nowrap border-b-[1px] border-gray-100 p-4 text-left;
   }
