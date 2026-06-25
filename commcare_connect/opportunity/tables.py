@@ -1749,12 +1749,15 @@ class InvoiceLineItemsTable(tables.Table):
         if show_org:
             usd_tooltip = _(
                 "Sum of FLW pay and org pay (USD), each converted at the exchange rate "
-                "at the delivery's approval time."
+                "at the delivery's approval time and rounded to 2 decimals per delivery."
             )
         else:
             self.columns["flw_amount_local"].column.visible = False
             self.columns["org_amount_local"].column.visible = False
-            usd_tooltip = _("FLW pay (USD), converted at the exchange rate at the delivery's approval time.")
+            usd_tooltip = _(
+                "FLW pay (USD), converted at the exchange rate at the delivery's approval time "
+                "and rounded to 2 decimals per delivery."
+            )
         self.columns["total_amount_usd"].column.verbose_name = header_with_tooltip(_("Total Pay (USD)"), usd_tooltip)
 
     class Meta:
