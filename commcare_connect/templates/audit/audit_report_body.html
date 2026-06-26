@@ -16,24 +16,38 @@
       <span class="text-xs text-white mt-1">{% trans "Workers reviewed" %}</span>
     </div>
   </div>
-  <div class="w-64">
-    <select id="worker-filter"
-            name="worker"
-            multiple
-            data-tomselect
-            aria-label="{% trans 'Filter by worker name' %}"
-            placeholder="{% trans 'Filter by worker name' %}"
-            hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
-            hx-trigger="change delay:300ms"
-            hx-target="#audit-table-region"
-            hx-select="#audit-table-region"
-            hx-swap="outerHTML"
-            hx-push-url="true">
-      {% for value, name in worker_filter_choices %}
-        <option value="{{ value }}"
-                {% if value in selected_workers %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
+  <div class="flex items-center justify-between gap-x-4">
+    <div class="w-64">
+      <select id="worker-filter"
+              name="worker"
+              multiple
+              data-tomselect
+              aria-label="{% trans 'Filter by worker name' %}"
+              placeholder="{% trans 'Filter by worker name' %}"
+              hx-get="{% url 'opportunity:audit:audit_report_detail' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+              hx-trigger="change delay:300ms"
+              hx-target="#audit-table-region"
+              hx-select="#audit-table-region"
+              hx-swap="outerHTML"
+              hx-push-url="true">
+        {% for value, name in worker_filter_choices %}
+          <option value="{{ value }}"
+                  {% if value in selected_workers %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div x-data>
+      <a href="{% url 'opportunity:audit:export_audit_report' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+         data-export-base="{% url 'opportunity:audit:export_audit_report' org_slug=org_slug opp_id=opportunity.opportunity_id audit_report_id=report.audit_report_id %}"
+         @click="$el.href = $el.dataset.exportBase + window.location.search"
+         x-tooltip.raw="{% trans 'Export uses the currently applied filters.' %}"
+         class="button-icon"
+         aria-label="{% trans 'Export performance report (CSV)' %}"
+         download>
+        <i class="fa-solid fa-download text-brand-deep-purple"
+           aria-hidden="true"></i>
+      </a>
+    </div>
   </div>
   <div id="audit-table-region" class="flex flex-col gap-4">
     {% render_table table %}

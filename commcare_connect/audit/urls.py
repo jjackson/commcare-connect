@@ -30,4 +30,9 @@ urlpatterns = [
         views.audit_report_complete,
         name="audit_report_complete",
     ),
+    path(
+        "<slug:opp_id>/audit_reports/<uuid:audit_report_id>/export/",
+        views.export_audit_report,
+        name="export_audit_report",
+    ),
 ]

@@ -1,16 +1,17 @@
 from datetime import timedelta
 
 from django.db import transaction
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import RequestConfig
 
-from commcare_connect.audit.calculations import format_value, get_registered_calculations
+from commcare_connect.audit.calculations import format_value
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
+from commcare_connect.audit.services import column_specs, stream_audit_report_csv
 from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTable
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
@@ -68,19 +69,6 @@ def audit_report_list(request, org_slug, opp_id):
     )
 
 
-def _column_specs(entries):
-    """Calculation columns to render, ordered by registry then by appearance."""
-    registry = {c.name: c.tooltip for c in get_registered_calculations()}
-    seen = {}
-    for entry in entries:
-        for name, result in entry.results.items():
-            if name not in seen:
-                seen[name] = result.get("label", name)
-    ordered = [(name, seen[name], registry.get(name, "")) for name in registry if name in seen]
-    leftovers = [(name, label, "") for name, label in seen.items() if name not in registry]
-    return ordered + leftovers
-
-
 @opportunity_required
 @org_program_manager_required
 def audit_report_detail(request, org_slug, opp_id, audit_report_id):
@@ -91,7 +79,7 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     all_entries = list(
         report.entries.select_related("opportunity_access__user").order_by("opportunity_access__user__name")
     )
-    columns_spec = _column_specs(all_entries)
+    columns_spec = column_specs(all_entries)
 
     worker_filter_choices = [(str(e.opportunity_access_id), e.opportunity_access.user.name) for e in all_entries]
 
@@ -249,3 +237,22 @@ def audit_report_complete(request, org_slug, opp_id, audit_report_id):
         report.save(update_fields=["status", "completed_by", "completed_date", "date_modified"])
 
     return HttpResponse(status=204)
+
+
+@opportunity_required
+@org_program_manager_required
+@require_GET
+def export_audit_report(request, org_slug, opp_id, audit_report_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
+    report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
+
+    selected_workers = request.GET.getlist("worker")
+    filename = f"weekly_performance_report_{opportunity.opportunity_id}_{report.period_start}_{report.period_end}.csv"
+
+    response = StreamingHttpResponse(
+        stream_audit_report_csv(report, selected_workers),
+        content_type="text/csv",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
