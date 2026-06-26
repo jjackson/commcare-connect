@@ -113,8 +113,10 @@ class Opportunity(BaseModel):
     auto_approve_payments = models.BooleanField(default=True)
     automatic_visit_verification = models.BooleanField(default=False)
     is_test = models.BooleanField(default=True)
+    archived = models.BooleanField(default=False)
     delivery_type = models.ForeignKey(DeliveryType, null=True, blank=True, on_delete=models.DO_NOTHING)
     managed = models.BooleanField(default=False)
+    program = models.ForeignKey("program.Program", on_delete=models.DO_NOTHING, null=True)
     hq_server = models.ForeignKey(HQServer, on_delete=models.DO_NOTHING, null=True)
 
     def __str__(self):
@@ -160,7 +162,7 @@ class Opportunity(BaseModel):
         for count in payment_unit_counts:
             visits_count = count["visits_count"]
             amount = count["amount"]
-            org_amount = count["org_amount"] if self.managed else 0
+            org_amount = count["org_amount"]
             claimed += visits_count * (amount + org_amount)
 
         return claimed
@@ -186,14 +188,10 @@ class Opportunity(BaseModel):
     def number_of_users(self):
         if not self.total_budget:
             return 0
-        if not self.managed:
-            return self.total_budget / self.budget_per_user
-
         budget_per_user = 0
         payment_units = self.paymentunit_set.all()
         for pu in payment_units:
             budget_per_user += pu.max_total * (pu.amount + pu.org_amount)
-
         return self.total_budget / budget_per_user
 
     @property
@@ -223,11 +221,7 @@ class Opportunity(BaseModel):
 
     @property
     def is_active(self):
-        return bool(self.active and self.end_date and self.end_date >= now().date())
-
-    @property
-    def program_name(self):
-        return self.managedopportunity.program.name if self.managed else None
+        return bool(not self.archived and self.active and self.end_date and self.end_date >= now().date())
 
     @property
     def has_ended(self):
@@ -312,15 +306,6 @@ class OpportunityAccess(models.Model):
             models.Index(fields=["opportunity", "date_learn_started"]),
         ]
         unique_together = ("user", "opportunity")
-
-    @cached_property
-    def managed_opportunity(self):
-        from commcare_connect.program.models import ManagedOpportunity
-
-        if self.opportunity.managed:
-            return ManagedOpportunity.objects.get(id=self.opportunity.id)
-
-        return None
 
     # TODO: Convert to a field and calculate this property CompletedModule is saved
     @property
@@ -520,8 +505,7 @@ class AssignedTask(XFormBaseModel):
                     to_reset.setdefault(access, {"properties": {}})["properties"][prop] = ""
                 if len(to_reset) > HQ_CASE_BULK_CHUNK_SIZE:
                     raise ListTooLongError(
-                        f"Too many HQ case property resets ({len(to_reset)}); "
-                        "split the delete into smaller batches."
+                        f"Too many HQ case property resets ({len(to_reset)}); split the delete into smaller batches."
                     )
                 if to_reset:
                     bulk_update_usercases(to_reset)
@@ -768,9 +752,7 @@ class CompletedWork(models.Model):
 
     @property
     def approved_count(self):
-        qs = self.uservisit_set.filter(status=VisitValidationStatus.approved)
-        if self.opportunity_access.opportunity.managed:
-            qs = qs.filter(review_status=VisitReviewStatus.agree)
+        qs = self.uservisit_set.filter(status=VisitValidationStatus.approved, review_status=VisitReviewStatus.agree)
         visits = qs.values_list("deliver_unit_id", flat=True)
         return self.calculate_completed(visits, approved=True)
 

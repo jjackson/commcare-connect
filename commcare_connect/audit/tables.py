@@ -4,20 +4,18 @@ from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy as _l
 from django_tables2 import columns
 
+from commcare_connect.audit.calculations import format_value
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.utils.tables import OrgContextTable
+from commcare_connect.utils.tables import DMYTColumn, IndexColumn, OrgContextTable
 
 
 class AuditReportTable(OrgContextTable):
-    audit_id = columns.Column(
-        accessor="serial",
-        verbose_name=_l("Audit ID"),
-        order_by=("period_end",),
-    )
-    date = columns.Column(
-        accessor="period_end",
-        verbose_name=_l("Date"),
+    index = IndexColumn()
+    date = DMYTColumn(
+        accessor="date_created",
+        verbose_name=_l("Generation Date"),
         orderable=True,
+        order_by=("date_created",),
     )
     status = columns.Column(verbose_name=_l("Status"))
     reviewer = columns.Column(
@@ -34,28 +32,14 @@ class AuditReportTable(OrgContextTable):
 
     class Meta:
         model = AuditReport
-        fields = ("audit_id", "date", "status", "reviewer", "view")
+        fields = ("index", "date", "status", "reviewer", "view")
         empty_text = _l("No audits have been generated yet.")
-        order_by = ("-period_end",)
-        attrs = {"class": "table table-hover"}
+        order_by = ("-date_created",)
+        row_attrs = {"class": "group"}
 
     def __init__(self, *args, opportunity=None, **kwargs):
         self.opportunity = opportunity
         super().__init__(*args, **kwargs)
-
-    def render_audit_id(self, record):
-        url = reverse(
-            "opportunity:audit:audit_report_detail",
-            kwargs={
-                "org_slug": self.org_slug,
-                "opp_id": self.opportunity.opportunity_id,
-                "audit_report_id": record.audit_report_id,
-            },
-        )
-        return format_html('<a class="text-brand-deep-purple hover:underline" href="{}">#{}</a>', url, record.serial)
-
-    def render_date(self, value):
-        return value.strftime("%b %-d, %Y")
 
     def render_status(self, record):
         if record.status == AuditReport.Status.COMPLETED:
@@ -75,7 +59,14 @@ class AuditReportTable(OrgContextTable):
                 "audit_report_id": record.audit_report_id,
             },
         )
-        return format_html('<a href="{}" aria-label="{}">&rsaquo;</a>', url, _("View audit"))
+        return format_html(
+            '<div class="opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-end">'
+            '<a href="{}" aria-label="{}">'
+            '<i class="fa-solid fa-chevron-right text-brand-deep-purple"></i>'
+            "</a></div>",
+            url,
+            _("View audit"),
+        )
 
 
 class CalcColumn(columns.Column):
@@ -85,16 +76,29 @@ class CalcColumn(columns.Column):
     negative badge when ``in_range`` is False.
     """
 
-    def __init__(self, calc_name, **kw):
+    def __init__(self, calc_name, tooltip="", **kw):
         self.calc_name = calc_name
-        super().__init__(empty_values=(), orderable=False, **kw)
+        self.calc_tooltip = tooltip
+        kw.setdefault("attrs", {"th": {"class": "whitespace-normal align-bottom w-28"}})
+        super().__init__(empty_values=(), order_by=(f"results__{calc_name}__value",), **kw)
+
+    @property
+    def header(self):
+        label = self.verbose_name
+        if not self.calc_tooltip:
+            return label
+        return format_html(
+            '{} <span x-data x-tooltip.raw="{}" class="inline-flex items-center cursor-help">'
+            '<i class="fa-solid fa-circle-info text-xs text-gray-400"></i></span>',
+            label,
+            self.calc_tooltip,
+        )
 
     def render(self, record):
         r = record.results.get(self.calc_name, {})
         if not r.get("has_sufficient_data"):
             return format_html('<span class="text-gray-400">{}</span>', _("N/A"))
-        value = r.get("value", "-")
-        display = f"{value:.2f}" if isinstance(value, float) else str(value) if value is not None else ""
+        display = format_value(r, with_fraction=True)
         if not r.get("in_range"):
             return format_html('<span class="badge badge-md negative-dark">{}</span>', display)
         return display
@@ -141,17 +145,20 @@ class AuditReportEntryTable(OrgContextTable):
     user = columns.Column(
         accessor="opportunity_access__user__name",
         verbose_name=_l("Connect Worker"),
+        attrs={"th": {"class": "whitespace-normal align-bottom w-40"}},
     )
 
     class Meta:
         model = AuditReportEntry
         fields = ("user",)
         empty_text = _l("No workers.")
-        order_by = ("user",)
 
     def __init__(self, data, *, opportunity, report, columns_spec, **kw):
         self.opportunity = opportunity
         self.report = report
-        extra = [(name, CalcColumn(calc_name=name, verbose_name=label)) for name, label in columns_spec]
+        extra = [
+            (name, CalcColumn(calc_name=name, verbose_name=label, tooltip=tooltip))
+            for name, label, tooltip in columns_spec
+        ]
         extra.append(("action", ActionColumn()))
         super().__init__(data, extra_columns=extra, **kw)

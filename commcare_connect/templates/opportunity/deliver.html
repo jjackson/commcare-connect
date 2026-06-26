@@ -48,7 +48,7 @@
                          class="text-primary">
                   <span class="ml-2">User Visits Sheet</span>
                 </label>
-                {% if opportunity.managed and not opportunity.automatic_visit_verification %}
+                {% if not opportunity.automatic_visit_verification %}
                   <label class="inline-flex items-center mr-4">
                     <input type="radio"
                            name="form_type"

@@ -97,9 +97,8 @@ class CompletedWorkUpdater:
             required_deliver_units, optional_deliver_units = self._get_deliver_units_for_payment_unit(payment_unit_id)
 
             number_completed = min([unit_counts[deliver_id] for deliver_id in required_deliver_units], default=0)
-            billable_count_key = "agree" if self.opportunity.managed else "approved"
             number_approved = min(
-                [approved_unit_counts[deliver_id][billable_count_key] for deliver_id in required_deliver_units],
+                [approved_unit_counts[deliver_id]["agree"] for deliver_id in required_deliver_units],
                 default=0,
             )
 
@@ -108,7 +107,7 @@ class CompletedWorkUpdater:
                 number_completed = min(number_completed, optional_completed)
 
                 optional_approved = sum(
-                    approved_unit_counts[deliver_id][billable_count_key] for deliver_id in optional_deliver_units
+                    approved_unit_counts[deliver_id]["agree"] for deliver_id in optional_deliver_units
                 )
                 number_approved = min(number_approved, optional_approved)
 
@@ -157,10 +156,7 @@ class CompletedWorkUpdater:
         return updated
 
     def _is_delivery_approved(self, approved_unit_counts, delivery_id):
-        if self.opportunity.managed:
-            return approved_unit_counts[delivery_id]["approved"] > 0 and approved_unit_counts[delivery_id]["agree"] > 0
-        else:
-            return approved_unit_counts[delivery_id]["approved"] > 0
+        return approved_unit_counts[delivery_id]["approved"] > 0 and approved_unit_counts[delivery_id]["agree"] > 0
 
     def _is_completed_work_approved(self, completed_work):
         approved_unit_counts = self.completed_works_unit_approvals[completed_work.id]
@@ -196,10 +192,8 @@ class CompletedWorkUpdater:
                 amount_accrued = approved_count * completed_work.payment_unit.amount
                 exchange_rate = get_exchange_rate(self.opportunity.currency_code, completed_work.status_modified_date)
                 amount_accrued_usd = amount_accrued / exchange_rate
-                # if it's a managed opportunity we also need to update the org payment amounts
-                if self.opportunity.managed:
-                    org_amount_accrued = approved_count * completed_work.payment_unit.org_amount
-                    org_amount_accrued_usd = org_amount_accrued / exchange_rate
+                org_amount_accrued = approved_count * completed_work.payment_unit.org_amount
+                org_amount_accrued_usd = org_amount_accrued / exchange_rate
 
             completed_work.saved_completed_count = completed_count
             completed_work.saved_approved_count = approved_count
@@ -334,11 +328,12 @@ def get_invoice_items(completed_works_qs):
         .values("payment_unit", "month_approved")
         .annotate(
             payment_unit_name=F("payment_unit__name"),
-            payment_unit_amount=F("payment_unit__amount"),
             record_count=Sum("saved_approved_count"),
             currency=F("opportunity_access__opportunity__currency__code"),
-            total_amount_usd=Sum("saved_payment_accrued_usd"),
-            total_amount_local=Sum("saved_payment_accrued"),
+            flw_amount_local=Sum("saved_payment_accrued"),
+            org_amount_local=Sum("saved_org_payment_accrued"),
+            flw_amount_usd=Sum("saved_payment_accrued_usd"),
+            org_amount_usd=Sum("saved_org_payment_accrued_usd"),
         )
         .order_by("month_approved")
     )
@@ -351,18 +346,25 @@ def get_invoice_items(completed_works_qs):
         exchange_rate_cache_key = (currency, month)
 
         if exchange_rate_cache_key not in exchange_rates_by_month:
-            exchange_rate = get_exchange_rate(currency, month)
-            exchange_rates_by_month[exchange_rate_cache_key] = exchange_rate
-
+            exchange_rates_by_month[exchange_rate_cache_key] = get_exchange_rate(currency, month)
         exchange_rate = exchange_rates_by_month[exchange_rate_cache_key]
+
+        flw_local = record["flw_amount_local"] or 0
+        org_local = record["org_amount_local"] or 0
+        flw_usd = record["flw_amount_usd"] or 0
+        org_usd = record["org_amount_usd"] or 0
+
         invoice_items.append(
             {
-                "month": record["month_approved"],
+                "month": month,
                 "payment_unit_name": record["payment_unit_name"],
                 "number_approved": record["record_count"],
-                "amount_per_unit": record["payment_unit_amount"],
-                "total_amount_local": record["total_amount_local"],
-                "total_amount_usd": record["total_amount_usd"],
+                "flw_amount_local": flw_local,
+                "org_amount_local": org_local,
+                "total_amount_local": flw_local + org_local,
+                "flw_amount_usd": flw_usd,
+                "org_amount_usd": org_usd,
+                "total_amount_usd": flw_usd + org_usd,
                 "exchange_rate": exchange_rate,
                 "currency": currency,
             }

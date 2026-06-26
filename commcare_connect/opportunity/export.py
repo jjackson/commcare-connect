@@ -38,9 +38,7 @@ class UserVisitExporter:
         self.headers = []
         self.columns = []
         self.form_json_schema = []
-        self.exclude_columns = {"visit_date", "form_json", "details", "justification", "review_status"}
-        if self.opportunity.managed:
-            self.exclude_columns.remove("justification")
+        self.exclude_columns = {"visit_date", "form_json", "details", "review_status"}
 
     def _get_table_metadata(self):
         uv = UserVisit.objects.filter(opportunity=self.opportunity).first()

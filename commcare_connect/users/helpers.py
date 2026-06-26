@@ -41,8 +41,22 @@ def create_hq_user_and_link(user, domain, opportunity):
 
 
 def fetch_hq_user_uuid(link: ConnectIDUserLink, api_key: HQApiKey) -> str | None:
-    hq_username = link.commcare_username
-    domain = link.domain
+    for obj in _iter_hq_users(api_key, link.domain):
+        if obj.get("username") == link.commcare_username:
+            return obj.get("id")
+    return None
+
+
+def fetch_hq_user_uuids(api_key: HQApiKey, domain: str) -> dict[str, str]:
+    """Return a {commcare_username: hq_user_uuid} map for every user in the domain.
+
+    The API key is an opportunity-level admin credential, so a single sweep lists all
+    mobile workers in the domain and backfills them in one call.
+    """
+    return {obj["username"]: obj["id"] for obj in _iter_hq_users(api_key, domain) if obj.get("username")}
+
+
+def _iter_hq_users(api_key: HQApiKey, domain: str):
     headers = {"Authorization": f"ApiKey {api_key.user.email}:{api_key.api_key}"}
     next_url = f"{api_key.hq_server.url}/a/{domain}/api/v0.5/user/?limit=200"
     while next_url:
@@ -54,12 +68,9 @@ def fetch_hq_user_uuid(link: ConnectIDUserLink, api_key: HQApiKey) -> str | None
                 f"{e.response.status_code} Error response {e.response.text} while fetching users for {domain}"
             )
         data = response.json()
-        for obj in data.get("objects", []):
-            if obj.get("username") == hq_username:
-                return obj.get("id")
+        yield from data.get("objects", [])
         next_path = data.get("meta", {}).get("next")
         next_url = f"{api_key.hq_server.url}{next_path}" if next_path else None
-    return None
 
 
 def _create_hq_user(user, domain, api_key):

@@ -1551,18 +1551,18 @@ class TestGetMetricsForMicroplanningWorkAreas:
         UserVisitFactory(opportunity=opp, work_area=None, status=VisitValidationStatus.pending)
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
-        assert m["value"] == 1000.0
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
+        assert m["value"] == 10.0
         assert "percentage" not in m
-        assert m["unit"] == "%"
+        assert "unit" not in m
 
     def test_pct_visited_to_pct_visits_zero_denominator(self, opp):
         """No visits and no expected visits → show '--'."""
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
         assert m["value"] == "--"
-        assert m["unit"] == "%"
+        assert "unit" not in m
 
     def test_pct_visited_ignores_visits_without_work_area(self, opp):
         """Approved visits with no work_area must not inflate the ratio's total_approved denominator."""
@@ -1577,10 +1577,10 @@ class TestGetMetricsForMicroplanningWorkAreas:
             UserVisitFactory(opportunity=opp, work_area=None, status=VisitValidationStatus.approved)
 
         metrics = get_metrics_for_microplanning(opp)
-        m = self._get_metric(metrics, "% WA visited to % total visits")
+        m = self._get_metric(metrics, "WA Visited : Visits Ratio")
         # total_approved (WA-attached) = 1 → pct_visits = 1/20 = 0.05
         # pct_wa_visited = 1/2 = 0.5 → ratio = 0.5 / 0.05 = 10.0
-        assert m["value"] == 1000.0
+        assert m["value"] == 10.0
 
     def test_zero_non_excluded_work_areas(self, opp):
         """All WAs excluded → percentage metrics show None; visited count is 0."""
@@ -1637,6 +1637,48 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert any(row.get_cell_value("ward") == "w1" for row in ward_table.rows)
         assert "wag_table" in resp.context
 
+    def test_context_exposes_date_filter(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
+        assert resp.status_code == 200
+        assert "filter_form" in resp.context
+        # No filter applied -> the download links carry no filter params.
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
+
+    def test_export_links_carry_custom_range(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01", "end": "2026-01-31"},
+        )
+        assert resp.context["export_hrefs"]["wag"]["xlsx"] == (
+            "?start=2026-01-01&end=2026-01-31&export=xlsx&table=wag"
+        )
+
+    def test_single_date_shows_validation_error(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        # Only a From date -> the page renders an error and falls back to overall (links carry no dates).
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01"},
+        )
+        assert resp.status_code == 200
+        assert b"Select both a From and a To date" in resp.content
+        assert resp.context["export_hrefs"]["ward"]["csv"] == "?export=csv&table=ward"
+
+    def test_export_honors_date_filter_params(self, client, org_user_admin, opportunity):
+        WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
+        client.force_login(org_user_admin)
+        resp = client.get(
+            self.url(opportunity.organization.slug, str(opportunity.opportunity_id)),
+            {"start": "2026-01-01", "end": "2026-01-31", "export": "csv", "table": "ward"},
+        )
+        assert resp.status_code == 200
+        assert resp["Content-Type"].startswith("text/csv")
+
     def test_export_returns_csv_of_requested_table(self, client, org_user_admin, opportunity):
         WorkAreaFactory(opportunity=opportunity, ward="w1", status=WorkAreaStatus.VISITED)
         client.force_login(org_user_admin)
@@ -1648,7 +1690,7 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         assert resp["Content-Type"].startswith("text/csv")
         assert "attachment" in resp["Content-Disposition"]
         body = resp.getvalue().decode()
-        assert "Ward Population Target" in body
+        assert "Expected Visit Count" in body
         assert "w1" in body
 
     def test_export_returns_xlsx_of_wag_table(self, client, org_user_admin, opportunity):
@@ -1677,9 +1719,10 @@ class TestCoverageProgressView(BaseMicroplanningFlagTest):
         cause.pgcode = "57014"  # QueryCanceled — what statement_timeout raises
         timeout_error = OperationalError("canceling statement due to statement timeout")
         timeout_error.__cause__ = cause
-        with patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls, patch(
-            "commcare_connect.microplanning.views.transaction.set_rollback"
-        ) as set_rollback:
+        with (
+            patch("commcare_connect.microplanning.views.CoverageProgressReport") as report_cls,
+            patch("commcare_connect.microplanning.views.transaction.set_rollback") as set_rollback,
+        ):
             report_cls.return_value.header.side_effect = timeout_error
             resp = client.get(self.url(opportunity.organization.slug, str(opportunity.opportunity_id)))
         assert resp.status_code == 503

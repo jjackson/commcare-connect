@@ -468,7 +468,7 @@ class PaymentInvoiceTable(OpportunityContextTable):
         review_button = (
             f'<a href="{invoice_review_url}" '
             f'class="button button-md outline-style !inline-flex justify-center">'
-            f'{_("Review")}</a>'
+            f"{_('Review')}</a>"
         )
         pay_button = ""
         if self.is_pm:
@@ -557,7 +557,7 @@ class BaseOpportunityList(OrgContextTable):
 
     status = tables.Column(verbose_name="Status", accessor="status", orderable=True)
 
-    program = tables.Column()
+    program = tables.Column(accessor="program_name")
     start_date = DMYTColumn()
     end_date = DMYTColumn()
 
@@ -597,7 +597,7 @@ class BaseOpportunityList(OrgContextTable):
         return date.strftime("%d-%b-%Y") if date else "--"
 
     def _render_div(self, value, extra_classes=""):
-        base_classes = "flex text-sm font-normal truncate text-brand-deep-purple " "overflow-clip overflow-ellipsis"
+        base_classes = "flex text-sm font-normal truncate text-brand-deep-purple overflow-clip overflow-ellipsis"
         all_classes = f"{base_classes} {extra_classes}".strip()
         return format_html('<div class="{}">{}</div>', all_classes, value)
 
@@ -688,15 +688,11 @@ class OpportunityTable(BaseOpportunityList):
                 "title": "View Connect Workers",
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -790,14 +786,12 @@ class ProgramManagerOpportunityTable(BaseOpportunityList):
                 "url": reverse("opportunity:worker_list", args=[self.org_slug, record.opportunity_id]),
             },
         ]
-
-        if record.managed:
-            actions.append(
-                {
-                    "title": "View Invoices",
-                    "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
-                }
-            )
+        actions.append(
+            {
+                "title": "View Invoices",
+                "url": reverse("opportunity:invoice_list", args=[self.org_slug, record.opportunity_id]),
+            }
+        )
 
         html = render_to_string(
             "components/dropdowns/text_button_dropdown.html",
@@ -967,7 +961,7 @@ class UserVisitVerificationTable(WorkerVisitTable):
             return self.get_icons([record.status])
 
         status = []
-        if record.opportunity.managed and record.review_status and record.review_created_on:
+        if record.review_status and record.review_created_on:
             if (
                 record.review_status == VisitReviewStatus.pending.value
                 and record.status == VisitValidationStatus.approved
@@ -1053,24 +1047,24 @@ class StatusIndicatorColumn(tables.Column):
     def render(self, record):
         if self._is_suspended(record):
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-minus-square text-black-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-minus-square text-black-600"></i></span>',
                 _("User suspended"),
             )
 
         if record.status == UserInviteStatus.accepted:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-check text-green-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-circle-check text-green-600"></i></span>',
                 _("Invite accepted"),
             )
         elif record.status in [UserInviteStatus.invited, UserInviteStatus.sms_delivered]:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-regular fa-clock text-orange-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-regular fa-clock text-orange-600"></i></span>',
                 _("Invite pending"),
             )
 
         if record.status in [UserInviteStatus.not_found, UserInviteStatus.sms_not_delivered]:
             return format_html(
-                '<span x-data x-tooltip.raw="{}">' '<i class="fa-solid fa-circle-xmark text-red-600"></i>' "</span>",
+                '<span x-data x-tooltip.raw="{}"><i class="fa-solid fa-circle-xmark text-red-600"></i></span>',
                 _("User not found") if record.status == UserInviteStatus.not_found else _("Invite failed"),
             )
 
@@ -1693,8 +1687,8 @@ class PaymentUnitTable(OrgContextTable):
     org_amount = tables.Column(verbose_name="Org pay per delivery")
 
     def __init__(self, *args, **kwargs):
-        self.can_edit = kwargs.pop("can_edit", False)
-        if not kwargs.pop("is_program_manager", False):
+        self.can_edit = kwargs.pop("is_program_manager", False)
+        if not self.can_edit:
             kwargs["exclude"] = "org_amount"
         super().__init__(*args, **kwargs)
 
@@ -1735,29 +1729,36 @@ class PaymentUnitTable(OrgContextTable):
 
 
 class InvoiceLineItemsTable(tables.Table):
-    month = tables.Column()
-    payment_unit_name = tables.Column(verbose_name="Payment Unit")
-    number_approved = tables.Column()
-    amount_per_unit = tables.Column(
-        verbose_name="Payment Unit Amount (local)",
-    )
-    total_amount_local = tables.Column(
-        verbose_name="Total Amount (local)",
-    )
-    exchange_rate = tables.Column()
-    total_amount_usd = tables.Column(
-        verbose_name=header_with_tooltip(
-            "Total Amount (USD)",
-            "Approved count × (payment unit amount ÷ exchange rate at time of approval) "
-            "rounded to 2 decimals for each delivery",
-        ),
-    )
+    month = tables.Column(verbose_name=gettext_lazy("Month"))
+    payment_unit_name = tables.Column(verbose_name=gettext_lazy("Payment Unit"))
+    number_approved = tables.Column(verbose_name=gettext_lazy("Number Approved"))
+    flw_amount_local = tables.Column(verbose_name=gettext_lazy("FLW Pay (local)"))
+    org_amount_local = tables.Column(verbose_name=gettext_lazy("Org Pay (local)"))
+    total_amount_local = tables.Column(verbose_name=gettext_lazy("Total Pay (local)"))
+    exchange_rate = tables.Column(verbose_name=gettext_lazy("Exchange Rate"))
+    total_amount_usd = tables.Column(verbose_name=gettext_lazy("Total Pay (USD)"))
 
-    def __init__(self, currency, *args, **kwargs):
+    def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
         if currency:
-            self.columns["amount_per_unit"].column.verbose_name = f"Payment Unit Amount ({currency})"
-            self.columns["total_amount_local"].column.verbose_name = f"Total Amount ({currency})"
+            self.columns["flw_amount_local"].column.verbose_name = _("FLW Pay (%(currency)s)") % {"currency": currency}
+            self.columns["org_amount_local"].column.verbose_name = _("Org Pay (%(currency)s)") % {"currency": currency}
+            self.columns["total_amount_local"].column.verbose_name = _("Total Pay (%(currency)s)") % {
+                "currency": currency
+            }
+        if show_org:
+            usd_tooltip = _(
+                "Sum of FLW pay and org pay (USD), each converted at the exchange rate "
+                "at the delivery's approval time and rounded to 2 decimals per delivery."
+            )
+        else:
+            self.columns["flw_amount_local"].column.visible = False
+            self.columns["org_amount_local"].column.visible = False
+            usd_tooltip = _(
+                "FLW pay (USD), converted at the exchange rate at the delivery's approval time "
+                "and rounded to 2 decimals per delivery."
+            )
+        self.columns["total_amount_usd"].column.verbose_name = header_with_tooltip(_("Total Pay (USD)"), usd_tooltip)
 
     class Meta:
         orderable = False
@@ -1770,18 +1771,32 @@ class InvoiceLineItemsTable(tables.Table):
 
 
 class InvoiceDeliveriesTable(tables.Table):
-    date_approved = DMYTColumn(verbose_name=_("Date Approved"), accessor="status_modified_date")
-    opportunity = tables.Column(verbose_name=_("Opportunity"), accessor="payment_unit__opportunity__name")
-    approved_count = tables.Column(verbose_name=_("Approved Deliveries"), accessor="saved_approved_count")
-    payment_accrued = tables.Column(verbose_name=_("Payment Accrued"), accessor="saved_payment_accrued")
-    payment_accrued_usd = tables.Column(verbose_name=_("Payment Accrued (USD)"), accessor="saved_payment_accrued_usd")
-    entity_name = tables.Column(verbose_name=_("Beneficiary"), accessor="entity_name")
-    date_created = DMYTColumn(verbose_name=_("Date of Delivery"), accessor="date_created")
-    username = tables.Column(verbose_name=_("Worker"), accessor="opportunity_access__user__name")
+    date_approved = DMYTColumn(verbose_name=gettext_lazy("Date Approved"), accessor="status_modified_date")
+    opportunity = tables.Column(verbose_name=gettext_lazy("Opportunity"), accessor="payment_unit__opportunity__name")
+    approved_count = tables.Column(verbose_name=gettext_lazy("Approved Deliveries"), accessor="saved_approved_count")
+    flw_amount_local = tables.Column(verbose_name=gettext_lazy("FLW Pay"), accessor="saved_payment_accrued")
+    org_amount_local = tables.Column(verbose_name=gettext_lazy("Org Pay"), accessor="saved_org_payment_accrued")
+    total_amount_local = tables.Column(
+        verbose_name=gettext_lazy("Total Pay"), accessor="saved_payment_accrued", empty_values=()
+    )
+    total_amount_usd = tables.Column(
+        verbose_name=gettext_lazy("Total Pay (USD)"), accessor="saved_payment_accrued_usd", empty_values=()
+    )
+    entity_name = tables.Column(verbose_name=gettext_lazy("Beneficiary"), accessor="entity_name")
+    date_created = DMYTColumn(verbose_name=gettext_lazy("Date of Delivery"), accessor="date_created")
+    username = tables.Column(verbose_name=gettext_lazy("Worker"), accessor="opportunity_access__user__name")
 
-    def __init__(self, currency, *args, **kwargs):
+    def __init__(self, currency, *args, show_org=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.columns["payment_accrued"].column.verbose_name = f"Payment Accrued ({currency})"
+        if currency:
+            self.columns["flw_amount_local"].column.verbose_name = _("FLW Pay (%(currency)s)") % {"currency": currency}
+            self.columns["org_amount_local"].column.verbose_name = _("Org Pay (%(currency)s)") % {"currency": currency}
+            self.columns["total_amount_local"].column.verbose_name = _("Total Pay (%(currency)s)") % {
+                "currency": currency
+            }
+        if not show_org:
+            self.columns["flw_amount_local"].column.exclude_from_export = True
+            self.columns["org_amount_local"].column.exclude_from_export = True
 
     class Meta:
         model = CompletedWork
@@ -1794,9 +1809,17 @@ class InvoiceDeliveriesTable(tables.Table):
             "date_created",
             "date_approved",
             "approved_count",
-            "payment_accrued",
-            "payment_accrued_usd",
+            "flw_amount_local",
+            "org_amount_local",
+            "total_amount_local",
+            "total_amount_usd",
         )
+
+    def value_total_amount_local(self, record):
+        return (record.saved_payment_accrued or 0) + (record.saved_org_payment_accrued or 0)
+
+    def value_total_amount_usd(self, record):
+        return (record.saved_payment_accrued_usd or 0) + (record.saved_org_payment_accrued_usd or 0)
 
 
 _task_select_td_extra = {
@@ -1847,8 +1870,7 @@ class AssignedTaskListTable(OpportunityContextTable):
     def render_assigned_task_id(self, value):
         # TODO: CCCT-2184 - Link to Connect Worker page filtered to task view
         return format_html(
-            '<a href="#" class="text-brand-indigo hover:underline">'
-            '<span class="text-sm font-medium">#{}</span></a>',
+            '<a href="#" class="text-brand-indigo hover:underline"><span class="text-sm font-medium">#{}</span></a>',
             value,
         )
 

@@ -39,7 +39,8 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     TaskTypeFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.program.models import ProgramApplicationStatus
+from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 from commcare_connect.users.models import UserCredential
 
 
@@ -115,8 +116,6 @@ class TestOpportunityChangeForm:
             "name",
             "description",
             "short_description",
-            "currency",
-            "country",
         ],
     )
     def test_required_fields(self, valid_opportunity, field, base_form_data):
@@ -209,10 +208,9 @@ class TestOpportunityChangeForm:
     @pytest.mark.parametrize(
         "data_updates,expected_valid",
         [
-            ({"currency": "USD", "additional_users": 5}, True),
-            ({"currency": "EUR", "additional_users": 10}, True),
-            ({"currency": "INVALID", "additional_users": 5}, False),
-            ({"currency": "USD", "additional_users": -5}, True),
+            ({"additional_users": 5}, True),
+            ({"additional_users": 10}, True),
+            ({"additional_users": -5}, True),
         ],
     )
     def test_valid_combinations(self, valid_opportunity, base_form_data, data_updates, expected_valid):
@@ -220,6 +218,21 @@ class TestOpportunityChangeForm:
         data.update(data_updates)
         form = OpportunityChangeForm(data=data, instance=valid_opportunity)
         assert form.is_valid() == expected_valid
+
+    @pytest.mark.parametrize("submitted_currency", ["EUR", "INVALID"])
+    def test_currency_and_country_are_immutable(self, valid_opportunity, base_form_data, submitted_currency):
+        """currency and country are disabled fields, so submitted values are ignored and the instance is preserved."""
+        original_currency = valid_opportunity.currency
+        original_country = valid_opportunity.country
+
+        data = base_form_data.copy()
+        data.update({"currency": submitted_currency, "country": "INVALID"})
+        form = OpportunityChangeForm(data=data, instance=valid_opportunity)
+
+        assert form.is_valid()
+        opp = form.save()
+        assert opp.currency == original_currency
+        assert opp.country == original_country
 
     def test_for_incomplete_opp(self, base_form_data, valid_opportunity):
         data = data = base_form_data.copy()
@@ -293,6 +306,12 @@ class TestOpportunityInitUpdateForm:
     def opportunity(self, organization):
         opportunity = OpportunityFactory(organization=organization)
 
+        ProgramApplicationFactory(
+            organization=organization,
+            program=opportunity.program,
+            status=ProgramApplicationStatus.ACCEPTED,
+        )
+
         learn_app = CommCareAppFactory(
             organization=organization,
             cc_app_id="existing-learn-id",
@@ -335,6 +354,7 @@ class TestOpportunityInitUpdateForm:
             "short_description": "updated short description",
             "currency": currency_code,
             "country": opportunity.country,
+            "organization": opportunity.organization.pk,
             "learn_app_description": learn_description,
             "learn_app_passing_score": learn_score,
         }
@@ -359,6 +379,7 @@ class TestOpportunityInitUpdateForm:
             instance=opportunity,
             user=opportunity.api_key.user,
             org_slug=opportunity.organization.slug,
+            program=opportunity.program,
         )
 
     def test_updates_existing_linked_apps(self, opportunity):
@@ -391,7 +412,8 @@ class TestOpportunityInitUpdateForm:
         assert updated_opportunity.deliver_app_id == deliver_app.id
         assert deliver_app.name == "updated deliver app"
 
-        assert updated_opportunity.currency.code == "EUR"
+        # currency is always taken from the program, ignoring the submitted "EUR" value
+        assert updated_opportunity.currency == opportunity.program.currency
 
     def test_switching_to_new_apps_creates_fresh_records(self, opportunity):
         original_learn_app = opportunity.learn_app
@@ -492,17 +514,18 @@ class TestOpportunityInitUpdateForm:
 
 @pytest.mark.django_db
 class TestOpportunityInitForm:
-    @pytest.mark.parametrize("switch_active", [True, False])
-    def test_init_form_sets_automatic_visit_verification_from_global_switch(self, opportunity, switch_active):
-        cache.clear()
+    @pytest.fixture(autouse=True)
+    def program_application(self, opportunity):
+        return ProgramApplicationFactory(
+            organization=opportunity.organization,
+            program=opportunity.program,
+            status=ProgramApplicationStatus.ACCEPTED,
+        )
+
+    def _build_data(self, opportunity):
         learn_app = opportunity.learn_app
         deliver_app = opportunity.deliver_app
-        data = {
-            "name": "Brand new opportunity",
-            "description": "Description",
-            "short_description": "Short",
-            "currency": opportunity.currency.code,
-            "country": opportunity.country.code,
+        return {
             "hq_server": opportunity.hq_server.id,
             "api_key": str(opportunity.api_key.id),
             "learn_app_domain": learn_app.cc_domain,
@@ -511,12 +534,28 @@ class TestOpportunityInitForm:
             "learn_app_passing_score": 70,
             "deliver_app_domain": deliver_app.cc_domain,
             "deliver_app": json.dumps({"id": deliver_app.cc_app_id, "name": deliver_app.name}),
+            "organization": opportunity.organization.pk,
         }
-        form = OpportunityInitForm(
+
+    def _build_form(self, opportunity, extra_data=None):
+        data = {
+            "name": "Brand new opportunity",
+            "description": "Description",
+            "short_description": "Short",
+            **self._build_data(opportunity),
+            **(extra_data or {}),
+        }
+        return OpportunityInitForm(
             data=data,
             user=opportunity.api_key.user,
             org_slug=opportunity.organization.slug,
+            program=opportunity.program,
         )
+
+    @pytest.mark.parametrize("switch_active", [True, False])
+    def test_init_form_sets_automatic_visit_verification_from_global_switch(self, opportunity, switch_active):
+        cache.clear()
+        form = self._build_form(opportunity)
         assert form.is_valid(), form.errors
 
         with override_switch(AUTOMATIC_VISIT_VERIFICATION, active=switch_active):
@@ -528,28 +567,7 @@ class TestOpportunityInitForm:
     @pytest.mark.parametrize("switch_active", [True, False])
     def test_default_credential_config_on_new_opportunity(self, opportunity, switch_active):
         cache.clear()
-        learn_app = opportunity.learn_app
-        deliver_app = opportunity.deliver_app
-        data = {
-            "name": "New opportunity with credentials",
-            "description": "Description",
-            "short_description": "Short",
-            "currency": opportunity.currency.code,
-            "country": opportunity.country.code,
-            "hq_server": opportunity.hq_server.id,
-            "api_key": str(opportunity.api_key.id),
-            "learn_app_domain": learn_app.cc_domain,
-            "learn_app": json.dumps({"id": learn_app.cc_app_id, "name": learn_app.name}),
-            "learn_app_description": "Learn description",
-            "learn_app_passing_score": 70,
-            "deliver_app_domain": deliver_app.cc_domain,
-            "deliver_app": json.dumps({"id": deliver_app.cc_app_id, "name": deliver_app.name}),
-        }
-        form = OpportunityInitForm(
-            data=data,
-            user=opportunity.api_key.user,
-            org_slug=opportunity.organization.slug,
-        )
+        form = self._build_form(opportunity, extra_data={"name": "New opportunity with credentials"})
         assert form.is_valid(), form.errors
 
         with override_switch(OPPORTUNITY_CREDENTIALS, active=switch_active):
@@ -577,11 +595,10 @@ class TestAddBudgetNewUsersForm:
         self.opp_total_budget_initially = total_user * self.budget_per_user  # 24
 
         self.program = ProgramFactory(organization=program_manager_org, budget=program_budget)
-        self.opportunity = ManagedOpportunityFactory(
+        self.opportunity = OpportunityFactory(
             program=self.program,
             organization=organization,
             total_budget=self.opp_total_budget_initially,
-            managed=True,
         )
         PaymentUnitFactory(opportunity=self.opportunity, max_total=max_total, amount=amount, org_amount=org_pay)
 

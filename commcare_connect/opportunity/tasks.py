@@ -73,6 +73,7 @@ from config import celery_app
 logger = logging.getLogger(__name__)
 
 OPPORTUNITY_AUTO_DEACTIVATION_DAYS = 30
+OPPORTUNITY_AUTO_ARCHIVE_DAYS = 30
 SYSTEM = "system"
 
 
@@ -212,7 +213,7 @@ def generate_review_visit_export(opportunity_id: int, from_date, to_date, status
     opportunity = Opportunity.objects.get(id=opportunity_id)
     logger.info(
         f"""Export review visit for {opportunity.name} with date
-        from {from_date} to {to_date} and status {','.join(status)}"""
+        from {from_date} to {to_date} and status {",".join(status)}"""
     )
     dataset = export_user_visit_review_data(opportunity, from_date, to_date, [VisitReviewStatus(s) for s in status])
     export_tmp_name = f"{now().isoformat()}_{slugify(opportunity.name)}_review_visit_export.{export_format}"
@@ -274,6 +275,12 @@ def auto_deactivate_ended_opportunities():
     action = f"{__name__}.auto_deactivate_ended_opportunities"
     with pghistory.context(username=SYSTEM, action=action):
         opportunities.update(active=False)
+
+
+@celery_app.task()
+def auto_archive_test_opportunities():
+    cutoff = datetime.date.today() - datetime.timedelta(days=OPPORTUNITY_AUTO_ARCHIVE_DAYS)
+    Opportunity.objects.filter(is_test=True, archived=False, end_date__lte=cutoff).update(archived=True)
 
 
 def _get_inactive_message(access: OpportunityAccess):
@@ -636,9 +643,9 @@ def generate_automated_service_delivery_invoice():
     opp_start_date = datetime.date(2026, 1, 1)
     created_invoices_ids = []
 
-    for opportunity in Opportunity.objects.filter(
-        active=True, managed=True, is_test=False, start_date__gte=opp_start_date
-    ).iterator(chunk_size=CHUNK_SIZE):
+    for opportunity in Opportunity.objects.filter(active=True, is_test=False, start_date__gte=opp_start_date).iterator(
+        chunk_size=CHUNK_SIZE
+    ):
         start_date = get_start_date_for_invoice(opportunity)
         # Below indicates there are no uninvoiced completed works to invoice in previous month or earlier
         if start_date > end_date_prev_month:

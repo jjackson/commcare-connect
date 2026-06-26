@@ -19,7 +19,8 @@ from commcare_connect.microplanning.coverage_progress import (
     status_event_model,
     ward_saturation_goal,
 )
-from commcare_connect.microplanning.models import WorkAreaStatus
+from commcare_connect.microplanning.filters import CoverageProgressFilterSet
+from commcare_connect.microplanning.models import WorkArea, WorkAreaStatus
 from commcare_connect.microplanning.tests.factories import WorkAreaFactory, WorkAreaGroupFactory
 from commcare_connect.opportunity.models import VisitValidationStatus
 from commcare_connect.opportunity.tests.factories import UserVisitFactory
@@ -267,13 +268,13 @@ def test_build_ward_rows_merges_and_derives():
     assert row["pct_WAs_visited"] == 40.0  # 4 / 10
     assert row["pct_WAs_evc_reached"] == 20.0  # 2 / 10
     assert row["pct_Buildings_covered_in_WAs_visited"] == 40.0  # 20 / 50
-    assert row["pct_WA_visited_to_pct_visits"] == 80.0  # 40 / 50 * 100
-    assert row["pct_WA_evc_reached_to_pct_visit"] == 40.0  # 20 / 50 * 100
+    assert row["pct_WA_visited_to_pct_visits"] == 0.8  # 40 / 50
+    assert row["pct_WA_evc_reached_to_pct_visit"] == 0.4  # 20 / 50
     assert row["WAs_visited_last_week"] == 1
     assert row["pct_WAs_visited_last_week"] == 10.0  # 1 / 10
-    # last-week ratio = pct_WAs_visited_last_week / pct_visits_approved_last_week * 100
-    #                 = 10.0 / (5/40*100 = 12.5) * 100 = 80.0
-    assert row["pct_WA_visited_to_pct_visits_last_week"] == 80.0
+    # last-week ratio = pct_WAs_visited_last_week / pct_visits_approved_last_week
+    #                 = 10.0 / (5/40*100 = 12.5) = 0.8
+    assert row["pct_WA_visited_to_pct_visits_last_week"] == 0.8
 
 
 def test_build_ward_rows_zero_denominator_yields_none():
@@ -334,10 +335,10 @@ def test_build_wag_rows_reduced_columns(opportunity):
 
     assert row["work_area_group"] == "G1"
     assert row["ward"] == "w1"
-    assert row["target_population"] == 300
+    assert row["expected_visit_total"] == 50
     assert row["pct_visits_approved"] == 50.0  # 25 / 50
     assert row["pct_WAs_evc_reached"] == 25.0  # 3 / 12
-    assert row["pct_WA_visited_to_pct_visits"] == 100.0  # (6/12=50) / (25/50=50) * 100
+    assert row["pct_WA_visited_to_pct_visits"] == 1.0  # (6/12=50) / (25/50=50)
     # reduced set: building-coverage columns are NOT present
     assert "pct_Buildings_covered_in_WAs_visited" not in row
 
@@ -407,3 +408,54 @@ def test_slot_computes_once_then_serves_cache(opportunity):
             assert get_target.call_count == 2  # only the cold call recomputed
     finally:
         cache.delete(key)
+
+
+def _coverage_filter(data):
+    return CoverageProgressFilterSet(data, queryset=WorkArea.objects.none())
+
+
+def test_filterset_no_params_is_overall():
+    assert _coverage_filter({}).to_date_filter().is_overall is True
+
+
+def test_filterset_custom_range_maps_to_custom_window():
+    result = _coverage_filter({"start": "2026-01-01", "end": "2026-01-31"}).to_date_filter()
+    assert result == CoverageDateFilter(start=datetime.date(2026, 1, 1), end=datetime.date(2026, 1, 31))
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"start": "2026-01-31", "end": "2026-01-01"},  # reversed
+        {"start": "2026-01-01"},  # incomplete (no end)
+        {"start": "not-a-date", "end": "2026-01-31"},  # invalid date
+    ],
+)
+def test_filterset_invalid_custom_range_falls_back_to_overall(data):
+    assert _coverage_filter(data).to_date_filter().is_overall is True
+
+
+def test_filterset_single_date_is_a_validation_error():
+    fs = _coverage_filter({"start": "2026-01-01"})
+    assert fs.form.is_valid() is False
+    assert "Select both a From and a To date to filter by a date range." in fs.form.non_field_errors()
+
+
+def test_filterset_reversed_range_is_a_validation_error():
+    fs = _coverage_filter({"start": "2026-01-31", "end": "2026-01-01"})
+    assert fs.form.is_valid() is False
+    assert "The From date must be on or before the To date." in fs.form.non_field_errors()
+
+
+def test_filterset_export_querystring_carries_known_params_plus_export_args():
+    qs = _coverage_filter({"start": "2026-01-01", "end": "2026-01-31", "bogus": "x"}).export_querystring(
+        {"export": "csv", "table": "ward"}
+    )
+    assert qs == "start=2026-01-01&end=2026-01-31&export=csv&table=ward"
+
+
+def test_filterset_export_querystring_drops_invalid_range():
+    # A lone date doesn't resolve to a window, so the download link carries no date params.
+    assert _coverage_filter({"start": "2026-01-01"}).export_querystring({"export": "csv", "table": "ward"}) == (
+        "export=csv&table=ward"
+    )

@@ -43,7 +43,7 @@ def _setup_opportunity_and_access(mobile_user: User, total_budget, end_date, bud
         total_budget=total_budget,
         end_date=end_date,
     )
-    PaymentUnitFactory(opportunity=opportunity, amount=budget_per_visit, max_total=100)
+    PaymentUnitFactory(opportunity=opportunity, amount=budget_per_visit, max_total=100, org_amount=0)
     opportunity_access = OpportunityAccessFactory(opportunity=opportunity, user=mobile_user)
     ConnectIdUserLinkFactory(
         user=mobile_user,
@@ -70,8 +70,7 @@ def test_claim_endpoint_success(mobile_user: User, api_client: APIClient):
 def test_claim_endpoint_budget_exhausted(opportunity: Opportunity, api_client: APIClient):
     pu = PaymentUnitFactory(opportunity=opportunity, amount=10, max_total=100)
     opportunity.total_budget = 10 * 100
-    if opportunity.managed:
-        opportunity.total_budget += 100 * pu.org_amount
+    opportunity.total_budget += 100 * pu.org_amount
     opportunity.end_date = datetime.date.today() + datetime.timedelta(days=100)
     opportunity.save()
 
@@ -223,6 +222,20 @@ def test_opportunity_list_endpoint(
 
     payment_unit_fields = ["id", "payment_unit_id", "name", "max_total", "max_daily", "amount", "end_date"]
     assert all(all(field in unit for field in payment_unit_fields) for unit in payment_units)
+
+
+@pytest.mark.django_db
+def test_opportunity_list_endpoint_excludes_archived(
+    mobile_user_with_connect_link: User,
+    api_client: APIClient,
+    opportunity: Opportunity,
+):
+    opportunity.archived = True
+    opportunity.save()
+    api_client.force_authenticate(mobile_user_with_connect_link)
+    response = api_client.get("/api/opportunity/")
+    assert response.status_code == 200
+    assert len(response.data) == 0
 
 
 def test_delivery_progress_endpoint(

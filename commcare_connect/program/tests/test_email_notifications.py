@@ -7,6 +7,7 @@ from commcare_connect.opportunity.models import CompletedWorkStatus, VisitValida
 from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     UserVisitFactory,
 )
 from commcare_connect.program.models import ProgramApplicationStatus
@@ -17,11 +18,7 @@ from commcare_connect.program.tasks import (
     send_program_invite_applied_email,
     send_program_invite_email,
 )
-from commcare_connect.program.tests.factories import (
-    ManagedOpportunityFactory,
-    ProgramApplicationFactory,
-    ProgramFactory,
-)
+from commcare_connect.program.tests.factories import ProgramApplicationFactory, ProgramFactory
 from commcare_connect.users.tests.factories import ProgramManagerOrgWithUsersFactory
 
 
@@ -70,7 +67,7 @@ def test_send_program_invited_notification(mock_send_mail):
 @patch("commcare_connect.program.tasks.send_mail_async.delay")
 def test_send_opportunity_created_notification(mock_send_mail):
     nm_org = ProgramManagerOrgWithUsersFactory()
-    managed_opportunity = ManagedOpportunityFactory(
+    managed_opportunity = OpportunityFactory(
         organization=nm_org,
     )
 
@@ -87,7 +84,7 @@ def test_send_opportunity_created_notification(mock_send_mail):
 class TestMonthlyDeliveryReminderEmail:
     def test_send_reminder_email_with_pending_deliveries(self, send_mock):
         org = ProgramManagerOrgWithUsersFactory()
-        opportunity = ManagedOpportunityFactory(organization=org, is_test=False)
+        opportunity = OpportunityFactory(organization=org, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
@@ -109,7 +106,7 @@ class TestMonthlyDeliveryReminderEmail:
 
     def test_no_email_sent_without_pending_deliveries(self, send_mock):
         org = ProgramManagerOrgWithUsersFactory()
-        opportunity = ManagedOpportunityFactory(organization=org, is_test=False)
+        opportunity = OpportunityFactory(organization=org, is_test=False)
 
         access = OpportunityAccessFactory(opportunity=opportunity)
         CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.approved)
@@ -123,7 +120,7 @@ class TestMonthlyDeliveryReminderEmail:
 
         org.memberships.all().delete()
 
-        opportunity = ManagedOpportunityFactory(organization=org, is_test=False)
+        opportunity = OpportunityFactory(organization=org, is_test=False)
         access = OpportunityAccessFactory(opportunity=opportunity)
         completed_work = CompletedWorkFactory(opportunity_access=access, status=CompletedWorkStatus.pending)
 
@@ -146,7 +143,7 @@ class TestOpportunityExpiryReminderEmails:
     def test_sends_reminder_7_days_before_end_date(self, mock_send_mail):
         pm_org = ProgramManagerOrgWithUsersFactory()
         program = ProgramFactory(organization=pm_org)
-        ManagedOpportunityFactory(
+        OpportunityFactory(
             program=program,
             end_date=datetime.date.today() + datetime.timedelta(days=7),
             active=True,
@@ -164,7 +161,7 @@ class TestOpportunityExpiryReminderEmails:
     def test_sends_reminder_3_days_before_end_date(self, mock_send_mail):
         pm_org = ProgramManagerOrgWithUsersFactory()
         program = ProgramFactory(organization=pm_org)
-        ManagedOpportunityFactory(
+        OpportunityFactory(
             program=program,
             end_date=datetime.date.today() + datetime.timedelta(days=3),
             active=True,
@@ -180,7 +177,7 @@ class TestOpportunityExpiryReminderEmails:
     def test_no_email_sent_for_non_expiring_opportunity(self, mock_send_mail):
         pm_org = ProgramManagerOrgWithUsersFactory()
         program = ProgramFactory(organization=pm_org)
-        ManagedOpportunityFactory(
+        OpportunityFactory(
             program=program,
             end_date=datetime.date.today() + datetime.timedelta(days=10),
             active=True,
@@ -194,7 +191,7 @@ class TestOpportunityExpiryReminderEmails:
         pm_org = ProgramManagerOrgWithUsersFactory()
         pm_org.memberships.all().delete()
         program = ProgramFactory(organization=pm_org)
-        ManagedOpportunityFactory(
+        OpportunityFactory(
             program=program,
             end_date=datetime.date.today() + datetime.timedelta(days=7),
             active=True,
@@ -208,8 +205,8 @@ class TestOpportunityExpiryReminderEmails:
         pm_org = ProgramManagerOrgWithUsersFactory()
         program = ProgramFactory(organization=pm_org)
         target_date = datetime.date.today() + datetime.timedelta(days=7)
-        ManagedOpportunityFactory(program=program, end_date=target_date, active=True)
-        ManagedOpportunityFactory(program=program, end_date=target_date, active=True)
+        OpportunityFactory(program=program, end_date=target_date, active=True)
+        OpportunityFactory(program=program, end_date=target_date, active=True)
 
         send_opportunity_expiry_reminder_emails(7)
 

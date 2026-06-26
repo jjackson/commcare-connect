@@ -66,6 +66,7 @@ from commcare_connect.organization.models import LLOEntity, Organization
 from commcare_connect.program.models import Program
 from commcare_connect.users.models import User
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_app_structure
+from commcare_connect.utils.file import EchoWriter
 from commcare_connect.utils.permission_const import WORKSPACE_ENTITY_MANAGEMENT_ACCESS
 
 STREAM_CHUNK_SIZE = 2000
@@ -83,14 +84,6 @@ class OpportunityDataExportView(BaseDataExportView):
     def check_permissions(self, request):
         super().check_permissions(request)
         self.check_opportunity_permission(request.user, self.kwargs.get("opp_id"))
-
-
-class EchoWriter:
-    """A Buffer interface that implements write for csv.writer
-    and returns back the value passed to write."""
-
-    def write(self, value):
-        return value
 
 
 class BaseDataExportListView(BaseDataExportView):
@@ -131,7 +124,7 @@ class BaseDataExportListView(BaseDataExportView):
 
     @extend_schema(
         description=(
-            "v1.0: Returns CSV text StreamingHttpResponse. " "v2.0: Returns paginated JSON with 'next' and 'results'."
+            "v1.0: Returns CSV text StreamingHttpResponse. v2.0: Returns paginated JSON with 'next' and 'results'."
         )
     )
     def get(self, *args, **kwargs):
@@ -163,8 +156,7 @@ def _get_opportunity_or_404(user, opp_id):
     try:
         return (
             Opportunity.objects.filter(
-                Q(organization__memberships__user=user)
-                | Q(managedopportunity__program__organization__memberships__user=user),
+                Q(organization__memberships__user=user) | Q(program__organization__memberships__user=user),
                 id=opp_id,
             )
             .distinct()
@@ -216,9 +208,7 @@ class ProgramOpportunityOrganizationDataView(BaseDataExportView):
     def get(self, request):
         organizations = Organization.objects.filter(memberships__user=request.user)
         opportunities = (
-            Opportunity.objects.filter(
-                Q(organization__in=organizations) | Q(managedopportunity__program__organization__in=organizations)
-            )
+            Opportunity.objects.filter(Q(organization__in=organizations) | Q(program__organization__in=organizations))
             .annotate(visit_count=Count("uservisit", distinct=True))
             .distinct()
         )
@@ -470,7 +460,7 @@ class LabsRecordDataView(BaseDataExportView, ListCreateAPIView):
         accessible_ids = (
             LabsRecord.objects.filter(
                 Q(opportunity__organization__memberships__user=user)
-                | Q(opportunity__managedopportunity__program__organization__memberships__user=user)
+                | Q(opportunity__program__organization__memberships__user=user)
                 | Q(program__organization__memberships__user=user)
                 | Q(organization__memberships__user=user)
                 | Q(opportunity__isnull=True, program__isnull=True, organization__isnull=True),
@@ -535,8 +525,8 @@ class ProgramOpportunityDataView(BaseDataExportListView):
     def get_queryset(self, request, program_id):
         return (
             Opportunity.objects.filter(
-                managedopportunity__program=program_id,
-                managedopportunity__program__organization__memberships__user=self.request.user,
+                program=program_id,
+                program__organization__memberships__user=self.request.user,
             )
             .select_related("learn_app", "deliver_app")
             .prefetch_related("paymentunit_set", "opportunityverificationflags")

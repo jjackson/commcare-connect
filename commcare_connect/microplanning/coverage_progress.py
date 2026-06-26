@@ -8,7 +8,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.utils.timezone import localdate
 
-from commcare_connect.microplanning.helpers import pct
+from commcare_connect.microplanning.helpers import pct, ratio
 from commcare_connect.microplanning.models import WorkArea, WorkAreaGroup, WorkAreaStatus
 from commcare_connect.opportunity.models import UserVisit, VisitValidationStatus
 
@@ -65,6 +65,7 @@ class CoverageDateFilter:
 
     @classmethod
     def last_week(cls) -> "CoverageDateFilter":
+        # Used to compute the pinned 7-day "last week" report columns (not a page-level filter mode).
         today = localdate()
         return cls(start=today - datetime.timedelta(days=WEEK_DAYS - 1), end=today)
 
@@ -336,7 +337,7 @@ def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_we
         # raw counts/sums (default 0 when this ward is absent from an aggregate)
         row = {
             "ward": ward,
-            "target_population": target["target_population"],
+            "expected_visit_total": target["expected_visit_total"],
             "building_count": target["building_count"],
             "num_work_areas": target["num_work_areas"],
             "visits_approved": visits.get("visits_approved", 0),
@@ -360,7 +361,7 @@ def build_ward_rows(target_aggregates, filtered_status, filtered_visits, last_we
             "last_week": pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"]),
         }
         for out_key, pct_key, denom in _WARD_PCT_RATIOS:
-            row[out_key] = pct(row[pct_key], ratio_denominator[denom])
+            row[out_key] = ratio(row[pct_key], ratio_denominator[denom])
 
         rows.append(row)
     return rows
@@ -396,17 +397,17 @@ def build_wag_rows(display, target_aggregates, filtered_status, filtered_visits,
             "work_area_group_id": wag_id,
             "work_area_group": meta["work_area_group"],
             "ward": meta["ward"],
-            "target_population": target["target_population"],
+            "expected_visit_total": target["expected_visit_total"],
         }
         row["pct_visits_approved"] = pct(visits.get("visits_approved", 0), target["expected_visit_total"])
         row["pct_visits_approved_last_week"] = pct(lw_visits.get("visits_approved", 0), target["expected_visit_total"])
         row["pct_WAs_evc_reached"] = pct(status.get("WAs_evc_reached", 0), target["num_work_areas"])
         row["pct_WAs_evc_reached_last_week"] = pct(lw_status.get("WAs_evc_reached", 0), target["num_work_areas"])
         # pct_WAs_visited is not a bottom-table column; compute inline as the ratio numerator
-        row["pct_WA_visited_to_pct_visits"] = pct(
+        row["pct_WA_visited_to_pct_visits"] = ratio(
             pct(status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved"]
         )
-        row["pct_WA_visited_to_pct_visits_last_week"] = pct(
+        row["pct_WA_visited_to_pct_visits_last_week"] = ratio(
             pct(lw_status.get("WAs_visited", 0), target["num_work_areas"]), row["pct_visits_approved_last_week"]
         )
         rows.append(row)

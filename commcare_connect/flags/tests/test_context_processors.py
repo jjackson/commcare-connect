@@ -4,7 +4,8 @@ import pytest
 from django.test import RequestFactory
 
 from commcare_connect.flags.models import Flag
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory, ProgramFactory
+from commcare_connect.opportunity.tests.factories import OpportunityFactory
+from commcare_connect.program.tests.factories import ProgramFactory
 from commcare_connect.users.tests.factories import MembershipFactory, OrganizationFactory, UserFactory
 from commcare_connect.web.context_processors import chat_widget_context
 
@@ -100,8 +101,8 @@ class TestChatWidgetContext:
 
         program_with_flag = ProgramFactory()
         program_without_flag = ProgramFactory()
-        ManagedOpportunityFactory(program=program_with_flag, organization=organization)
-        opp_without_flag = ManagedOpportunityFactory(program=program_without_flag, organization=organization)
+        OpportunityFactory(program=program_with_flag, organization=organization)
+        opp_without_flag = OpportunityFactory(program=program_without_flag, organization=organization)
 
         user = UserFactory()
         MembershipFactory(user=user, organization=organization)

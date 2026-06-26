@@ -30,6 +30,7 @@ from commcare_connect.opportunity.tests.factories import (
     CompletedWorkFactory,
     DeliverUnitFactory,
     OpportunityAccessFactory,
+    OpportunityFactory,
     PaymentFactory,
     PaymentUnitFactory,
     UserVisitFactory,
@@ -51,7 +52,6 @@ from commcare_connect.opportunity.visit_import import (
     get_missing_justification_message,
     update_payment_accrued,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 from commcare_connect.users.models import User
 from commcare_connect.users.tests.factories import OrganizationFactory
 
@@ -163,6 +163,7 @@ def test_payment_accrued(opportunity: Opportunity):
                     status=VisitValidationStatus.approved.value,
                     opportunity_access=access,
                     completed_work=completed_work,
+                    review_status=VisitReviewStatus.agree.value,
                 )
     update_payment_accrued(opportunity, [mobile_user.id for mobile_user in mobile_users])
     for access in access_objects:
@@ -192,6 +193,7 @@ def test_duplicate_payment(opportunity: Opportunity, mobile_user: User):
         status=VisitValidationStatus.approved.value,
         opportunity_access=access,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -220,6 +222,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
                     deliver_unit=deliver_unit,
                     status=VisitValidationStatus.approved.value,
                     completed_work=completed_work,
+                    review_status=VisitReviewStatus.agree.value,
                 )
             optional_deliver_unit = random.choice(payment_unit.deliver_units.filter(optional=True))
             UserVisitFactory(
@@ -228,6 +231,7 @@ def test_payment_accrued_optional_deliver_units(opportunity: Opportunity):
                 deliver_unit=optional_deliver_unit,
                 status=VisitValidationStatus.approved.value,
                 completed_work=completed_work,
+                review_status=VisitReviewStatus.agree.value,
             )
     update_payment_accrued(opportunity, [access.user.id for access in access_objects])
     for access in access_objects:
@@ -253,6 +257,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=deliver_unit,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     optional_deliver_unit = DeliverUnitFactory(payment_unit=payment_unit, app=opportunity.deliver_app, optional=True)
     UserVisitFactory.create_batch(
@@ -262,6 +267,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=optional_deliver_unit,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -274,6 +280,7 @@ def test_payment_accrued_asymmetric_optional_deliver_units(opportunity: Opportun
         deliver_unit=optional_deliver_unit_2,
         status=VisitValidationStatus.approved.value,
         completed_work=completed_work,
+        review_status=VisitReviewStatus.agree.value,
     )
     update_payment_accrued(opportunity, [mobile_user.id])
     access.refresh_from_db()
@@ -489,25 +496,25 @@ def test_bulk_update_catchments(opportunity, dataset, new_catchments, old_catchm
 
     import_status = _bulk_update_catchments(opportunity, dataset)
 
-    assert import_status.seen_catchments == {
-        str(catchment.id) for catchment in old_catchments
-    }, "Mismatch in updated catchments"
+    assert import_status.seen_catchments == {str(catchment.id) for catchment in old_catchments}, (
+        "Mismatch in updated catchments"
+    )
     assert import_status.new_catchments == len(new_catchments), "Incorrect number of new catchments"
 
     for catchment in old_catchments:
         updated_catchment = CatchmentArea.objects.get(site_code=catchment.site_code)
-        assert (
-            updated_catchment.name == f"{name_change} {catchment.name}"
-        ), f"Name not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.radius == catchment.radius + radius_change
-        ), f"Radius not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.latitude == catchment.latitude + latitude_change
-        ), f"Latitude not updated correctly for catchment {catchment.id}"
-        assert (
-            updated_catchment.longitude == catchment.longitude + longitude_change
-        ), f"Longitude not updated correctly for catchment {catchment.id}"
+        assert updated_catchment.name == f"{name_change} {catchment.name}", (
+            f"Name not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.radius == catchment.radius + radius_change, (
+            f"Radius not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.latitude == catchment.latitude + latitude_change, (
+            f"Latitude not updated correctly for catchment {catchment.id}"
+        )
+        assert updated_catchment.longitude == catchment.longitude + longitude_change, (
+            f"Longitude not updated correctly for catchment {catchment.id}"
+        )
         assert updated_catchment.active, f"Active status not updated correctly for catchment {catchment.id}"
 
 
@@ -650,6 +657,7 @@ def create_user_visits_for_completed_work(opportunity, user, access, payment_uni
             status=VisitValidationStatus.approved.value,
             opportunity_access=access,
             completed_work=completed_work,
+            review_status=VisitReviewStatus.agree.value,
         )
 
 
@@ -769,7 +777,7 @@ def _validate_saved_fields(opportunity_access: OpportunityAccess):
 class TestBulkReviewVisitImport:
     def setup_method(self):
         self.organization = OrganizationFactory.create()
-        self.opp = ManagedOpportunityFactory.create(organization=self.organization)
+        self.opp = OpportunityFactory.create(organization=self.organization)
         self.now_time = now()
 
     def _prepare_dataset(self, visits, status):

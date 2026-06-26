@@ -14,9 +14,10 @@ from commcare_connect.opportunity.models import (
     DeliveryType,
     HQApiKey,
     LearnModule,
+    Opportunity,
 )
 from commcare_connect.organization.models import Organization
-from commcare_connect.program.models import ManagedOpportunity, Program, ProgramApplication, ProgramApplicationStatus
+from commcare_connect.program.models import Program, ProgramApplication, ProgramApplicationStatus
 from commcare_connect.utils.commcarehq_api import CommCareHQAPIException, get_applications_for_user_by_domain
 
 
@@ -168,9 +169,7 @@ class ManagedOpportunityCreateSerializer(serializers.Serializer):
                 {"end_date": _("End date must be within the program's start and end dates.")}
             )
 
-        other_budgets = (
-            ManagedOpportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))["total"] or 0
-        )
+        other_budgets = Opportunity.objects.filter(program=program).aggregate(total=Sum("total_budget"))["total"] or 0
         if other_budgets + data["total_budget"] > program.budget:
             raise serializers.ValidationError({"total_budget": _("Budget exceeds the program budget.")})
 
@@ -249,12 +248,13 @@ class ManagedOpportunityCreateSerializer(serializers.Serializer):
             },
         )
 
-        opportunity = ManagedOpportunity.objects.create(
+        opportunity = Opportunity.objects.create(
             name=validated_data["name"],
             description=validated_data["description"],
             short_description=validated_data["short_description"],
             organization=organization,
             program=program,
+            managed=True,
             learn_app=learn_app,
             deliver_app=deliver_app,
             start_date=validated_data["start_date"],
@@ -295,7 +295,7 @@ class ManagedOpportunityResponseSerializer(serializers.ModelSerializer):
     country = serializers.SlugRelatedField(slug_field="name", read_only=True)
 
     class Meta:
-        model = ManagedOpportunity
+        model = Opportunity
         fields = [
             "id",
             "opportunity_id",

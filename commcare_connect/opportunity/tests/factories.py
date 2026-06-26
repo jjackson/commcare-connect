@@ -61,6 +61,7 @@ class OpportunityFactory(DjangoModelFactory):
     currency = LazyFunction(lambda: Currency.objects.get(code="USD"))
     country = LazyFunction(lambda: Country.objects.get(code="USA"))
     hq_server = SubFactory(HQServerFactory)
+    program = SubFactory("commcare_connect.program.tests.factories.ProgramFactory")
 
     class Meta:
         model = "opportunity.Opportunity"
@@ -283,7 +284,7 @@ class AssignedTaskFactory(DjangoModelFactory):
     completed_at = Faker("date_time", tzinfo=timezone.utc)
     duration = LazyFunction(lambda: timedelta(hours=1))
     status = AssignedTaskStatus.ASSIGNED
-    due_date = LazyFunction(lambda: (date.today() + timedelta(days=7)))
+    due_date = LazyFunction(lambda: date.today() + timedelta(days=7))
     assigned_by = SubFactory(UserFactory)
 
     class Meta:

@@ -1,10 +1,18 @@
 import datetime
+from types import SimpleNamespace
 
 import pytest
 
 from commcare_connect.audit import calculations
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
-from commcare_connect.audit.services import generate_audit_report_for_opportunity, period_for
+from commcare_connect.audit.services import (
+    _format_reference_range,
+    entries_for_export,
+    generate_audit_report_for_opportunity,
+    period_for,
+    stream_audit_report_csv,
+)
+from commcare_connect.audit.tests.factories import AuditReportFactory
 from commcare_connect.opportunity.tests.factories import OpportunityAccessFactory
 
 
@@ -19,7 +27,7 @@ def isolated_registry():
 
 @pytest.fixture
 def fixed_calc(isolated_registry):
-    from commcare_connect.audit.calculations import AuditCalculation
+    from commcare_connect.audit.calculations import AuditCalculation, Measurement
 
     state = {"call_count": 0}
 
@@ -33,7 +41,7 @@ def fixed_calc(isolated_registry):
             state["call_count"] += 1
             # Even pk → value=1.0 (in range); odd pk → value=0.0 (out of range).
             value = 1.0 if opportunity_access.pk % 2 == 0 else 0.0
-            return value, 1
+            return Measurement(value, 1)
 
     calculations._REGISTRY.append(FakeCalc())
     return state
@@ -93,3 +101,73 @@ def test_period_for_returns_previous_completed_week(today, expected_start, expec
     start, end = period_for(today)
     assert start == expected_start
     assert end == expected_end
+
+
+@pytest.mark.django_db
+def test_entries_for_export_filters_by_selected_workers(make_audit_entry):
+    report = AuditReportFactory()
+    entries = {name: make_audit_entry(report, name, 1) for name in ("Bob", "Bobby", "Carol")}
+
+    selected = [entries["Bob"].opportunity_access_id, entries["Bobby"].opportunity_access_id]
+    rows = entries_for_export(report, selected_workers=selected)
+
+    worker_names = {entry.opportunity_access.user.name for entry in rows}
+    assert worker_names == {"Bob", "Bobby"}
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_outputs_header_and_rows(make_audit_entry):
+    report = AuditReportFactory()
+    make_audit_entry(report, "Bob", 0.5, in_range=False)  # out-of-range still exports raw value
+    make_audit_entry(report, "Ann", None, has_data=False)  # insufficient data -> "N/A"
+
+    lines = "".join(stream_audit_report_csv(report)).splitlines()
+
+    assert lines[0] == "Connect Worker,Calc A"
+    assert "Ann,N/A" in lines
+    assert "Bob,0.5" in lines
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_applies_selected_workers(make_audit_entry):
+    report = AuditReportFactory()
+    entries = {name: make_audit_entry(report, name, 1) for name in ("Bob", "Bobby", "Carol")}
+
+    csv_text = "".join(stream_audit_report_csv(report, selected_workers=[entries["Carol"].opportunity_access_id]))
+
+    assert "Carol" in csv_text
+    assert "Bob" not in csv_text
+
+
+@pytest.mark.parametrize(
+    "lower, upper, expected",
+    [
+        (0.5, 1.0, "0.5 - 1.0"),
+        (0.5, None, ">= 0.5"),
+        (None, 1.0, "<= 1.0"),
+        (None, None, ""),
+    ],
+)
+def test_format_reference_range(lower, upper, expected):
+    calc = SimpleNamespace(lower_bound=lower, upper_bound=upper)
+    assert _format_reference_range(calc) == expected
+
+
+@pytest.mark.django_db
+def test_stream_audit_report_csv_appends_reference_range_to_header(isolated_registry, make_audit_entry):
+    @calculations.register_calculation
+    class RangeCalc(calculations.AuditCalculation):
+        name = "calc_a"
+        label = "Calc A"
+        lower_bound = 0.5
+        upper_bound = 1.0
+
+        def compute(self, opportunity_access, period_start, period_end):
+            return 0.5, 1
+
+    report = AuditReportFactory()
+    make_audit_entry(report, "Bob", 0.5)
+
+    header = "".join(stream_audit_report_csv(report)).splitlines()[0]
+
+    assert header == "Connect Worker,Calc A (0.5 - 1.0)"

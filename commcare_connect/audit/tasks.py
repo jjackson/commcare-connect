@@ -25,8 +25,7 @@ def generate_audit_reports() -> None:
     period_start, period_end = period_for(timezone.now().date())
 
     opportunities = Opportunity.objects.filter(
-        Q(pk__in=flag.opportunities.values_list("pk", flat=True))
-        | Q(managedopportunity__program__in=flag.programs.all()),
+        Q(pk__in=flag.opportunities.values_list("pk", flat=True)) | Q(program__in=flag.programs.all()),
         active=True,
     ).distinct()
 

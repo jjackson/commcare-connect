@@ -1,18 +1,17 @@
 from datetime import timedelta
 
 from django.db import transaction
-from django.db.models import F, Window
-from django.db.models.functions import RowNumber
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django_tables2 import RequestConfig
 
-from commcare_connect.audit.calculations import get_registered_calculations
+from commcare_connect.audit.calculations import format_value
 from commcare_connect.audit.models import AuditReport, AuditReportEntry
+from commcare_connect.audit.services import column_specs, stream_audit_report_csv
 from commcare_connect.audit.tables import AuditReportEntryTable, AuditReportTable
 from commcare_connect.flags.flag_names import WEEKLY_PERFORMANCE_REPORT
 from commcare_connect.flags.models import Flag
@@ -38,12 +37,7 @@ def _require_feature_flag(opportunity):
 def audit_report_list(request, org_slug, opp_id):
     opportunity = request.opportunity
     _require_feature_flag(opportunity)
-    # Annotate each row with its chronological position
-    queryset = (
-        AuditReport.objects.filter(opportunity=opportunity)
-        .select_related("completed_by")
-        .annotate(serial=Window(expression=RowNumber(), order_by=F("period_end").asc()))
-    )
+    queryset = AuditReport.objects.filter(opportunity=opportunity).select_related("completed_by")
 
     total_count = queryset.count()
     pending_count = queryset.filter(status=AuditReport.Status.PENDING).count()
@@ -75,19 +69,6 @@ def audit_report_list(request, org_slug, opp_id):
     )
 
 
-def _column_specs(entries):
-    """Calculation columns to render, ordered by registry then by appearance."""
-    registry_names = [c.name for c in get_registered_calculations()]
-    seen = {}
-    for entry in entries:
-        for name, result in entry.results.items():
-            if name not in seen:
-                seen[name] = result.get("label", name)
-    ordered = [(name, seen[name]) for name in registry_names if name in seen]
-    leftovers = [(name, label) for name, label in seen.items() if name not in registry_names]
-    return ordered + leftovers
-
-
 @opportunity_required
 @org_program_manager_required
 def audit_report_detail(request, org_slug, opp_id, audit_report_id):
@@ -95,39 +76,34 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     _require_feature_flag(opportunity)
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
 
-    name_filter = request.GET.get("filter", "").strip()
-    qs = report.entries.select_related("opportunity_access__user")
-    if name_filter:
-        qs = qs.filter(opportunity_access__user__name__icontains=name_filter)
-    entries = list(qs.order_by("opportunity_access__user__name"))
+    all_entries = list(
+        report.entries.select_related("opportunity_access__user").order_by("opportunity_access__user__name")
+    )
+    columns_spec = column_specs(all_entries)
 
-    all_entries = list(report.entries.all())
-    columns_spec = _column_specs(all_entries)
+    worker_filter_choices = [(str(e.opportunity_access_id), e.opportunity_access.user.name) for e in all_entries]
 
-    to_review = [e for e in entries if e.flagged and not e.reviewed]
-    no_action = [e for e in entries if not e.flagged or e.reviewed]
+    selected_workers = request.GET.getlist("worker")
+    if selected_workers:
+        entries = [e for e in all_entries if str(e.opportunity_access_id) in selected_workers]
+    else:
+        entries = list(all_entries)
+
+    # If no sorting given, apply default to float workers that need review to the top of the table
+    if not request.GET.get("sort"):
+        entries.sort(key=lambda e: (not (e.flagged and not e.reviewed), e.opportunity_access.user.name.lower()))
 
     total_flagged = sum(1 for e in all_entries if e.flagged)
     reviewed_count = sum(1 for e in all_entries if e.flagged and e.reviewed)
 
-    review_table = AuditReportEntryTable(
-        to_review,
+    table = AuditReportEntryTable(
+        entries,
         opportunity=opportunity,
         report=report,
         columns_spec=columns_spec,
-        prefix="review-",
         org_slug=org_slug,
     )
-    no_action_table = AuditReportEntryTable(
-        no_action,
-        opportunity=opportunity,
-        report=report,
-        columns_spec=columns_spec,
-        prefix="noaction-",
-        org_slug=org_slug,
-    )
-    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(review_table)
-    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(no_action_table)
+    RequestConfig(request, paginate={"per_page": DEFAULT_PAGE_SIZE}).configure(table)
 
     path = [
         {"title": _("Opportunities"), "url": reverse("opportunity:list", args=(org_slug,))},
@@ -148,12 +124,12 @@ def audit_report_detail(request, org_slug, opp_id, audit_report_id):
     context = {
         "opportunity": opportunity,
         "report": report,
-        "review_table": review_table,
-        "no_action_table": no_action_table,
+        "table": table,
+        "worker_filter_choices": worker_filter_choices,
+        "selected_workers": selected_workers,
         "reviewed_count": reviewed_count,
         "total_flagged": total_flagged,
         "can_complete": total_flagged == reviewed_count and report.status == AuditReport.Status.PENDING,
-        "name_filter": name_filter,
         "path": path,
         "org_slug": org_slug,
     }
@@ -174,7 +150,11 @@ def audit_report_task_modal(request, org_slug, opp_id, audit_report_id, entry_id
     report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
     entry = get_object_or_404(AuditReportEntry, audit_report_entry_id=entry_id, audit_report=report)
 
-    failed = [(name, r) for name, r in entry.results.items() if r.get("has_sufficient_data") and not r.get("in_range")]
+    failed = [
+        {"label": r["label"], "value": format_value(r)}
+        for r in entry.results.values()
+        if r.get("has_sufficient_data") and not r.get("in_range")
+    ]
     task_types = TaskType.objects.filter(opportunity=opportunity).order_by("name")
 
     return render(
@@ -257,3 +237,22 @@ def audit_report_complete(request, org_slug, opp_id, audit_report_id):
         report.save(update_fields=["status", "completed_by", "completed_date", "date_modified"])
 
     return HttpResponse(status=204)
+
+
+@opportunity_required
+@org_program_manager_required
+@require_GET
+def export_audit_report(request, org_slug, opp_id, audit_report_id):
+    opportunity = request.opportunity
+    _require_feature_flag(opportunity)
+    report = get_object_or_404(AuditReport, audit_report_id=audit_report_id, opportunity=opportunity)
+
+    selected_workers = request.GET.getlist("worker")
+    filename = f"weekly_performance_report_{opportunity.opportunity_id}_{report.period_start}_{report.period_end}.csv"
+
+    response = StreamingHttpResponse(
+        stream_audit_report_csv(report, selected_workers),
+        content_type="text/csv",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
