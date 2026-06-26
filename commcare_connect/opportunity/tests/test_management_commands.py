@@ -18,7 +18,6 @@ from commcare_connect.opportunity.tests.factories import (
     PaymentUnitFactory,
     UserVisitFactory,
 )
-from commcare_connect.program.tests.factories import ManagedOpportunityFactory
 
 
 @pytest.mark.django_db
@@ -36,7 +35,7 @@ class TestFixManagedOppApprovedCounts:
 
     def _setup_managed_opp_with_stale_count(self, invoice=None):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True, managed=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         deliver_unit = DeliverUnitFactory(app=opp_access.opportunity.deliver_app, payment_unit=payment_unit)
@@ -86,7 +85,7 @@ class TestFixManagedOppApprovedCounts:
 
     def test_work_with_count_of_one_not_reprocessed(self):
         opp_access = OpportunityAccessFactory(
-            opportunity=ManagedOpportunityFactory(auto_approve_payments=True),
+            opportunity=OpportunityFactory(auto_approve_payments=True, managed=True),
         )
         payment_unit = PaymentUnitFactory(opportunity=opp_access.opportunity, amount=100)
         deliver_unit = DeliverUnitFactory(app=opp_access.opportunity.deliver_app, payment_unit=payment_unit)
