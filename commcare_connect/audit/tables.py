@@ -19,9 +19,10 @@ class AuditReportTable(OrgContextTable):
     )
     status = columns.Column(verbose_name=_l("Status"))
     reviewer = columns.Column(
-        accessor="completed_by__name",
+        accessor="completed_by",
         verbose_name=_l("Reviewer"),
         default="—",
+        order_by=("completed_by__name", "completed_by__username"),
         orderable=True,
     )
     view = columns.Column(
@@ -50,6 +51,9 @@ class AuditReportTable(OrgContextTable):
             modifier = "warning-dark"
             label = _("Pending")
         return format_html('<span class="badge badge-md {}">{}</span>', modifier, label)
+
+    def render_reviewer(self, value):
+        return value.name or value.username
 
     def render_view(self, record):
         url = reverse(
