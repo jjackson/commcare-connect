@@ -26,12 +26,14 @@
         {% if can_manage_tasks %}
           <button type="button"
                   class="button-icon shadow-sm"
+                  aria-label="{% trans 'Create Task' %}"
                   @click.stop="showCreateTaskModal = true"
                   x-tooltip.raw="{% trans 'Create Task' %}">
             <i class="fa-solid fa-plus text-brand-deep-purple"></i>
           </button>
           <button type="button"
                   class="button-icon hover:bg-red-600 hover:text-white shadow-sm"
+                  aria-label="{% trans 'Delete Task(s)' %}"
                   @click="$store.confirmModal.show({ title: '{% trans "Delete Tasks" %}', message: `{% blocktrans %}Are you sure you want to delete __count__ task(s)? This action can not be undone.{% endblocktrans %}`.replace('__count__', selected.length), confirmBtnText: '{% trans "Delete" %}', confirmBtnRed: true, formRef: $refs.deleteTasksForm })"
                   :disabled="selected.length === 0"
                   x-tooltip.raw="{% trans 'Delete Task(s)' %}">
